@@ -222,7 +222,7 @@ private struct HomeRow: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { on in
             if on {
                 withAnimation(Motion.glide) { hovered = id }

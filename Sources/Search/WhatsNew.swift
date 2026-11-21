@@ -666,7 +666,7 @@ struct WhatsNewCard: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Palette.muted)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 Spacer()
                 Pill("Close", filled: true, action: close)
             }

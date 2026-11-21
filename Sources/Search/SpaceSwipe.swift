@@ -405,7 +405,7 @@ struct NewSpaceCard: View {
                 .id(icon)
                 .transition(.opacity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .help(inline ? "New space — choose its icon" : "Choose an icon")
         .popover(isPresented: $choosing, arrowEdge: .bottom) { icons }

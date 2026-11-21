@@ -340,7 +340,7 @@ private struct SiteList: View {
                                 .frame(width: 18, height: 18)
                                 .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressStyle())
                         .accessibilityLabel("Remove \(host)")
                         .help("Remove \(host)")
                     }
@@ -421,7 +421,7 @@ struct StoreOffer: View {
                         Ring(size: 10)
                     } else {
                         Button("Add") { extensions.install(from: id) }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressStyle())
                             .font(.system(size: 12))
                             .foregroundStyle(Palette.ground)
                             .padding(.horizontal, 11)

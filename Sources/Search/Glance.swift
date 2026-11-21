@@ -441,7 +441,7 @@ struct GlanceCorner: View {
                         .padding(.trailing, scale * 5.4 / 34)
                         .padding(.bottom, scale * 5.4 / 34)
                         .accessibilityLabel("\(unread) unread")
-                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
             case nil:
                 EmptyView()
@@ -624,7 +624,7 @@ private struct CardButton: View {
                 .background(Palette.ink.opacity(hovering ? 0.14 : 0.08), in: Circle())
                 .overlay(Circle().strokeBorder(Palette.ink.opacity(0.14), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { on in withAnimation(Motion.quick) { hovering = on } }
         .help(help)
     }
@@ -850,7 +850,7 @@ struct MeetingRow: View {
                         Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.muted)
                             .frame(width: 18, height: 18)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                     .help("Not this one")
                     .transition(.opacity)
                 }

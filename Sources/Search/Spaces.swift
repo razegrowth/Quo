@@ -805,7 +805,7 @@ struct SpaceDot: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: browser.space.look)
         .help("\(browser.space.name) — \(KeyCombo.spacesOnCommand ? "⌘1–⌘9" : "⌃1–⌃9"), or two fingers \(browser.prefs.sidebar ? "sideways" : "up or down") over the tabs, to switch")
@@ -892,7 +892,7 @@ struct SpaceRow: View {
                         .scaleEffect(over && !on && !Motion.reduced ? 1.06 : 1)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .overlay { RightClick { SpaceMenu.menu(for: browser) } }
                 .onHover { inside in
                     if inside { hovered = space.id } else if hovered == space.id { hovered = nil }
@@ -902,7 +902,7 @@ struct SpaceRow: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .animation(Motion.reduced ? nil : .spring(response: 0.35, dampingFraction: 0.8), value: browser.spaceID)
+        .animation(Motion.settle, value: browser.spaceID)
         .animation(Motion.quick, value: hovered)
     }
 }

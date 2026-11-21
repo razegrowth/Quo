@@ -148,13 +148,13 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         shrink.fromValue = CATransform3DIdentity
         shrink.toValue = LittleWindow.scaled(0.96, in: window.contentView?.bounds ?? .zero)
         shrink.duration = 0.14
-        shrink.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        shrink.timingFunction = Motion.outCurve
         shrink.fillMode = .forwards
         shrink.isRemovedOnCompletion = false
         layer.add(shrink, forKey: "littleOut")
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.14
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            context.timingFunction = Motion.outCurve
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated { self?.window.close() }
@@ -617,7 +617,7 @@ final class LittleFlight {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [self] in
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.24
-                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    context.timingFunction = Motion.outCurve
                     window.animator().alphaValue = 0
                 }
             }
@@ -708,7 +708,7 @@ struct LittleView: View {
             if let keep {
                 if tab.canGoBack {
                     LittleBarButton(symbol: "chevron.left", help: "Back", roomy: roomy) { tab.back() }
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
                 if let copy {
                     LittleBarButton(symbol: "link", help: "Copy Link", roomy: roomy, action: copy)
@@ -816,7 +816,7 @@ private struct LittleBarButton: View {
                 .background(hovering ? Palette.hover : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .fixedSize()
         .onHover { hovering = $0 }
         .help(help)
@@ -860,7 +860,7 @@ private struct LittleOpen: View {
                 .frame(height: roomy ? 28 : 24)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .help("Open in \(space?.name ?? Store.name)   ⌘O")
             if place.spaces.count > 1 {
                 Rectangle().fill(Palette.ground.opacity(0.25)).frame(width: 1, height: roomy ? 14 : 12)
@@ -871,7 +871,7 @@ private struct LittleOpen: View {
                         .frame(width: roomy ? 24 : 21, height: roomy ? 28 : 24)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help("Open in another space")
             }
         }

@@ -67,7 +67,7 @@ enum HoverTip {
         let duration = Motion.seconds(0.1)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            context.timingFunction = Motion.outCurve
             panel.animator().alphaValue = 0
         } completionHandler: {
             MainActor.assumeIsolated {

@@ -1023,7 +1023,7 @@ struct TranslateSign: View {
                                 in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .help(TranslateMenu.heading(mark))
             .accessibilityLabel(TranslateMenu.heading(mark))
@@ -1031,7 +1031,7 @@ struct TranslateSign: View {
                 TranslateMenu(tab: tab) { showing = false }
             }
             .animation(Motion.quick, value: hovering)
-            .transition(.scale(scale: 0.5).combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
     }
 }

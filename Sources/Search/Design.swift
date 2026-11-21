@@ -330,12 +330,18 @@ enum Motion {
         testLowPower ?? ProcessInfo.processInfo.isLowPowerModeEnabled
     }
 
+    // Critically damped, both of them, as Apple's own interface springs are
+    // (Designing Fluid Interfaces): a thing that moves because the app moved
+    // it settles straight into place and never past it. Overshoot belongs
+    // to a thing the hand threw, and the swipe between spaces carries its
+    // own (SwipeGlide). Under-damped, the tab you went to wobbled past its
+    // row and back on every click.
     static var glide: Animation? {
-        reduced ? nil : light ? .easeOut(duration: 0.16) : .spring(response: 0.34, dampingFraction: 0.82)
+        reduced ? nil : light ? .easeOut(duration: 0.16) : .spring(response: 0.34, dampingFraction: 1)
     }
 
     static var settle: Animation? {
-        reduced ? nil : light ? .easeOut(duration: 0.16) : .spring(response: 0.30, dampingFraction: 0.86)
+        reduced ? nil : light ? .easeOut(duration: 0.16) : .spring(response: 0.30, dampingFraction: 1)
     }
 
     static var quick: Animation? {
@@ -354,13 +360,15 @@ enum Motion {
     /// to settle. Fold.slide moves the window's buttons on the same numbers,
     /// in Core Animation's terms.
     static func fold(out: Bool) -> (response: Double, damping: Double) {
-        out ? (0.14, 0.86) : (0.13, 1)
+        out ? (0.14, 1) : (0.13, 1)
     }
 
     static func folding(out: Bool) -> Animation? {
         if reduced { return nil }
         if let slide = slide(out: out) {
-            return out ? .easeOut(duration: slide) : .easeIn(duration: slide)
+            // A strong ease-out both ways: going back on an ease-in, it
+            // hung still for the first frames, the very ones being watched.
+            return .timingCurve(0.23, 1, 0.32, 1, duration: slide)
         }
         let spring = fold(out: out)
         return .spring(response: spring.response, dampingFraction: spring.damping)
@@ -372,7 +380,7 @@ enum Motion {
     /// Read at the moment it moves, as `light` is.
     static func slide(out: Bool) -> TimeInterval? {
         guard Store.settings.bool(forKey: slidesKey) else { return nil }
-        return out ? 0.26 : 0.22
+        return out ? 0.26 : 0.2
     }
 
     nonisolated static let slidesKey = "sidebar.slides"
@@ -389,6 +397,31 @@ enum Motion {
 
     /// That fade's length.
     static let fade: TimeInterval = 0.2
+
+    /// The ease-out for anything on a set length rather than a spring, in
+    /// SwiftUI's terms: fast at once, long and soft into place. The system's
+    /// own easeOut is too weak to read as a response. Exits take it too,
+    /// shorter than the way in; nothing in the interface eases in.
+    static func out(_ duration: TimeInterval) -> Animation? {
+        reduced ? nil : .timingCurve(0.23, 1, 0.32, 1, duration: duration)
+    }
+
+    /// The same curve for Core Animation and windows' own animations.
+    static var outCurve: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1) }
+}
+
+/// Anything pressable gives a little under the pointer and comes straight
+/// back, as a tab does (Give): 97% on the press, which answers at once, and
+/// back on release a touch slower, on the strong ease-out, never a bounce.
+/// A press that doesn't move reads as a click the app didn't hear.
+struct PressStyle: ButtonStyle {
+    var scale: CGFloat = Motion.give
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !Motion.reduced ? scale : 1)
+            .animation(Motion.out(configuration.isPressed ? 0.1 : 0.16), value: configuration.isPressed)
+    }
 }
 
 /// The app's mark where a page shows it (Settings › About, the welcome

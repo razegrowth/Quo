@@ -252,8 +252,8 @@ struct Omnibox: View {
                 .strokeBorder(Palette.hairline, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.07), radius: 20, y: 6)
-        // The arrow keys' ground glides to its row, as the pointer's does.
-        .animation(Motion.glide, value: browser.picked)
+        // The arrow keys' ground is on its row at once: only the keys move
+        // it, and a slide trails them. The pointer's own still travels.
         .transition(.scale(scale: 0.98, anchor: .top).combined(with: .opacity))
     }
 

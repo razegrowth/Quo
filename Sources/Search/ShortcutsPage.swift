@@ -178,7 +178,7 @@ private struct KeyBox: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         // What the Shortcuts group's line under its title used to say.
         .help("Click, then press the new shortcut")
         .onHover { hovering = $0 }

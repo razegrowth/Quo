@@ -968,10 +968,10 @@ struct ContentView: View {
             .environment(\.washStrength, browser.washStrength)
             // And its grain, if it has any.
             .environment(\.washGrain, browser.washGrain)
-            // The field comes on its spring, and goes quickly: once Return
-            // is pressed the page is on its way, and the field is not what
-            // there is to watch.
-            .animation(browser.fieldShowing ? Motion.settle : Motion.quick, value: browser.fieldShowing)
+            // The field is there the moment ⌘T or ⌘L is pressed, and gone
+            // the moment it's done, with no animation either way, as
+            // Raycast's and Spotlight's are: a key pressed dozens of times a
+            // day answers at once, and any motion only reads as a delay.
             .background(windowSetup)
             .onChange(of: browser.prefs.sidebar) { _, _ in
                 DispatchQueue.main.async { Lights.refresh(window); measureLights() }
@@ -2156,7 +2156,7 @@ private struct ImportProgress: View {
                     .frame(height: 22)
                     .background(Palette.ink.opacity(0.07), in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .disabled(job.cancelling)
         }
     }

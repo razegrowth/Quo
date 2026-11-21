@@ -89,7 +89,7 @@ struct DownloadShelf: View {
                         .frame(height: 22)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .transition(.opacity)
             }
         }
@@ -103,7 +103,7 @@ struct DownloadShelf: View {
     /// Downloads button.
     static let coming: AnyTransition = .asymmetric(
         insertion: .offset(y: 14).combined(with: .scale(scale: 0.94, anchor: .bottom)).combined(with: .opacity),
-        removal: .offset(y: 18).combined(with: .scale(scale: 0.86, anchor: .bottom)).combined(with: .opacity)
+        removal: .offset(y: 18).combined(with: .scale(scale: 0.9, anchor: .bottom)).combined(with: .opacity)
     )
 }
 
@@ -186,7 +186,7 @@ private struct RunningCard: View {
             Spacer(minLength: 0)
             if hovering || entry.state != .downloading {
                 action
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .padding(.horizontal, 10)
@@ -350,7 +350,7 @@ private struct ArrivedCard: View {
                     Round(icon: "magnifyingglass", help: "Show in Finder") { reveal() }
                     Round(icon: "xmark", help: "Put away") { fetches.putAway(arrival.id) }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .padding(.horizontal, 10)
@@ -378,7 +378,7 @@ private struct ArrivedCard: View {
         .help(arrival.file.path)
         .onAppear {
             // The icon settles a beat after the card, the tick after it.
-            withAnimation(Motion.reduced ? nil : .spring(response: 0.38, dampingFraction: 0.58).delay(0.08)) { landed = true }
+            withAnimation(Motion.reduced ? nil : .spring(response: 0.38, dampingFraction: 1).delay(0.08)) { landed = true }
             leave(after: ArrivedCard.stays)
         }
         .onDisappear { going?.cancel() }
@@ -419,7 +419,7 @@ private struct Round: View {
                 .background(Circle().fill(Palette.ink.opacity(hovering ? 0.1 : 0.06)))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
         .help(help)

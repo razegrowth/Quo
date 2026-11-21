@@ -150,7 +150,7 @@ struct PopupSign: View {
                                 in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .help(tab.blockedPopups.count == 1 ? "Pop-up blocked" : "\(tab.blockedPopups.count) pop-ups blocked")
             .accessibilityLabel("Pop-up blocked")
@@ -158,7 +158,7 @@ struct PopupSign: View {
                 BlockedPopupsMenu(browser: browser, tab: tab) { showing = false }
             }
             .animation(Motion.quick, value: hovering)
-            .transition(.scale(scale: 0.5).combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
     }
 }

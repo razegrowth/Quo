@@ -146,14 +146,14 @@ struct WelcomePanel: View {
                         .frame(width: i == step ? 26 : 8, height: 4)
                 }
             }
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: step)
+            .animation(.spring(response: 0.4, dampingFraction: 1), value: step)
             Spacer()
             ZStack(alignment: .trailing) {
                 // Held open on the last step too, so the bars stay centred.
                 Color.clear
                 if step < WelcomePanel.steps - 1 {
                     Button("Skip") { finish() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressStyle())
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
                         .keyboardShortcut(.cancelAction)
@@ -970,7 +970,7 @@ private struct Chips<Option: Hashable>: View {
         HStack(spacing: 4) {
             ForEach(options, id: \.0) { option, title, symbol in
                 let on = option == selection
-                Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { selection = option } } label: {
+                Button { withAnimation(Motion.settle) { selection = option } } label: {
                     HStack(spacing: 5) {
                         if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .semibold)) }
                         Text(title).font(.system(size: 12.5, weight: .medium))
@@ -985,7 +985,7 @@ private struct Chips<Option: Hashable>: View {
                     }
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
             }
         }
         .padding(3)
@@ -1038,7 +1038,7 @@ private struct WheelButton: View {
             .scaleEffect(hovering ? 1.16 : custom ? 1.08 : 1)
             .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         // In and out on a smooth curve with no bounce: a spring that
         // overshot faded the glow past nothing and back, a flash on the way
         // out. The hues keep turning until the glow has gone.
@@ -1087,7 +1087,7 @@ private struct Swatches: View {
     var body: some View {
         HStack(spacing: 10) {
             ForEach(Spaces.colours.indices, id: \.self) { i in
-                Button { withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { selection = i } } label: {
+                Button { withAnimation(Motion.settle) { selection = i } } label: {
                     ZStack {
                         if i == 0 {
                             Circle().strokeBorder(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
@@ -1101,7 +1101,7 @@ private struct Swatches: View {
                     .scaleEffect(selection == i ? 1.08 : 1)
                     .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help(Spaces.colourNames[i])
             }
         }
@@ -1232,7 +1232,7 @@ private struct Primary: View {
         }
         .buttonStyle(Press())
         .onHover { hovering = $0 }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .animation(Motion.settle, value: hovering)
     }
 }
 
@@ -1263,8 +1263,9 @@ private struct Ghost: View {
 private struct Press: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !Motion.reduced ? 0.97 : 1)
+            // Instant on the press, back without a bounce (PressStyle).
+            .animation(Motion.out(configuration.isPressed ? 0.1 : 0.16), value: configuration.isPressed)
     }
 }
 
@@ -1301,7 +1302,7 @@ private struct Toggled: View {
 
     var body: some View {
         let on = self.on && !empty
-        Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { self.on.toggle() } } label: {
+        Button { withAnimation(Motion.settle) { self.on.toggle() } } label: {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
@@ -1318,7 +1319,7 @@ private struct Toggled: View {
             .contentShape(Rectangle())
             .opacity(empty ? 0.45 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .disabled(empty)
         .animation(Motion.settle, value: empty)
         .animation(Motion.settle, value: detail)

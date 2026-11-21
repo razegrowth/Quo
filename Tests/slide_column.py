@@ -6,7 +6,8 @@ split suite's harness: started hidden in a world of its own, no window shown,
 moved or resized, everything removed afterwards.
 
 Off by default: ⌘S folds the column on its short springs, as it always did.
-On: the column comes out on a 0.26 s ease-out and goes on a 0.22 s ease-in,
+On: the column comes out over 0.26 s and goes over 0.2 s, both on the strong
+ease-out (Motion.out: 0.23, 1, 0.32, 1), never an ease-in,
 the window's buttons riding with it on the same curve. Either way the page
 takes its room before the column moves, and keeps its width through the
 slide (see fold_flash.py). Under the Mac's Reduce Motion it fades in place
@@ -50,16 +51,16 @@ try:
     a = fold()
     lights = a["lights"] or {}
     t.ok("on: hidden, the column folded", a["folded"], a)
-    t.ok("on: going in on a 0.22 s ease-in", lights.get("kind") == "eased" and abs(lights.get("duration", 0) - 0.22) < 0.01
-         and "easeIn" in lights.get("timing", "") and "Out" not in lights.get("timing", ""), lights)
+    t.ok("on: going in on a 0.2 s strong ease-out", lights.get("kind") == "eased" and abs(lights.get("duration", 0) - 0.2) < 0.01
+         and lights.get("timing", "") == "(0.23 1; 0.32 1)", lights)
     t.ok("on: the page keeps its width through the slide", steady(a),
          [(p["at"], p["page"], p["folded"]) for p in a["passes"]][:6])
     time.sleep(0.5)
     b = fold()
     lights = b["lights"] or {}
     t.ok("on: shown, the column out", not b["folded"], b)
-    t.ok("on: coming out on a 0.26 s ease-out", lights.get("kind") == "eased" and abs(lights.get("duration", 0) - 0.26) < 0.01
-         and "easeOut" in lights.get("timing", ""), lights)
+    t.ok("on: coming out on a 0.26 s strong ease-out", lights.get("kind") == "eased" and abs(lights.get("duration", 0) - 0.26) < 0.01
+         and lights.get("timing", "") == "(0.23 1; 0.32 1)", lights)
     narrowed = [p for p in b["passes"] if p["page"] < b["pageBefore"]]
     t.ok("on: the page gives up its room only after the slide",
          not narrowed or narrowed[0]["at"] >= 260, [(p["at"], p["page"]) for p in narrowed][:2])

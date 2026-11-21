@@ -76,7 +76,7 @@ private struct AgentStatusFace: View {
                         .contentShape(Rectangle())
                         .background(ClickSpot { AgentControl.shared.stopButton = $0 })
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help("\(AgentWords.short(session)). Click to stop it.")
             case .row, .door:
                 VStack(alignment: .leading, spacing: 1) {
@@ -117,7 +117,7 @@ private struct AgentStop: View {
                 .contentShape(Rectangle())
                 .background(ClickSpot { AgentControl.shared.stopButton = $0 })
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .help("Disconnect it. Its tabs stay where they are.")
     }
@@ -168,7 +168,7 @@ struct AgentRowStop: View {
                 .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .help("Stop the coding agent. Its tabs stay where they are.")
     }
 }
@@ -275,7 +275,7 @@ private struct AgentQuestion: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(Palette.ink)
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
         }
         .frame(maxWidth: 420, alignment: .leading)
         .padding(16)

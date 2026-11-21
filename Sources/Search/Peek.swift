@@ -272,7 +272,7 @@ struct PeekPanel: View {
                     .background(hovering ? Palette.hover : Palette.ground, in: Circle())
                     .overlay(Circle().strokeBorder(Palette.hairline, lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .help(help)
             .onHover { hovering = $0 }
         }
@@ -293,7 +293,7 @@ struct PeekBadge: View {
             .overlay(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 0.5))
             .shadow(color: .black.opacity(0.12), radius: 1.5, y: 0.5)
             .allowsHitTesting(false)
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 }
 

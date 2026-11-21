@@ -600,7 +600,7 @@ struct ReaderLook: View {
                         .background(Capsule().fill(look == each ? Palette.wash : .clear))
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help(each == .system ? "As the window is" : each.title)
             }
         }

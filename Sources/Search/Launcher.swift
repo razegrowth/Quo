@@ -536,7 +536,8 @@ private struct LauncherView: View {
                     .onTapGesture { launcher.take(offer) }
             }
         }
-        .animation(Motion.glide, value: launcher.picked)
+        // The arrow keys' pick is lit at once: a highlight that slides
+        // between rows trails the keys it answers, many times a day.
         .padding(6)
         .background(Palette.ground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
@@ -728,7 +729,7 @@ struct LauncherKeyBox: View {
                     )
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .help("Click, then press the key. ⌫ takes it away")
             .onHover { hovering = $0 }
             .onDisappear(perform: stop)

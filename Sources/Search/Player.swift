@@ -153,7 +153,7 @@ private struct PlayerButton: View {
                 .background(Palette.ink.opacity(hovering ? 0.07 : 0), in: Circle())
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .help(help)
         .animation(Motion.quick, value: hovering)

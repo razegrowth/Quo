@@ -118,7 +118,7 @@ struct Swiping: View {
                     // A short fade and a little growth, both ways. Anything
                     // longer is still arriving when a quick flick has already
                     // let go.
-                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .animation(Motion.timed(.easeOut(duration: 0.16)), value: pull == nil)
@@ -650,7 +650,7 @@ struct Trouble: View {
                 .font(.system(size: 14))
                 .foregroundStyle(Palette.ink)
             Button("Try again", action: retry)
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.muted)
         }

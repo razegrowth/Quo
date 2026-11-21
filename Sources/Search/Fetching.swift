@@ -773,13 +773,13 @@ struct FetchDoor: View {
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .help("Downloads (⇧⌘J)")
             .background(ButtonSpot { spot.view = $0; if browser.downloadsHanging { float(true) } })
             .onChange(of: browser.downloadsHanging) { _, on in float(on) }
             .onDisappear { DownloadsFloat.hide(for: browser) }
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
             .animation(Motion.quick, value: fetches.done)
             .animation(Motion.quick, value: fetches.showing)
             .animation(Motion.quick, value: hovering)

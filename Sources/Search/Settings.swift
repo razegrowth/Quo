@@ -230,7 +230,7 @@ struct SettingsPanel: View {
                             .font(.system(size: 11))
                             .foregroundStyle(Palette.faint)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                 }
             }
             .padding(.horizontal, 9)
@@ -278,7 +278,7 @@ struct SettingsPanel: View {
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
         }
@@ -424,7 +424,7 @@ struct SettingsPanel: View {
                     .padding(.leading, 2)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help("Open \(group.page.title) at \(group.title)")
                 Card { rows(byGroup[group.id] ?? [], searched: true) }
             }
@@ -1012,7 +1012,7 @@ struct SettingsPanel: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Palette.faint)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
             }
             .font(.system(size: 12.5))
             .foregroundStyle(Palette.ink)
@@ -1319,7 +1319,7 @@ struct SettingRow<Control: View>: View {
                                     .foregroundStyle(Palette.muted.opacity(0.8))
                                     .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressStyle())
                             .help(more ?? "")
                             .accessibilityLabel("More about \(title)")
                         }
@@ -1398,7 +1398,7 @@ struct Pictures<Option: Hashable>: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityLabel(title)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
@@ -1644,7 +1644,7 @@ struct Steps: View {
                     .frame(minWidth: 36)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .help("Back to \(label(home))")
             Step(icon: "plus", to: above) { value = $0 }
         }
@@ -1669,7 +1669,7 @@ struct Steps: View {
                     .background(hovering && to != nil ? Palette.hover : .clear, in: Circle())
                     .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .disabled(to == nil)
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
@@ -1709,7 +1709,7 @@ struct Pill: View {
                 .overlay(Capsule().strokeBorder(filled ? .clear : Palette.hairline, lineWidth: 1))
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
     }
@@ -1854,7 +1854,7 @@ private struct FilterListRow: View {
                 .foregroundStyle(name == "xmark.circle.fill" ? Palette.faint : Palette.muted)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .help(help)
         .accessibilityLabel(help)
     }

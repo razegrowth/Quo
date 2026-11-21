@@ -1514,7 +1514,7 @@ private struct PinSquare: View, Equatable {
         .modifier(PinGlance(browser: browser, tab: tab, hovering: hovering))
         .help(GlanceKind.of(tab.address) == nil ? tab.label : "")
         .animation(nil, value: hovering)
-        .transition(.scale(scale: 0.8).combined(with: .opacity))
+        .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 }
 
@@ -1857,7 +1857,7 @@ struct Quiet: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
     }
@@ -1892,7 +1892,7 @@ struct KeepLine: View {
                     .foregroundStyle(Palette.muted)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help("Close the tabs under the line. Pins and groups stay; ⇧⌘T brings them all back.")
                 .transition(.opacity)
             }
@@ -1925,7 +1925,7 @@ struct Speaker: View {
                 .background(Palette.ink.opacity(hovering ? 0.07 : 0), in: Circle())
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .help(tab.muted ? "Unmute Tab" : "Mute Tab")
         .animation(Motion.quick, value: hovering)
@@ -1977,7 +1977,7 @@ struct Door: View {
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.35).onEnded { _ in
                 guard let menu = held?() else { return }

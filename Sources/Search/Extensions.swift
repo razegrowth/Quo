@@ -2551,7 +2551,7 @@ private struct ExtensionButtons: View {
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             // The window held still while the pointer is on the button.
             .background(StillWindow(on: hovering))
@@ -2902,7 +2902,7 @@ private struct ExtensionMenu: View {
                     .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Palette.hover : .clear))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .help(help)
         }

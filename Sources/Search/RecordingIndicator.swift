@@ -199,7 +199,7 @@ struct PillView: View {
                             .frame(height: 22)
                             .background(Palette.ink, in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                     .accessibilityLabel("Stop \(line.name)")
                 }
             }

@@ -243,7 +243,7 @@ private struct CornerSpeaker: View {
                 .overlay(Circle().strokeBorder(Palette.hairline, lineWidth: 0.5))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .help(tab.muted ? "Unmute Tab" : "Mute Tab")
         .offset(x: 3, y: 3)
     }

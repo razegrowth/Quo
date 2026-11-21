@@ -1225,7 +1225,7 @@ struct BookmarkCard: View {
             .contentShape(Rectangle())
         }
         .menuStyle(.button)
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .menuIndicator(.hidden)
     }
 
@@ -1297,7 +1297,8 @@ struct BookmarksFloat: View {
                 .onDisappear(perform: stop)
             }
         }
-        .animation(Motion.reduced ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: browser.bookmarksOpen)
+        // In on settle, out faster: once it's let go it's not what's watched.
+        .animation(browser.bookmarksOpen ? Motion.settle : Motion.out(0.16), value: browser.bookmarksOpen)
     }
 
     /// Escape puts it away, wherever the keys are.

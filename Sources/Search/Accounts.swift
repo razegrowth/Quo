@@ -214,7 +214,7 @@ struct AccountList: View {
                     .foregroundStyle((hovering && !onCross) || lit ? Palette.ink : Palette.muted)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .help("Turns on Apple Passwords and pairs with a code from your Mac. Settings › Passwords turns it off.")
                 Button(action: never) {
                     Image(systemName: "xmark")
@@ -224,7 +224,7 @@ struct AccountList: View {
                         .background(Palette.ink.opacity(onCross ? 0.07 : 0), in: Circle())
                         .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .onHover { onCross = $0 }
                 .help("Don't offer again")
                 .accessibilityLabel("Don't offer again")
@@ -277,7 +277,7 @@ struct AccountList: View {
                 .background(hovering || lit ? Palette.hover : .clear)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
         }

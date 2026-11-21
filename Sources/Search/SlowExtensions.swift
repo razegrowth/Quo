@@ -201,7 +201,7 @@ struct SlowExtensionCard: View {
                 Pill("Not Now") { slow.later() }
                 Spacer(minLength: 0)
                 Button("Don't Ask Again") { slow.never() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                     .font(.system(size: 11.5))
                     .foregroundStyle(Palette.muted)
             }

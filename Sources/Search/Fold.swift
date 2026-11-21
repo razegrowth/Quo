@@ -765,7 +765,8 @@ struct Fold: View {
         if let slide = Motion.slide(out: !off) {
             // The column's eased slide (Slide the column in and out).
             spring = CABasicAnimation(keyPath: path)
-            spring.timingFunction = CAMediaTimingFunction(name: off ? .easeIn : .easeOut)
+            // The strong ease-out both ways (Motion.out): nothing eases in.
+            spring.timingFunction = Motion.outCurve
             spring.duration = slide
         } else {
             let fold = Motion.fold(out: !off)

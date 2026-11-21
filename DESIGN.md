@@ -152,19 +152,20 @@ Depth is quiet: a hairline and a soft shadow, never a heavy one.
 
 ## Motion
 
-Things move like light objects with a little weight: quick to start, unhurried to stop, rarely bouncing. Nothing moves for its own sake, and nothing takes long.
+Things move like light objects with a little weight: quick to start, unhurried to stop, and never past their place. Nothing moves for its own sake, and nothing takes long. Following Apple's *Designing Fluid Interfaces* and Emil Kowalski's design-engineering rules: springs are critically damped unless a hand threw the thing, nothing eases in, nothing grows from nothing, and what the keyboard does is never animated.
 
 ### Curves
 
 | Token | SwiftUI | CSS | Feels like | For |
 |---|---|---|---|---|
 | `quick` | `.easeOut(duration: 0.14)` | `140ms cubic-bezier(0.2, 0.8, 0.2, 1)` | A tap | Hover in and out, colour changes, small fades |
-| `settle` | `.spring(response: 0.30, dampingFraction: 0.86)` | `320ms cubic-bezier(0.25, 1, 0.35, 1)` | Landing in place | Selection moving, a toggle, a segment, a card appearing |
-| `glide` | `.spring(response: 0.34, dampingFraction: 0.82)` | `360ms cubic-bezier(0.3, 1.08, 0.4, 1)` | Travel, the faintest overshoot | A highlight travelling between rows, layout changing size |
+| `out` | `.timingCurve(0.23, 1, 0.32, 1, duration:)` | `cubic-bezier(0.23, 1, 0.32, 1)` | Answering at once | Anything on a set length: entrances, exits (shorter than the way in), Core Animation and window fades |
+| `settle` | `.spring(response: 0.30, dampingFraction: 1)` | `320ms cubic-bezier(0.25, 1, 0.35, 1)` | Landing in place | Selection moving, a toggle, a segment, a card appearing |
+| `glide` | `.spring(response: 0.34, dampingFraction: 1)` | `360ms cubic-bezier(0.25, 1, 0.35, 1)` | Travel, straight into place | A highlight travelling between rows, layout changing size |
 | `smooth` | `.smooth(duration: 0.42)` | `420ms cubic-bezier(0.25, 0.8, 0.25, 1)` | A page turned by hand | Swapping one view for another, the new-space card |
 | `rise` | `.spring(response: 0.6, dampingFraction: 0.85)` | `600ms cubic-bezier(0.16, 1, 0.3, 1)` | Arriving | Things coming onto a screen for the first time |
-| `fold` | out `.spring(response: 0.14, dampingFraction: 0.86)`, in `.spring(response: 0.13, dampingFraction: 1)` | out `140ms ease-out`, in `130ms ease-in` | Snappy | A sidebar folding away and back |
-| `press` | scale to 0.97 on `quick` | `transform: scale(0.97)` | Giving under a finger | Anything pressed |
+| `fold` | out `.spring(response: 0.14, dampingFraction: 1)`, in `.spring(response: 0.13, dampingFraction: 1)` | out `140ms`, in `130ms`, both on `out` | Snappy | A sidebar folding away and back |
+| `press` | `PressStyle`: 0.97 in 0.1 s, back in 0.16 s, both on `out` | `transform: scale(0.97)` | Giving under a finger | Every button: no button without it, and never a bounce |
 
 Hover glows fade in on `smooth` at 0.45 s and out at 0.55 s, never with a bounce: a spring that overshoots an opacity flashes on the way out.
 
@@ -174,8 +175,17 @@ Hover glows fade in on `smooth` at 0.45 s and out at 0.55 s, never with a bounce
 - **Swap.** One view giving way to another: the old one fades and shrinks to 0.96–0.97 on a quick 0.24 s; the new one rises in 0.1 s later on `smooth`. Never slide a whole screen sideways for a change of content; slide only for a change of place (one space to the next).
 - **Travel.** A highlight or selection is one shape that moves to its new place on `glide` (matched geometry), never two that fade.
 - **Hover.** On `quick`, or `smooth` for anything larger than a row. The leaving item lets go 60 ms after the next one takes the highlight, so it travels instead of blinking.
-- **Popovers and floating cards.** Scale from 0.94 at the edge they come from, with a 6 pt rise and a fade, on `spring(response: 0.32, dampingFraction: 0.86)`; out on a plain fade and 0.97.
+- **Popovers and floating cards.** Scale from 0.94 at the edge they come from, with a 6 pt rise and a fade, on `settle`; out faster, on a plain fade and 0.97.
 - **Opening moment.** Once, on first launch only: dark, the mark blooming from 0.5 scale and a 20 pt blur in a soft glow with one fine ring spreading away, then the stage and the words. About two seconds in all. Nowhere else gets this.
+
+### Rules
+
+- **Damping 1 by default.** Overshoot only where the hand carried momentum into it (the swipe between spaces, a thrown window). A menu, a highlight or a card the app moved lands without passing its place.
+- **Nothing eases in.** Entrances and exits alike go on `out`, the exit a little shorter. An ease-in holds still for the first frames, the very ones being watched.
+- **Nothing grows from nothing.** A transition starts at 0.9 scale or more, with a fade. Below that it looks like it came from nowhere.
+- **The keyboard is never animated.** ⌘T and ⌘L open and close at once; the arrow keys light their row at once. Only the pointer's own hover travels.
+- **Every press answers.** Buttons use `PressStyle`; tabs and pins give on `Give`.
+- **Under 300 ms** for anything in the interface. Cards, sheets and the new-space card may take up to 0.45 s; the first-run opening is the one long moment.
 
 **Reduce Motion:** every move becomes an instant change or a 0.15–0.2 s fade. Nothing floats, spins or rises.
 
@@ -214,7 +224,8 @@ Tokens to start from:
 
   --ease-quick: cubic-bezier(0.2, 0.8, 0.2, 1);    /* 140ms */
   --ease-settle: cubic-bezier(0.25, 1, 0.35, 1);    /* 320ms */
-  --ease-glide: cubic-bezier(0.3, 1.08, 0.4, 1);    /* 360ms */
+  --ease-glide: cubic-bezier(0.25, 1, 0.35, 1);     /* 360ms, no overshoot */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-smooth: cubic-bezier(0.25, 0.8, 0.25, 1);  /* 420ms */
   --ease-rise: cubic-bezier(0.16, 1, 0.3, 1);       /* 600ms */
 }

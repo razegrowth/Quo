@@ -893,7 +893,9 @@ struct SpaceLookPicker: View {
 
     /// Springs: one that bounces a little for what lands — a snap, a preset,
     /// a handle let go — and a tight one that follows the pointer.
-    private var bouncy: Animation? { Motion.reduced ? nil : .spring(response: 0.36, dampingFraction: 0.62) }
+    // A handle caught, a stop added or taken away: a click, not a throw, so
+    // it lands without the bounce it had (Motion.settle's reasoning).
+    private var bouncy: Animation? { Motion.reduced ? nil : .spring(response: 0.32, dampingFraction: 1) }
     private var following: Animation? { Motion.reduced ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.78) }
 
     var body: some View {
@@ -997,7 +999,7 @@ struct SpaceLookPicker: View {
                     turned += 45
                     browser.turnGradient(id)
                 }
-                .transition(.scale(scale: 0.5).combined(with: .opacity))
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -1009,7 +1011,7 @@ struct SpaceLookPicker: View {
                         selected = max(0, min(at, points.count - 2))
                     }
                 }
-                .transition(.scale(scale: 0.5).combined(with: .opacity))
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -1019,7 +1021,7 @@ struct SpaceLookPicker: View {
                         if let added = browser.addWheelHandle(id) { selected = added }
                     }
                 }
-                .transition(.scale(scale: 0.5).combined(with: .opacity))
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
         .animation(bouncy, value: points.count)
@@ -1045,7 +1047,7 @@ struct SpaceLookPicker: View {
             .shadow(color: .black.opacity(lifted ? 0.32 : 0.26), radius: lifted ? 6 : 2.5, y: lifted ? 3 : 1)
             .scaleEffect(lifted ? 1.3 : 1)
             .position(spot(points[at]))
-            .transition(.scale(scale: 0.2).combined(with: .opacity))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
             .accessibilityElement()
             .accessibilityLabel("Colour \(at + 1)")
             .accessibilityValue(OKLab(r: r, g: g, b: b).hex)
@@ -1245,7 +1247,7 @@ struct SpaceLookPicker: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityLabel(option.1)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
@@ -1322,7 +1324,7 @@ private struct Swatch<Fill: View>: View {
                 .padding(3)
                 .overlay(Circle().strokeBorder(selected ? Palette.ink.opacity(0.75) : .clear, lineWidth: 1.5))
                 .scaleEffect(hovering ? 1.1 : 1)
-                .animation(Motion.reduced ? nil : .spring(response: 0.28, dampingFraction: 0.6), value: hovering)
+                .animation(Motion.settle, value: hovering)
                 .contentShape(Circle())
         }
         .buttonStyle(Pressy())
@@ -1337,8 +1339,9 @@ private struct Swatch<Fill: View>: View {
 private struct Pressy: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .animation(Motion.reduced ? nil : .spring(response: 0.22, dampingFraction: 0.55), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !Motion.reduced ? 0.94 : 1)
+            // Instant on the press, back without a bounce (PressStyle).
+            .animation(Motion.out(configuration.isPressed ? 0.1 : 0.16), value: configuration.isPressed)
     }
 }
 
@@ -1404,7 +1407,7 @@ private struct GrainSlider: View {
                     .shadow(color: .black.opacity(0.25), radius: holding ? 4 : 2, y: holding ? 2 : 1)
                     .scaleEffect(holding ? 1.2 : 1)
                     .offset(x: 1 + room * value)
-                    .animation(Motion.reduced ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: holding)
+                    .animation(Motion.settle, value: holding)
             }
             .contentShape(Rectangle())
             .gesture(
