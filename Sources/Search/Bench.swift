@@ -1659,6 +1659,7 @@ final class Bench {
                 case .bookmark: "bookmark"
                 case .known: "known"
                 case .command: "command"
+                case .elsewhere: "elsewhere"
                 }
             }
             func state(_ extra: [String: Any] = [:]) -> [String: Any] {
@@ -2143,7 +2144,10 @@ final class Bench {
             default: break
             }
             answer(["way": sync.way.rawValue, "available": SyncCloud.available, "problem": sync.problem ?? "", "pushes": sync.pushes, "push": sync.pushRegistration,
-                    "others": sync.others, "synced": sync.lastSynced.map { $0.timeIntervalSince1970 } ?? 0])
+                    "others": sync.others, "synced": sync.lastSynced.map { $0.timeIntervalSince1970 } ?? 0,
+                    "device": sync.device,
+                    // The other devices' open tabs this window's profile sees, by name.
+                    "elsewhere": Dictionary(sync.elsewhere(browser.profileID).map { ($0.name, $0.tabs.count) }) { a, _ in a }])
         case "filterlists":
             // The filter lists of Settings › Privacy (FilterLists.swift):
             // add one as the field would, update, switch, remove, and read

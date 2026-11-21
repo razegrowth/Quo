@@ -349,6 +349,18 @@ struct Omnibox: View {
                     // at the end now that the site's icon leads the row.
                     symbol("bookmark")
                 }
+                if case .elsewhere(let device, let phone) = offer.kind {
+                    // Open on another of your devices: which, at the end.
+                    HStack(spacing: 5) {
+                        Image(systemName: phone ? "iphone" : "laptopcomputer")
+                            .font(.system(size: m.glyph - 1, weight: .medium))
+                        Text(device)
+                            .font(.system(size: m.rowNote))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize()
+                }
             }
             .padding(.horizontal, m.rowSide)
             .padding(.vertical, m.rowAir)

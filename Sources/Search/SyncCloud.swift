@@ -68,8 +68,8 @@ final class SyncCloud {
 
     nonisolated static var available: Bool { fakeFolder != nil || (containerID != nil && (!Store.testing || realInTests)) }
 
-    nonisolated static let zoneName = "Sync"
-    nonisolated static let recordType = "SyncFile"
+    nonisolated static let zoneName = SyncRecord.zone
+    nonisolated static let recordType = SyncRecord.type
 
     private let backend: SyncCloudBackend
     /// Every Mac's file, as last fetched, by record name.
@@ -91,7 +91,7 @@ final class SyncCloud {
         token = try? Data(contentsOf: SyncCloud.tokenURL)
     }
 
-    static func recordName(scope: String, device: String) -> String { scope + "." + device }
+    static func recordName(scope: String, device: String) -> String { SyncRecord.name(scope: scope, device: device) }
 
     /// The files of one scope, every Mac's.
     func files(in scope: String) -> [SyncFile] { files.values.filter { $0.scope == scope } }
@@ -263,35 +263,12 @@ final class SyncCloudKit: SyncCloudBackend {
                                 token: token, more: changes.moreComing, complete: since == nil)
     }
 
-    /// What a record holds, as the file it was made from.
-    static func file(from record: CKRecord) -> SyncFile? {
-        guard let scope = record["scope"] as? String else { return nil }
-        var data = record.encryptedValues["data"] as? Data
-        if data == nil, let asset = record["asset"] as? CKAsset, let url = asset.fileURL { data = try? Data(contentsOf: url) }
-        guard let data else { return nil }
-        return SyncMerge.decode(data, scope: scope)
-    }
+    /// What a record holds, and the record for a file: the same on the
+    /// iPhone (SyncRecord.swift).
+    static func file(from record: CKRecord) -> SyncFile? { SyncRecord.file(from: record) }
 
-    /// The record for a file: where it is kept and whose it is in the
-    /// clear, everything it says encrypted.
     static func record(for file: SyncFile, name: String, zone: CKRecordZone.ID, spare: inout URL?) throws -> CKRecord {
-        guard let data = SyncMerge.encode(file) else { throw CKError(.invalidArguments) }
-        let record = CKRecord(recordType: SyncCloud.recordType, recordID: CKRecord.ID(recordName: name, zoneID: zone))
-        record["scope"] = file.scope as NSString
-        record["device"] = file.device as NSString
-        record["written"] = file.written as NSNumber
-        record.encryptedValues["name"] = file.name ?? ""
-        // A record holds a megabyte in all; a larger file goes as an asset,
-        // which iCloud keeps encrypted too.
-        if data.count < 700_000 {
-            record.encryptedValues["data"] = data
-        } else {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(Store.name.lowercased())-sync-\(UUID().uuidString).json")
-            try data.write(to: url)
-            record["asset"] = CKAsset(fileURL: url)
-            spare = url
-        }
-        return record
+        try SyncRecord.record(for: file, name: name, zone: zone, tag: Store.name.lowercased(), spare: &spare)
     }
 
     func save(_ file: SyncFile, as name: String) async throws {

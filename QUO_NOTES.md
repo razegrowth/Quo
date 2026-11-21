@@ -2,6 +2,12 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.5.0 · 21 November 2026
+
+Your open tabs follow you: what's open on your other Macs comes up in ⌘T, ready to pick up where you left off.
+
+Press ⌘T and the pages you were last looking at on another Mac sit under your own open tabs, with the Mac's name beside them; start typing and the ones that match come up too. Return opens one here in a new tab. Each Mac says what it has open through your own iCloud, end to end encrypted, within half a minute of a change and the moment you switch away from it, and never a private tab, a pin, or a tab an agent is working in. It's ready for Quo for iPhone too: its tabs will show up the same way.
+
 ## 0.4.0 · 21 November 2026
 
 Pinned Calendar and Gmail that tell you what's coming, as Arc's did, plus the fixes and import support from Search 1.0.16.

@@ -1,0 +1,40 @@
+{
+  "fill": {
+    "solid": "srgb:0.09020,0.09020,0.09020,1.00000"
+  },
+  "groups": [
+    {
+      "blur-material": null,
+      "layers": [
+        {
+          "fill": {
+            "solid": "srgb:0.98039,0.98039,0.98039,1.00000"
+          },
+          "image-name": "quo-q-vector.svg",
+          "name": "quo-q-vector",
+          "position": {
+            "scale": 1.4,
+            "translation-in-points": [
+              0.39394936880489695,
+              0.22111351155115244
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

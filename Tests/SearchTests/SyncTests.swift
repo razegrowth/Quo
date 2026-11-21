@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import XCTest
 @testable import Search
@@ -449,5 +450,147 @@ final class SyncTests: XCTestCase {
         // A value this build doesn't know is passed over.
         SyncSettings.apply(["set:look": "\"sepia\""], to: prefs)
         XCTAssertEqual(prefs.look, .dark)
+    }
+
+    // MARK: - open tabs
+
+    private let tabsScope = SyncTabs.scope(Sync.scope(Profile.personalID))
+
+    private func tab(_ url: String, _ title: String = "", space: String? = nil, at active: Double = 6000) -> SyncedTab {
+        SyncedTab(url: url, title: title, space: space, active: active)
+    }
+
+    func testTabsGoAndComeBackTheSame() throws {
+        let work = UUID().uuidString
+        let tabs = [tab("https://a.example/", "A", space: work, at: 6030), tab("https://b.example/x", "B", at: 6200)]
+        let spaces = [SyncedTabSpace(id: work, name: "Work"), SyncedTabSpace(id: UUID().uuidString, name: "Empty")]
+        let file = SyncTabs.file(device: "mac-a", name: "Studio", phone: false, scope: tabsScope, tabs: tabs, spaces: spaces, now: 7000)
+        let data = try XCTUnwrap(SyncMerge.encode(file))
+        let back = try XCTUnwrap(SyncMerge.decode(data, scope: tabsScope))
+        let read = try XCTUnwrap(SyncTabs.read(back))
+        XCTAssertEqual(read.name, "Studio")
+        XCTAssertFalse(read.phone)
+        XCTAssertEqual(read.written, 7000)
+        // The one looked at last first, to the minute.
+        XCTAssertEqual(read.tabs.map(\.url), ["https://b.example/x", "https://a.example/"])
+        XCTAssertEqual(read.tabs.map(\.active), [6180, 6000])
+        // Only the spaces that have tabs are named.
+        XCTAssertEqual(read.spaces, [spaces[0]])
+        XCTAssertEqual(read.tabs(in: work).map(\.title), ["A"])
+        XCTAssertEqual(read.spaceName(work), "Work")
+
+        let phone = SyncTabs.file(device: "iphone-a", name: "iPhone", phone: true, scope: tabsScope, tabs: tabs, spaces: [], now: 7000)
+        XCTAssertEqual(SyncTabs.read(phone)?.phone, true)
+    }
+
+    func testATabsFileGoesThroughACloudKitRecord() throws {
+        let file = SyncTabs.file(device: "iphone-a", name: "iPhone", phone: true, scope: tabsScope,
+                                 tabs: [tab("https://a.example/", "A")], spaces: [], now: 7000)
+        var spare: URL?
+        let zone = CKRecordZone.ID(zoneName: SyncRecord.zone, ownerName: CKCurrentUserDefaultName)
+        let record = try SyncRecord.record(for: file, name: SyncRecord.name(scope: tabsScope, device: "iphone-a"),
+                                           zone: zone, tag: "test", spare: &spare)
+        XCTAssertNil(spare)
+        XCTAssertEqual(record.recordID.recordName, "tabs-profile-\(Profile.personalID.uuidString).iphone-a")
+        XCTAssertEqual(SyncRecord.file(from: record), file)
+    }
+
+    func testOnlyWebPagesAreHandedEachOnceAndNoMoreThanEnough() {
+        let tabs = [
+            tab("https://a.example/", "Old A", at: 6000),
+            tab("https://a.example/", "New A", at: 6100),
+            tab("https://a.example/", "A in Work", space: "work", at: 6050),
+            tab("about:blank"), tab("file:///Users/me/notes.txt"), tab("quo://settings"),
+            tab("javascript:alert(1)"), tab("https://"), tab("http://plain.example/"),
+        ]
+        let tidy = SyncTabs.tidy(tabs)
+        // The newest of a page in one space; the same page in another space
+        // is another tab.
+        XCTAssertEqual(tidy.map(\.title), ["New A", "", "A in Work"])
+        XCTAssertEqual(tidy[1].url, "http://plain.example/")
+        let many = (0..<400).map { tab("https://site\($0).example/", at: Double($0) * 60) }
+        let kept = SyncTabs.tidy(many)
+        XCTAssertEqual(kept.count, SyncTabs.most)
+        XCTAssertEqual(kept.first?.url, "https://site399.example/")
+    }
+
+    func testAGlanceMakesNoNewFileButAChangeDoes() {
+        let tabs = [tab("https://a.example/", "A", at: 6000)]
+        let written = SyncTabs.file(device: "mac-a", name: "Studio", phone: false, scope: tabsScope, tabs: tabs, spaces: [], now: 7000)
+        // The same tab looked at again within the minute, its title the same.
+        XCTAssertFalse(SyncTabs.due(written, tabs: [tab("https://a.example/", "A", at: 6040)], spaces: [],
+                                    name: "Studio", now: 7100, going: false))
+        let changed = tabs + [tab("https://b.example/", "B", at: 7050)]
+        // A new tab, but the last file was written a moment ago: not yet...
+        XCTAssertFalse(SyncTabs.due(written, tabs: changed, spaces: [], name: "Studio", now: 7010, going: false))
+        // ...unless the device is going away, or long enough has passed.
+        XCTAssertTrue(SyncTabs.due(written, tabs: changed, spaces: [], name: "Studio", now: 7010, going: true))
+        XCTAssertTrue(SyncTabs.due(written, tabs: changed, spaces: [], name: "Studio", now: 7000 + SyncTabs.every, going: false))
+        // Nothing written yet, or written under another name: now.
+        XCTAssertTrue(SyncTabs.due(nil, tabs: [], spaces: [], name: "Studio", now: 7010, going: false))
+        XCTAssertTrue(SyncTabs.due(written, tabs: tabs, spaces: [], name: "Studio 2", now: 7100, going: false))
+        // Going away with nothing new says nothing.
+        XCTAssertFalse(SyncTabs.due(written, tabs: tabs, spaces: [], name: "Studio", now: 7010, going: true))
+    }
+
+    func testOtherDevicesTabsLeaveOutThisOneQuietOnesAndOtherProfiles() {
+        let other = SyncTabs.scope(Sync.scope(UUID()))
+        let one = [tab("https://a.example/", "A")]
+        let files = [
+            SyncTabs.file(device: "me", name: "This Mac", phone: false, scope: tabsScope, tabs: one, spaces: [], now: 9000),
+            SyncTabs.file(device: "phone", name: "iPhone", phone: true, scope: tabsScope, tabs: one, spaces: [], now: 9000),
+            SyncTabs.file(device: "laptop", name: "Laptop", phone: false, scope: tabsScope, tabs: one, spaces: [], now: 8000),
+            SyncTabs.file(device: "empty", name: "Empty", phone: false, scope: tabsScope, tabs: [], spaces: [], now: 9000),
+            SyncTabs.file(device: "work", name: "Work Mac", phone: false, scope: other, tabs: one, spaces: [], now: 9000),
+        ]
+        XCTAssertEqual(SyncTabs.others(files, scope: tabsScope, device: "me", now: 9100).map(\.name), ["iPhone", "Laptop"])
+        XCTAssertEqual(SyncTabs.others(files, scope: tabsScope, device: "me", now: 8000 + SyncTabs.stale).map(\.name), ["iPhone"])
+        XCTAssertEqual(SyncTabs.others(files, scope: other, device: "me", now: 9100).map(\.name), ["Work Mac"])
+    }
+
+    func testATabsFileIsNeverTakenForAProfilesOrTheSettings() throws {
+        // As a Quo from before tabs synced meets one: in iCloud it decodes
+        // as any file and is kept, in its own scope, which that Quo never
+        // merges; read for a scope it does merge, it is passed over.
+        let file = SyncTabs.file(device: "phone", name: "iPhone", phone: true, scope: tabsScope,
+                                 tabs: [tab("https://a.example/")], spaces: [], now: 9000)
+        let data = try XCTUnwrap(SyncMerge.encode(file))
+        XCTAssertNotNil(SyncMerge.decode(data, scope: tabsScope))
+        XCTAssertNil(SyncMerge.decode(data, scope: Sync.scope(Profile.personalID)))
+        XCTAssertNil(SyncMerge.decode(data, scope: "app"))
+        // And a profile's own file is never read as tabs.
+        let pins = SyncFile(format: SyncMerge.format, device: "mac", name: "Mac", scope: Sync.scope(Profile.personalID),
+                            written: 9000, items: ["tabs": SyncEntry(v: "[]", t: 9000, d: "mac")])
+        XCTAssertNil(SyncTabs.read(pins))
+        // A device's own folder in a Mac from before: in a folder of its
+        // own name, which that Mac never lists.
+        let mac = mac("mac", ["space:\(Space.firstID.uuidString)": "{}"], scope: Sync.scope(Profile.personalID))
+        let tabsFolder = folder.appendingPathComponent(tabsScope, isDirectory: true)
+        try FileManager.default.createDirectory(at: tabsFolder, withIntermediateDirectories: true)
+        try data.write(to: tabsFolder.appendingPathComponent("phone.json"))
+        let before = mac.items
+        mac.pass(at: 9100)
+        XCTAssertEqual(mac.items, before)
+    }
+
+    func testTabsElsewhereAnswerToWhatIsTyped() {
+        let phone = DeviceTabs(device: "p", name: "iPhone", phone: true, written: 9000,
+                               tabs: [tab("https://news.example/today", "Morning news", at: 8000),
+                                      tab("https://recipes.example/soup", "Leek soup", at: 8500)], spaces: [])
+        let mac = DeviceTabs(device: "m", name: "Laptop", phone: false, written: 8000,
+                             tabs: [tab("https://soup.example/", "Soup shop", at: 8900)], spaces: [])
+        XCTAssertEqual(SyncTabs.matching("soup", in: [phone, mac]).map(\.tab.title), ["Soup shop", "Leek soup"])
+        XCTAssertEqual(SyncTabs.matching("NEWS", in: [phone, mac]).map(\.device.name), ["iPhone"])
+        XCTAssertEqual(SyncTabs.matching("", in: [phone, mac]).count, 3)
+    }
+
+    func testATabInASpaceThisDeviceDoesntKnowShowsInTheFirst() {
+        let device = DeviceTabs(device: "m", name: "Mac", phone: false, written: 9000,
+                                tabs: [tab("https://a.example/", space: "home"), tab("https://b.example/", space: "gone"),
+                                       tab("https://c.example/")], spaces: [])
+        XCTAssertEqual(device.tabs(in: "home").count, 1)
+        XCTAssertEqual(device.tabs(in: "home", known: ["home"], orHome: true).map(\.url),
+                       ["https://a.example/", "https://b.example/", "https://c.example/"])
+        XCTAssertEqual(device.tabs(in: "work", known: ["home", "work"]).count, 0)
     }
 }

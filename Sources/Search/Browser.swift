@@ -7181,8 +7181,10 @@ final class Browser: NSObject, ObservableObject {
                 guard let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) else { return false }
                 return !tab.bench && tab.shy == (active?.shy ?? false)
             }
-            let shown = Set(open.map(\.url))
-            offers = open + offers.filter { $0.tab != nil || !shown.contains($0.url) }
+            // Then the pages open on your other devices that answer to it.
+            let elsewhere = elsewhereOffers(matching: typed)
+            let shown = Set((open + elsewhere).map(\.url))
+            offers = open + elsewhere + offers.filter { $0.tab != nil || !shown.contains($0.url) }
             if !prefs.commandBar, !offers.isEmpty {
                 let near = AddressCommand.near(typed, in: self).map { [Suggestion.command($0)] } ?? []
                 offers += near + AddressCommand.listed(typed, in: self).map(Suggestion.command)
@@ -7440,7 +7442,32 @@ final class Browser: NSObject, ObservableObject {
             guard let id = offer.tab, let tab = tabs.first(where: { $0.id == id }) else { return false }
             return !tab.bench && tab.shy == shy
         }
-        return Array(open.prefix(4)) + (prefs.recentInNewTab ? recentPlaces() : [])
+        return Array(open.prefix(4)) + elsewhereOffers(matching: "") + (prefs.recentInNewTab ? recentPlaces() : [])
+    }
+
+    /// ⌘T's rows for pages open on your other devices, your iPhone's and
+    /// your other Macs' (SyncTabs.swift), in this window's profile. Before
+    /// anything is typed, the few looked at in the last day; as you type,
+    /// the ones that answer to it. Never in a private window, and never a
+    /// page already open here.
+    private func elsewhereOffers(matching typed: String) -> [Suggestion] {
+        guard active?.shy != true else { return [] }
+        let devices = Sync.shared.elsewhere(profileID)
+        guard !devices.isEmpty else { return [] }
+        let open = Set(tabs.compactMap { $0.address.map(History.identity(for:)) })
+        let blank = typed.trimmingCharacters(in: .whitespaces).isEmpty
+        let since = Date().timeIntervalSince1970 - 24 * 60 * 60
+        var seen = Set<String>()
+        var out: [Suggestion] = []
+        for (device, tab) in SyncTabs.matching(typed, in: devices) {
+            guard !blank || tab.active >= since, let url = URL(string: tab.url) else { continue }
+            let identity = History.identity(for: url)
+            guard !open.contains(identity), seen.insert(identity).inserted else { continue }
+            out.append(Suggestion(key: tab.title.isEmpty ? Address.pretty(url) : tab.title, title: Address.pretty(url),
+                                  url: url, kind: .elsewhere(device.name, phone: device.phone)))
+            if out.count == (blank ? 3 : 2) { break }
+        }
+        return out
     }
 
     private func recentPlaces() -> [Suggestion] {

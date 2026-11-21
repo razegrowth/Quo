@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Quo</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Web site URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>http</string>
+				<string>https</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Quo</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>quo</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Quo listens while you hold the mic, to search by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>What you say is turned into words for the search, on this iPhone where it can be.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Quo saves images you choose to your photos.</string>
+	<key>QuoCloudKit</key>
+	<string>$(QUO_CLOUDKIT)</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+</dict>
+</plist>

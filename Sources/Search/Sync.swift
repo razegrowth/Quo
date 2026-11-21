@@ -35,8 +35,12 @@ import SystemConfiguration
 // tabs or downloads folder), pins (each space's and the ones every space shows,
 // their letter, name, page and order), bookmarks, and the settings listed in
 // SyncSettings. What never does: history, passwords, cookies and site data,
-// open tabs that aren't pinned, tab groups (they hold open tabs), private
-// windows, extensions, the downloads folder, window sizes.
+// tab groups (they hold open tabs), private windows, extensions, the
+// downloads folder, window sizes.
+//
+// Open tabs aren't merged with anyone's: each Mac, and Quo for iPhone, hands
+// its own over as they are, in a scope of their own beside each profile's,
+// "tabs-profile-<id>", and the other devices' show in ⌘T (SyncTabs.swift).
 //
 // Profiles: Personal is the same profile on every Mac. Another profile syncs
 // with the profile of the same id on another Mac; one made separately on each
@@ -125,6 +129,12 @@ final class Sync: ObservableObject {
     @Published private(set) var problem: String?
     /// The other Macs whose files were read, by name.
     @Published private(set) var others: [String] = []
+    /// The open tabs of the other devices, an iPhone's among them, by the
+    /// scope of the profile they are in ("profile-<id>").
+    @Published private(set) var elsewhere: [String: [DeviceTabs]] = [:]
+    /// The app went to the back: this Mac's tabs are written in the next
+    /// pass even if it wrote them a moment ago, for the iPhone in your hand.
+    private var going = false
 
     var on: Bool { folder != nil || cloud }
 
@@ -243,7 +253,7 @@ final class Sync: ObservableObject {
     /// the browser stays as it is.
     func turnOff() {
         if let root {
-            for scope in scopes {
+            for scope in scopes + tabScopes {
                 try? FileManager.default.removeItem(at: root.appendingPathComponent(scope).appendingPathComponent(device + ".json"))
             }
         }
@@ -260,6 +270,8 @@ final class Sync: ObservableObject {
         lastSynced = nil
         problem = nil
         others = []
+        elsewhere = [:]
+        going = false
     }
 
     private func begin() {
@@ -267,6 +279,11 @@ final class Sync: ObservableObject {
         for name in [Spaces.changed, Pins.changed, Bookmarks.saved, NSApplication.didBecomeActiveNotification] {
             NotificationCenter.default.publisher(for: name).sink(receiveValue: poke).store(in: &bag)
         }
+        // Leaving the Mac for the iPhone: its tabs go now, not in half a minute.
+        NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification).sink { [weak self] _ in
+            self?.going = true
+            self?.schedule(after: 0.5)
+        }.store(in: &bag)
         Shared.prefs.objectWillChange.sink { [weak self] in self?.schedule() }.store(in: &bag)
         // Signed out of iCloud, or into another Apple ID: looked at again.
         if cloud {
@@ -321,6 +338,9 @@ final class Sync: ObservableObject {
     }
 
     private var scopes: [String] { ["app"] + Profiles.shared.list.map { Sync.scope($0.id) } }
+    /// Each profile's open tabs' scope (SyncTabs.swift): never merged, so
+    /// not among `scopes`, which are.
+    private var tabScopes: [String] { Profiles.shared.list.map { SyncTabs.scope(Sync.scope($0.id)) } }
 
     nonisolated static func scope(_ profile: UUID) -> String { "profile-" + profile.uuidString }
 
@@ -354,6 +374,7 @@ final class Sync: ObservableObject {
                                current: { Sync.items(of: profile.id, base: $0) },
                                apply: { Sync.apply($0, to: profile) }))
         }
+        if problem == nil { runTabs(in: root) }
         others = seen.sorted()
         if problem == nil { lastSynced = Date() }
     }
@@ -373,9 +394,26 @@ final class Sync: ObservableObject {
         problem = nil
         watch(folder, scope: scope)
         let now = Date().timeIntervalSince1970
-        var theirs: [[String: SyncEntry]] = []
-        var names: [String] = []
         let own = folder.appendingPathComponent(device + ".json")
+        let read = theirFiles(in: folder, scope: scope, own: own)
+        let theirs = read.map(\.items)
+        let names = read.map { $0.name ?? "Another Mac" }
+
+        let merged = merge(scope: scope, theirs: theirs, now: now, current: current, apply: apply)
+        // This Mac's file, only when it says something new.
+        let written = (try? Data(contentsOf: own)).flatMap { SyncMerge.decode($0, scope: scope) }
+        if written?.items != merged || written?.name != Sync.macName {
+            let file = SyncFile(format: SyncMerge.format, device: device, name: Sync.macName, scope: scope, written: now, items: merged)
+            if let data = SyncMerge.encode(file) { try? data.write(to: own, options: .atomic) }
+        }
+        return names
+    }
+
+    /// The other devices' files in a scope's folder, those that are there
+    /// to be read now.
+    private func theirFiles(in folder: URL, scope: String, own: URL) -> [SyncFile] {
+        let files = FileManager.default
+        var out: [SyncFile] = []
         for url in (try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] {
             let name = url.lastPathComponent
             // iCloud Drive keeps a file it has let go of as ".<name>.icloud",
@@ -394,18 +432,35 @@ final class Sync: ObservableObject {
             guard let data = try? Data(contentsOf: url), data.count < 32 << 20,
                   let file = SyncMerge.decode(data, scope: scope), file.device != device
             else { continue }
-            theirs.append(file.items)
-            names.append(file.name ?? "Another Mac")
+            out.append(file)
         }
+        return out
+    }
 
-        let merged = merge(scope: scope, theirs: theirs, now: now, current: current, apply: apply)
-        // This Mac's file, only when it says something new.
-        let written = (try? Data(contentsOf: own)).flatMap { SyncMerge.decode($0, scope: scope) }
-        if written?.items != merged || written?.name != Sync.macName {
-            let file = SyncFile(format: SyncMerge.format, device: device, name: Sync.macName, scope: scope, written: now, items: merged)
+    /// Each profile's open tabs through the folder: the other devices'
+    /// read, and this Mac's written when they changed (SyncTabs.swift).
+    private func runTabs(in root: URL) {
+        let now = Date().timeIntervalSince1970
+        let going = self.going
+        self.going = false
+        var found: [String: [DeviceTabs]] = [:]
+        for profile in Profiles.shared.list {
+            let scope = SyncTabs.scope(Sync.scope(profile.id))
+            let folder = root.appendingPathComponent(scope, isDirectory: true)
+            guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else { continue }
+            let own = folder.appendingPathComponent(device + ".json")
+            found[Sync.scope(profile.id)] = SyncTabs.others(theirFiles(in: folder, scope: scope, own: own),
+                                                            scope: scope, device: device, now: now)
+            // Before a window is up there is nothing to say yet, not "none".
+            guard !Browsers.all.isEmpty else { continue }
+            let mine = Sync.openTabs(of: profile.id)
+            let written = (try? Data(contentsOf: own)).flatMap { SyncMerge.decode($0, scope: scope) }
+            guard SyncTabs.due(written, tabs: mine.tabs, spaces: mine.spaces, name: Sync.macName, now: now, going: going) else { continue }
+            let file = SyncTabs.file(device: device, name: Sync.macName, phone: false, scope: scope,
+                                     tabs: mine.tabs, spaces: mine.spaces, now: now)
             if let data = SyncMerge.encode(file) { try? data.write(to: own, options: .atomic) }
         }
-        return names
+        if elsewhere != found { elsewhere = found }
     }
 
     /// One scope's items merged with the other Macs', applied here, and what
@@ -476,6 +531,26 @@ final class Sync: ObservableObject {
                     if let wait = SyncCloud.retryAfter(error) { retry(after: wait) }
                 }
             }
+            // Each profile's open tabs: the other devices' read, this Mac's
+            // saved when they changed (SyncTabs.swift).
+            let going = self.going
+            self.going = false
+            var found: [String: [DeviceTabs]] = [:]
+            for profile in Profiles.shared.list {
+                let scope = SyncTabs.scope(Sync.scope(profile.id))
+                found[Sync.scope(profile.id)] = SyncTabs.others(store.files(in: scope), scope: scope, device: device, now: now)
+                guard problem == nil, !Browsers.all.isEmpty else { continue }
+                let mine = Sync.openTabs(of: profile.id)
+                guard SyncTabs.due(store.file(scope: scope, device: device), tabs: mine.tabs, spaces: mine.spaces,
+                                   name: Sync.macName, now: now, going: going) else { continue }
+                let file = SyncTabs.file(device: device, name: Sync.macName, phone: false, scope: scope,
+                                         tabs: mine.tabs, spaces: mine.spaces, now: now)
+                do { try await store.save(file) } catch {
+                    problem = SyncCloud.describe(error)
+                    if let wait = SyncCloud.retryAfter(error) { retry(after: wait) }
+                }
+            }
+            if elsewhere != found { elsewhere = found }
             others = seen.sorted()
             if problem == nil { lastSynced = Date() }
         }
@@ -547,6 +622,35 @@ final class Sync: ObservableObject {
         Session.erase(space: space.id)
         Pins.forget(space.id)
         if space.sharesSignIns != true { Spaces.erase(space.id) }
+    }
+
+    // MARK: - open tabs
+
+    /// The other devices' open tabs in a profile, the one heard from last
+    /// first.
+    func elsewhere(_ profile: UUID) -> [DeviceTabs] { elsewhere[Sync.scope(profile)] ?? [] }
+
+    /// A profile's open tabs on this Mac, every window's and every space's,
+    /// for the other devices: not private ones, not pins (they sync as
+    /// pins), not a script's or an agent's, nor those in a group an agent
+    /// made; not a pop-up's or a window closed for good.
+    static func openTabs(of profile: UUID) -> (tabs: [SyncedTab], spaces: [SyncedTabSpace]) {
+        var tabs: [SyncedTab] = []
+        for browser in Browsers.all where browser.profileID == profile && !browser.isPopup && !browser.retired && !browser.shut {
+            var rows: [(space: UUID, tabs: [Tab], groups: [TabGroup])] = [(browser.spaceID, browser.tabs, browser.tabGroups)]
+            for (space, row) in browser.parked { rows.append((space, row.tabs, row.groups ?? [])) }
+            for row in rows {
+                let agents = Set(row.groups.filter { $0.agent != nil }.map(\.id))
+                for tab in row.tabs where !tab.shy && !tab.bench && !tab.agent && !tab.popup && tab.pin == nil {
+                    if let group = tab.groupID, agents.contains(group) { continue }
+                    guard let url = tab.address, SyncTabs.handed(url.absoluteString) else { continue }
+                    tabs.append(SyncedTab(url: url.absoluteString, title: tab.label, space: row.space.uuidString,
+                                          active: tab.touched.timeIntervalSince1970))
+                }
+            }
+        }
+        let spaces = Spaces.read(profile: profile).map { SyncedTabSpace(id: $0.id.uuidString, name: $0.name) }
+        return (tabs, spaces)
     }
 
     // MARK: - for Settings

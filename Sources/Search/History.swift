@@ -33,6 +33,9 @@ struct Suggestion: Identifiable, Equatable {
         case searched
         /// Not a place either: something the app itself does.
         case command(AddressCommand)
+        /// A page open on another of your devices, your iPhone or another
+        /// Mac, by its name (SyncTabs.swift): opened here in a new tab.
+        case elsewhere(String, phone: Bool)
 
         var isCommand: Bool { if case .command = self { return true }; return false }
     }
@@ -46,6 +49,7 @@ struct Suggestion: Identifiable, Equatable {
         if case .searched = kind { return "searched " + History.identity(for: url) }
         if case .visited = kind { return History.identity(for: url) }
         if case .bookmark = kind { return History.identity(for: url) }
+        if case .elsewhere(let device, _) = kind { return "elsewhere " + device + " " + url.absoluteString }
         return key
     }
 
