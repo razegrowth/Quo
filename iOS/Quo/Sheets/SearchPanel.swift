@@ -19,36 +19,65 @@ struct SearchPanel: View {
     @ObservedObject private var settings = AppSettings.shared
 
     let morph: Namespace.ID
+    /// While the bar is being drawn up into this, its own row stands where
+    /// the field will be, its + in place; let go, the + becomes the field.
+    let drawnRow: AnyView?
 
-    init(browser: Browser, prefill: String?, morph: Namespace.ID) {
+    init(browser: Browser, prefill: String?, morph: Namespace.ID, drawnRow: AnyView? = nil) {
         self.browser = browser
         self.prefill = prefill
         self.morph = morph
+        self.drawnRow = drawnRow
     }
 
     var body: some View {
         // The sheet behind this is the bottom bar's own, grown (Chrome).
         VStack(spacing: 0) {
-            field
-                .padding(.horizontal, 14)
-                .padding(.top, 14)
-                .padding(.bottom, 6)
+            if let drawnRow {
+                drawnRow
+            } else {
+                field
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+            }
             content
                 .frame(maxWidth: .infinity)
         }
         .environment(\.colorScheme, incognito ? .dark : colorScheme)
         .onAppear {
             text = prefill ?? ""
-            if settings.autoKeyboard || prefill != nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true }
-            }
+            if drawnRow == nil { focusSoon() }
         }
+        // Drawn up and let go: now the keyboard.
+        .onChange(of: drawnRow == nil) { _, settled in if settled { focusSoon() } }
         .onDisappear { dictation.stop() }
         .onChange(of: text) { _, new in askEngine(new) }
         .onChange(of: dictation.words) { _, words in if !words.isEmpty { text = words } }
     }
 
     @Environment(\.colorScheme) private var colorScheme
+
+    /// Five suggestions' room, always.
+    static let listHeight: CGFloat = 5 * 48 + 8
+
+    /// The keyboard comes up in the same moment the sheet starts to move,
+    /// so the two travel together; a moment later, the keyboard starts
+    /// mid-spring and drags the sheet along on a curve of its own.
+    private func focusSoon() {
+        // The keyboard is already on its way (the stand-in field took it on
+        // the tap); the next turn, the field is in the window to take it over.
+        guard settings.autoKeyboard || prefill != nil else { return }
+        DispatchQueue.main.async { focused = true }
+        // Once, a little later, if the field didn't take it: the keyboard
+        // asked for again rather than typing into nothing.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard case .search = browser.panel, drawnRow == nil,
+                  !Keyboard.shared.up || Keyboard.shared.proxyHolds else { return }
+            focused = false
+            DispatchQueue.main.async { focused = true }
+        }
+    }
 
     // MARK: - the field
 
@@ -101,8 +130,12 @@ struct SearchPanel: View {
         .padding(.leading, 18)
         .padding(.trailing, 10)
         .frame(height: 54)
-        .background(Q.tile, in: Capsule())
-        .overlay(Capsule().strokeBorder(Q.hairline))
+        .background {
+            // The bar's + capsule, stretched into the field.
+            Capsule().fill(Q.tile)
+                .overlay(Capsule().strokeBorder(Q.hairline))
+                .matchedGeometryEffect(id: "plus", in: morph)
+        }
     }
 
     // MARK: - under it
@@ -110,28 +143,26 @@ struct SearchPanel: View {
     @ViewBuilder private var content: some View {
         if let problem = dictation.problem {
             quiet(problem)
+                .frame(height: SearchPanel.listHeight)
         } else if incognito && text.isEmpty {
             quiet("You\u{2019}re browsing Incognito")
-                .frame(height: 220)
+                .frame(height: SearchPanel.listHeight)
         } else {
-            let rows = suggestions
-            if rows.isEmpty {
-                Color.clear.frame(height: 12)
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(rows) { row in
-                            Button { choose(row) } label: { SuggestionRow(row: row) }
-                                .buttonStyle(RowStyle())
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
+            // One height whatever is in it: suggestions coming and going as
+            // you type fill the same room, top first, and never resize the
+            // sheet under your thumb.
+            // Five at most, and no scrolling, as in Arc Search: a finger on
+            // the list moves the sheet, never a list inside it.
+            let rows = Array(suggestions.prefix(5))
+            VStack(spacing: 0) {
+                ForEach(rows) { row in
+                    Button { choose(row) } label: { SuggestionRow(row: row) }
+                        .buttonStyle(RowStyle())
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: 320)
-                .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+            .frame(height: SearchPanel.listHeight, alignment: .top)
         }
     }
 
@@ -230,7 +261,7 @@ struct SearchPanel: View {
 
     private func close() {
         dictation.stop()
-        browser.panel = .none
+        browser.closeSearch()
     }
 
     /// The engine's own suggestions, after a short pause in typing.
@@ -327,7 +358,9 @@ final class Dictation: ObservableObject {
     @Published private(set) var listening = false
     @Published private(set) var words = ""
     @Published private(set) var problem: String?
-    private let engine = AVAudioEngine()
+    /// Made when the mic is first tapped: an audio engine is slow to set
+    /// up, and making one each time the search opened cost a frame.
+    private lazy var engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
 
@@ -399,4 +432,36 @@ final class Dictation: ObservableObject {
         listening = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
+}
+
+/// Whether the keyboard is on screen (the screen keeps this from the
+/// system's notices), and a way to bring it up before the field is there.
+@MainActor
+final class Keyboard {
+    static let shared = Keyboard()
+    var up = false
+    private var proxy: UITextField?
+
+    /// The keyboard up this very moment, before the search field is even
+    /// on screen: a field of the same kind out of sight takes it first, and
+    /// the search field takes it over when it comes, the keyboard staying.
+    func raise() {
+        guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows).first(where: \.isKeyWindow) else { return }
+        if proxy == nil {
+            let field = UITextField(frame: CGRect(x: -1000, y: -1000, width: 10, height: 10))
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+            field.spellCheckingType = .no
+            field.keyboardType = .webSearch
+            field.returnKeyType = .go
+            proxy = field
+        }
+        guard let proxy else { return }
+        if proxy.window !== window { window.addSubview(proxy) }
+        proxy.becomeFirstResponder()
+    }
+
+    /// Whether the stand-in still has the keyboard (the search field never took it).
+    var proxyHolds: Bool { proxy?.isFirstResponder ?? false }
 }

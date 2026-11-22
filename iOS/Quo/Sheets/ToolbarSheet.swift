@@ -8,13 +8,16 @@ struct ToolbarPanel: View {
     @ObservedObject var browser: Browser
     @ObservedObject var tab: Tab
     @ObservedObject private var sync = MacSync.shared
-    @State private var displayOpen = true
+    /// Display options, open or closed as you last left them; closed at first.
+    @AppStorage("toolbar.displayOpen") private var displayOpen = false
     @State private var copied = false
 
     private func dismiss() { browser.panel = .none }
 
     var body: some View {
-        ScrollView {
+        // No scroll view: what's here always fits, and a scroll view sized
+        // to its contents is laid out twice over on every open.
+        VStack(spacing: 0) {
             VStack(spacing: 12) {
                 address
                 tiles
@@ -31,9 +34,6 @@ struct ToolbarPanel: View {
             .padding(.top, 10)
             .padding(.bottom, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        // As tall as what's in it, up to most of the screen.
-        .frame(maxHeight: UIScreen.main.bounds.height * 0.78)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -62,6 +62,7 @@ struct ToolbarPanel: View {
             .accessibilityLabel("Edit address")
             small(copied ? "checkmark" : "link", enabled: tab.url != nil, label: "Copy link") {
                 UIPasteboard.general.url = tab.url
+                Haptics.tap()
                 withAnimation(Q.quick) { copied = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation(Q.quick) { copied = false } }
             }
@@ -82,6 +83,7 @@ struct ToolbarPanel: View {
                 .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
         }
+        .buttonStyle(PressStyle())
         .disabled(!enabled)
         .accessibilityLabel(label)
     }
@@ -105,6 +107,7 @@ struct ToolbarPanel: View {
                     browser.say("Unpinned from \(sync.currentSpace?.name ?? "your space")")
                 } else {
                     sync.pin(url, title: tab.shownTitle)
+                    Haptics.done()
                     browser.say("Pinned to \(sync.currentSpace?.name ?? "your space")")
                 }
             }
@@ -220,6 +223,8 @@ private struct ZoomRow: View {
             Spacer()
             Text("\(Int((zoom * 100).rounded()))%")
                 .font(Q.footnote.monospacedDigit())
+                .contentTransition(.numericText(value: Double(zoom)))
+                .animation(Q.quick, value: zoom)
                 .foregroundStyle(Q.muted)
                 .onTapGesture { set(1) }
             HStack(spacing: 0) {

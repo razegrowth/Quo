@@ -33,22 +33,41 @@ final class Browser: ObservableObject {
         didSet {
             // A new search starts in the tab's own mode; switching it is the sheet's.
             if case let .search(_, incognito) = panel, !isSearch(oldValue) { searchIncognito = incognito }
+            Trace.mark("panel \(panel)")
             if panel != .switcher { chromeHidden = false }
-            // Leaving search, the keyboard goes down with the sheet, not after it.
+            // Leaving search, the keyboard goes down, and the sheet with it.
             if isSearch(oldValue), !isSearch(panel) {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
+            if panel != oldValue { screen?.panelChanged(from: oldValue) }
         }
     }
+    /// The screen, which moves everything to match.
+    weak var screen: BrowserController?
     /// The bar slid away under the tab switcher, its buttons standing in.
-    @Published var chromeHidden = false
+    @Published var chromeHidden = false {
+        didSet { if chromeHidden != oldValue { screen?.chromeHiddenChanged() } }
+    }
     private func isSearch(_ panel: Panel) -> Bool { if case .search = panel { return true } else { return false } }
     @Published var sheet: SheetKind?
-    @Published var barCollapsed = false
+    @Published var barCollapsed = false {
+        didSet { if barCollapsed != oldValue { screen?.barCollapsedChanged() } }
+    }
     /// Your Mac's spaces, risen over everything.
-    @Published var spacesOpen = false
+    @Published var spacesOpen = false {
+        didSet { if spacesOpen != oldValue { screen?.spacesChanged() } }
+    }
     /// The search sheet's Incognito switch, which the bar's ground wears too.
-    @Published var searchIncognito = false
+    @Published var searchIncognito = false {
+        didSet { if searchIncognito != oldValue { screen?.groundChanged() } }
+    }
+    /// A tab coming out of the tab button under a finger: the button's own
+    /// card is out, so it's hidden.
+    @Published var hopping = false
+    /// The first launch, before the onboarding is up: the browser stays
+    /// dark under it, so it doesn't show for a moment first.
+    @Published var awaitingOnboarding = !AppSettings.shared.onboarded
+        && ProcessInfo.processInfo.environment["QUO_SKIP_ONBOARDING"] == nil
     @Published var translating: Translator.State = .idle
     @Published var reader: Reader.Article?
     @Published var notice: String?
@@ -87,8 +106,31 @@ final class Browser: ObservableObject {
         barCollapsed = false
     }
 
+    /// Nothing open: straight to a search, keyboard up, if Settings says so.
+    func searchIfEmpty() {
+        if tabs.current == nil, tabs.all.isEmpty, AppSettings.shared.autoKeyboard { newSearch() }
+    }
+
+    /// A new search, the keyboard starting on this very tap: the sheet
+    /// stands where the bar is and the keyboard brings it up.
     func newSearch() {
-        panel = .search(prefill: nil, incognito: tabs.current?.incognito ?? false)
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) {
+            panel = .search(prefill: nil, incognito: tabs.current?.incognito ?? false)
+        }
+        if AppSettings.shared.autoKeyboard { Keyboard.shared.raise() }
+    }
+
+    /// A search put away: it goes back down with the keyboard, as one piece,
+    /// and is the bar again once it's there.
+    func closeSearch() {
+        guard case .search = panel else { return }
+        if Keyboard.shared.up {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } else {
+            panel = .none
+        }
     }
 
     func showSwitcher() {
@@ -131,46 +173,13 @@ struct BrowserView: View {
     @StateObject private var browser = Browser.shared
     @ObservedObject private var tabs = Tabs.shared
     @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Q.frame.ignoresSafeArea()
-
-            GeometryReader { geo in
-                page(top: geo.safeAreaInsets.top)
-                    .clipShape(RoundedRectangle(cornerRadius: pageScale < 1 ? 28 : 0, style: .continuous))
-                    .scaleEffect(pageScale, anchor: .center)
-                    .quoAnimation(.spring(response: 0.32, dampingFraction: 0.9), value: pageScale)
-                    .ignoresSafeArea(edges: [.top, .bottom])
-            }
-
-            if browser.panel.isSheet {
-                // The page dims where it is, fading, never sliding; a tap on
-                // it puts the sheet away.
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .onTapGesture { browser.panel = .none }
-                    .transition(.opacity)
-                    .zIndex(1)
-            }
-
-            if browser.panel == .switcher {
-                // It moves its own cards in and out.
-                TabSwitcher(browser: browser)
-                    .transition(.identity)
-                    .zIndex(2)
-            }
-
-            // Over the switcher, so the bar slides away and back with it.
-            Chrome(browser: browser)
-                .zIndex(3)
-
-            if browser.spacesOpen {
-                SpacesSheet(browser: browser)
-                    .transition(.move(edge: .bottom))
-                    .zIndex(5)
-            }
+        ZStack {
+            // The pages, the bar and its sheets, the switcher and your
+            // spaces: one UIKit screen that moves them itself.
+            BrowserScreen()
+                .ignoresSafeArea()
 
             if let notice = browser.notice {
                 Text(notice)
@@ -181,7 +190,11 @@ struct BrowserView: View {
                     .overlay(Capsule().strokeBorder(Q.hairline))
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    // In from the top and back out the same way, leaving
+                    // quicker than it came.
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity).animation(.easeOut(duration: 0.18))))
                     .zIndex(6)
             }
 
@@ -189,10 +202,12 @@ struct BrowserView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, 8)
                 .zIndex(6)
+
+            if browser.awaitingOnboarding {
+                Color.black.ignoresSafeArea().zIndex(7)
+            }
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.18) : Q.snap, value: browser.panel)
         .animation(Q.settle, value: browser.notice)
-        .animation(.spring(response: 0.32, dampingFraction: 0.9), value: browser.spacesOpen)
         .sheet(item: $browser.sheet) { kind in
             switch kind {
             case .site:
@@ -208,121 +223,8 @@ struct BrowserView: View {
         }
         .translator(browser: browser)
         .onAppear {
-            if tabs.current == nil, tabs.all.isEmpty, settings.autoKeyboard { browser.newSearch() }
-        }
-    }
-
-    /// Behind a sheet the page steps back a little, as under any sheet.
-    private var pageScale: CGFloat {
-        guard tabs.current != nil else { return 1 }
-        return browser.panel.isSheet || browser.spacesOpen ? 0.93 : 1
-    }
-
-    @ViewBuilder private func page(top: CGFloat) -> some View {
-        if let tab = tabs.current {
-            PageView(tab: tab, browser: browser, top: top)
-                .id(tab.id)
-        } else {
-            StartView(browser: browser)
-                .padding(.top, top)
-                .background(Q.ground)
-        }
-    }
-}
-
-/// The tab's page, with a thin line while it loads.
-struct PageView: View {
-    @ObservedObject var tab: Tab
-    let browser: Browser
-    /// The status bar's height: the strip there wears the page's colour.
-    let top: CGFloat
-
-    var body: some View {
-        WebHost(tab: tab, browser: browser)
-            .padding(.top, top)
-            .background(Color(tab.topColor))
-            .overlay {
-                if let failure = tab.failure {
-                    VStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.magnifyingglass")
-                            .font(.system(size: 28, weight: .regular))
-                            .foregroundStyle(Q.muted)
-                        Text("Can\u{2019}t open \(Address.shown(tab.url))")
-                            .font(Q.callout)
-                            .foregroundStyle(Q.ink)
-                            .multilineTextAlignment(.center)
-                        Text(failure)
-                            .font(Q.footnote)
-                            .foregroundStyle(Q.muted)
-                            .multilineTextAlignment(.center)
-                        Button { tab.retry() } label: {
-                            Text("Try Again")
-                                .font(Q.bodyEmphasis)
-                                .foregroundStyle(Q.ground)
-                                .padding(.horizontal, 20)
-                                .frame(height: 44)
-                                .background(Q.ink, in: Capsule())
-                        }
-                        .buttonStyle(PressStyle())
-                        .padding(.top, 8)
-                    }
-                    .padding(32)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Q.ground)
-                    .transition(.opacity)
-                }
-            }
-            .overlay(alignment: .top) {
-                if tab.loading {
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: top)
-                        GeometryReader { geo in
-                            Rectangle().fill(Q.ink.opacity(0.55))
-                                .frame(width: geo.size.width * max(0.06, tab.progress), height: 2)
-                                .animation(Q.quick, value: tab.progress)
-                        }
-                        .frame(height: 2)
-                    }
-                    .transition(.opacity)
-                }
-            }
-    }
-}
-
-/// The tab's WKWebView, made once and kept by the tab.
-struct WebHost: UIViewRepresentable {
-    let tab: Tab
-    let browser: Browser
-
-    func makeUIView(context: Context) -> UIView {
-        let holder = UIView()
-        holder.backgroundColor = .clear
-        attach(to: holder)
-        return holder
-    }
-
-    func updateUIView(_ holder: UIView, context: Context) {
-        if holder.subviews.first !== tab.webViewIfBuilt { attach(to: holder) }
-    }
-
-    private func attach(to holder: UIView) {
-        holder.subviews.forEach { $0.removeFromSuperview() }
-        let web = tab.webView(store: Tabs.shared.store(for: tab))
-        web.translatesAutoresizingMaskIntoConstraints = false
-        holder.addSubview(web)
-        NSLayoutConstraint.activate([
-            web.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
-            web.topAnchor.constraint(equalTo: holder.topAnchor),
-            web.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
-        ])
-        // Room under the page for the bar, so its foot can be scrolled to.
-        web.scrollView.contentInset.bottom = 64
-        web.scrollView.verticalScrollIndicatorInsets.bottom = 64
-        let browser = self.browser
-        tab.onScroll = { [weak tab] delta, dragging in
-            guard let tab else { return }
-            browser.scrolled(delta, dragging: dragging, tab: tab)
+            // Not under the onboarding: the keyboard would come up behind it.
+            if settings.onboarded { browser.searchIfEmpty() }
         }
     }
 }
@@ -341,6 +243,7 @@ struct StartView: View {
                 .foregroundStyle(Q.ink)
             Text(sync.currentSpace?.name ?? "Quo")
                 .font(Q.title)
+                .titleTracking()
                 .foregroundStyle(Q.ink)
                 .padding(.top, 14)
             Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))

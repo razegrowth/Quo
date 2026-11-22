@@ -7,8 +7,9 @@ import UIKit
 /// next one peeking in from the right; the ones before it tuck under, closer
 /// together and darker, the further back they are.
 ///
-/// Opening it, the page in front shrinks into its card in the middle, and
-/// the bar slides away as the switcher's own buttons come in. A card tapped grows back into the page while the rest
+/// Opening it, the page in front shrinks into its card, peeking in on the
+/// right, the tab before it in the middle; the bar slides away as the
+/// switcher's own buttons come in. A card tapped grows back into the page while the rest
 /// fall into the bar's tab button. A card flicked up closes.
 struct TabSwitcher: View {
     @ObservedObject var browser: Browser
@@ -40,8 +41,9 @@ struct TabSwitcher: View {
             let g = Deck(size: proxy.size, insets: Screen.insets)
             let cards = deck
             ZStack(alignment: .topLeading) {
+                // Dark until the chosen card covers the screen.
                 backdrop
-                    .opacity(phase == .open ? 1 : 0)
+                    .opacity(phase == .arriving ? 0 : 1)
 
                 if cards.isEmpty {
                     empty.frame(width: g.W, height: g.H)
@@ -75,20 +77,30 @@ struct TabSwitcher: View {
         let shown = cardOpacity(tab, d: d)
         let headerWidth = max(0, min(g.cardW, g.x(d + 1) - g.x(d) - 8))
 
-        DeckHeader(tab: tab, roomy: headerWidth > 96)
+        DeckHeader(tab: tab, room: headerWidth)
             .frame(width: headerWidth, height: 20, alignment: .leading)
             .position(x: frame.minX + headerWidth / 2, y: frame.minY - 18 + liftY)
             .opacity(open ? shown * g.dimHeader(d) : 0)
             .zIndex(Double(index) * 2 + 1)
             .allowsHitTesting(false)
+            .transition(thrown(g))
 
         DeckCard(tab: tab, width: frame.width, height: frame.height,
-                 radius: radius(of: tab), dim: open ? g.dim(d) : 0)
+                 radius: radius(of: tab), dim: open ? g.dim(d) : 0,
+                 top: frame.minY == 0 ? g.top : 0)
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY + liftY)
             .opacity(shown * (1 + min(0, liftY) / g.H * 1.6))
             .zIndex(Double(index) * 2)
             .allowsHitTesting(false)
+            .transition(thrown(g))
+    }
+
+    /// A card closed by a flick carries on up and off the screen on its own
+    /// quick curve, from wherever the finger left it.
+    private func thrown(_ g: Deck) -> AnyTransition {
+        .asymmetric(insertion: .identity,
+                    removal: .offset(y: -g.H * 0.9).combined(with: .opacity).animation(.easeOut(duration: 0.24)))
     }
 
     /// Where a card is in each phase: in the deck, as the page itself, or
@@ -98,9 +110,9 @@ struct TabSwitcher: View {
         case .open:
             return g.card(d)
         case .arriving:
-            return tab.id == tabs.current?.id ? g.page : g.button
+            return tab.id == tabs.current?.id ? g.screen : g.button
         case .leaving(let chosen):
-            return tab.id == chosen ? g.page : g.button
+            return tab.id == chosen ? g.screen : g.button
         }
     }
 
@@ -127,8 +139,11 @@ struct TabSwitcher: View {
         order = sorted.map(\.id)
         sorted.forEach { $0.loadThumbnail() }
         // The tab you were on in the middle: the page shrinks into its card.
+        // As in Arc Search: the tab before the one you were on in the middle,
+        // the page you were on shrinking into its card peeking in on the
+        // right, so going back to the last tab is one tap.
         let current = sorted.firstIndex { $0.id == tabs.current?.id } ?? (sorted.count - 1)
-        position = CGFloat(max(0, current))
+        position = CGFloat(max(0, current - 1))
         DispatchQueue.main.async {
             withAnimation(Self.move) {
                 phase = .open
@@ -139,16 +154,23 @@ struct TabSwitcher: View {
 
     private func choose(_ tab: Tab) {
         guard phase == .open else { return }
-        tabs.select(tab)
+        // Its page goes behind the switcher now, live, so it has drawn by
+        // the time the card has grown over the screen.
+        browser.screen?.prepare(tab)
         // The card grows back into the page while the bar slides up with it.
         withAnimation(Self.move) {
             phase = .leaving(tab.id)
             browser.chromeHidden = false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Once the card covers the screen, the page is in front under it
+        // and the switcher goes: the same picture, on the same spot.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             var quiet = Transaction()
             quiet.disablesAnimations = true
-            withTransaction(quiet) { browser.panel = .none }
+            withTransaction(quiet) {
+                tabs.select(tab)
+                browser.panel = .none
+            }
         }
     }
 
@@ -178,7 +200,9 @@ struct TabSwitcher: View {
                     let raw = from - t.width / g.step
                     let last = CGFloat(cards.count - 1)
                     // Past either end, the deck gives a little and no more.
-                    position = raw < 0 ? raw / 3 : raw > last ? last + (raw - last) / 3 : raw
+                    position = raw < 0 ? Fling.rubberBand(raw * g.step, dimension: g.W) / g.step
+                        : raw > last ? last + Fling.rubberBand((raw - last) * g.step, dimension: g.W) / g.step
+                        : raw
                 } else if axis == .vertical, lifted != nil {
                     lift = t.height < 0 ? t.height : t.height / 4
                 }
@@ -187,14 +211,19 @@ struct TabSwitcher: View {
                 defer { axis = nil; dragFrom = nil }
                 guard phase == .open else { return }
                 if axis == .horizontal, let from = dragFrom {
-                    let thrown = from - value.predictedEndTranslation.width / g.step
-                    let target = min(max(thrown.rounded(), 0), CGFloat(max(0, cards.count - 1)))
-                    withAnimation(Self.snap) { position = target }
+                    // Lands on the card the flick's momentum points at, and
+                    // the deck carries on from the finger's speed into it.
+                    let landing = from - (value.translation.width + Fling.project(value.velocity.width)) / g.step
+                    let target = min(max(landing.rounded(), 0), CGFloat(max(0, cards.count - 1)))
+                    let speed = -value.velocity.width / g.step
+                    withAnimation(Fling.release(from: position, to: target, speed: speed)) { position = target }
                 } else if axis == .vertical, let id = lifted, let tab = cards.first(where: { $0.id == id }) {
                     let away = value.translation.height < -110 || value.predictedEndTranslation.height < -320
                     if away {
-                        withAnimation(.easeOut(duration: 0.18)) { lift = -g.H }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { close(tab) }
+                        // The rest of the deck closes the gap the moment it's
+                        // let go, while the thrown card is still on its way up.
+                        Haptics.toss()
+                        close(tab)
                     } else {
                         withAnimation(Self.snap) { lift = 0 }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if lift == 0 { lifted = nil } }
@@ -321,8 +350,9 @@ private struct Deck {
         return CGRect(x: x(d), y: cardTop + (cardH - h) / 2, width: w, height: h)
     }
 
-    /// The page, where it sits under the status bar.
-    var page: CGRect { CGRect(x: 0, y: top, width: W, height: H - top) }
+    /// The whole screen, where the page sits with its strip under the
+    /// status bar.
+    var screen: CGRect { CGRect(x: 0, y: 0, width: W, height: H) }
 
     /// The bar's tab button, bottom left.
     var button: CGRect { CGRect(x: 30, y: H - bottom - 52, width: 30, height: 40) }
@@ -334,6 +364,8 @@ private struct DeckCard: View {
     let height: CGFloat
     let radius: CGFloat
     let dim: Double
+    /// As the page itself: the strip under the status bar, in the page's colour.
+    var top: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -342,8 +374,9 @@ private struct DeckCard: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: width, height: height, alignment: .top)
+                    .frame(width: width, height: max(0, height - top), alignment: .top)
                     .clipped()
+                    .padding(.top, top)
             } else {
                 VStack(spacing: 10) {
                     SiteMark(host: tab.host, size: 36)
@@ -366,25 +399,43 @@ private struct DeckCard: View {
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-        .shadow(color: .black.opacity(0.35), radius: 16, x: -4, y: 6)
+        // The shadow cast by a plain shape behind the card, not by the
+        // picture: far cheaper to draw while the deck moves.
+        .background {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(Color.black)
+                .shadow(color: .black.opacity(0.35), radius: 16, x: -4, y: 6)
+        }
     }
 }
 
 private struct DeckHeader: View {
     @ObservedObject var tab: Tab
-    let roomy: Bool
+    /// How wide it may be: up to the next card, which covers the rest.
+    let room: CGFloat
 
     var body: some View {
+        // The whole title, never cut short with "…": it fades out softly
+        // where its room ends, so as the deck slides it shows more or less
+        // of itself, as Arc Search's do.
         HStack(spacing: 7) {
             if tab.incognito {
                 Image(systemName: "eyeglasses").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
             }
             SiteMark(host: tab.host, size: 18)
-            if roomy {
-                Text(tab.shownTitle)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
+            Text(tab.shownTitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .frame(width: max(room, 1), alignment: .leading)
+        .mask(alignment: .leading) {
+            let fade = min(36, room * 0.4)
+            HStack(spacing: 0) {
+                Rectangle().frame(width: max(0, room - fade))
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: fade)
             }
         }
     }

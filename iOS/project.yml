@@ -47,3 +47,9 @@ targets:
         INFOPLIST_FILE: Quo/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_PREVIEWS: YES
+      configs:
+        # Run from Xcode, SwiftUI without the optimiser is noticeably slower,
+        # and that's how it gets judged on the phone. Optimised here too.
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          SWIFT_COMPILATION_MODE: wholemodule

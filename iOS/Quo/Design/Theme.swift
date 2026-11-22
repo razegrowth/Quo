@@ -165,3 +165,67 @@ struct SiteMark: View {
         return bare.first.map { String($0).uppercased() } ?? "Q"
     }
 }
+
+/// Apple's rules for things moved by a finger (Designing Fluid Interfaces,
+/// WWDC 2018): let go, and what was moving carries on at the finger's speed
+/// into a spring; flung, it lands where the momentum would take it; past
+/// an end, it gives a little, less the further it goes.
+enum Fling {
+    /// Where a fling would come to rest, from its speed in points a second,
+    /// as scrolling decelerates.
+    static func project(_ velocity: CGFloat, rate: CGFloat = 0.998) -> CGFloat {
+        velocity / 1000 * rate / (1 - rate)
+    }
+
+    /// How far something follows past an end: always a little, less the
+    /// further, never a hard stop.
+    static func rubberBand(_ overshoot: CGFloat, dimension: CGFloat, constant: CGFloat = 0.55) -> CGFloat {
+        guard overshoot != 0 else { return 0 }
+        let sign: CGFloat = overshoot < 0 ? -1 : 1
+        let a = abs(overshoot)
+        return sign * (a * dimension * constant) / (dimension + constant * a)
+    }
+
+    /// The spring that takes over from a finger: moving `from` toward `to`
+    /// at `speed` (points a second) when let go. A settle, not a bounce:
+    /// a little give, as after a throw.
+    static func release(from: CGFloat, to: CGFloat, speed: CGFloat) -> Animation {
+        let distance = to - from
+        let relative = abs(distance) > 1 ? Double(speed / distance) : 0
+        return .interpolatingSpring(Spring(response: 0.32, dampingRatio: 0.84), initialVelocity: max(-12, min(12, relative)))
+    }
+}
+
+/// Touch you can feel, only where something was done (Apple's rules:
+/// caused by the action, on the same frame as it, and only where it helps).
+/// The generators are made once and kept warm, so a tap's feedback lands on
+/// the frame it should.
+@MainActor
+enum Haptics {
+    private static let soft = UIImpactFeedbackGenerator(style: .soft)
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
+    private static let selection = UISelectionFeedbackGenerator()
+    private static let notice = UINotificationFeedbackGenerator()
+
+    static func prepare() {
+        soft.prepare(); light.prepare(); rigid.prepare(); selection.prepare(); notice.prepare()
+    }
+
+    /// A sheet a finger drew out or pushed away, landing.
+    static func settle() { soft.impactOccurred(intensity: 0.7); soft.prepare() }
+    /// Something small done: a link copied.
+    static func tap() { light.impactOccurred(intensity: 0.6); light.prepare() }
+    /// A card thrown away.
+    static func toss() { rigid.impactOccurred(intensity: 0.55); rigid.prepare() }
+    /// One of a set chosen: the next space.
+    static func pick() { selection.selectionChanged(); selection.prepare() }
+    /// Something kept: a page pinned.
+    static func done() { notice.notificationOccurred(.success); notice.prepare() }
+}
+
+extension View {
+    /// A title's tracking, tightened as Apple's type is at larger sizes;
+    /// small text keeps the face's own spacing.
+    func titleTracking() -> some View { tracking(-0.3) }
+}

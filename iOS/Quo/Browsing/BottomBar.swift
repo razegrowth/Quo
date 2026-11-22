@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// The slim bar at the page's foot, and the sheets that come up from it:
-/// + and ^ bring a sheet up from the bottom in one piece while the bar's
-/// buttons give way under it, and the page steps back. Scrolling down slides the bar
-/// away; scrolling up brings it back.
-struct Chrome: View {
+/// What's in the bar at the page's foot and in the sheets it grows into.
+/// As in Arc Search there is no sheet of its own: the bar is one surface
+/// that grows taller into the search or the toolbar, its buttons giving way
+/// to what's in them. The screen (BrowserController) sizes and moves the
+/// surface; this only says what's on it, and how tall each face is.
+struct ChromeContent: View {
     @ObservedObject var browser: Browser
-    @Namespace private var morph
+    @ObservedObject var state: ChromeState
     @ObservedObject private var tabs = Tabs.shared
-    @State private var drag: CGFloat = 0
+    @Namespace private var morph
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Mode: Equatable { case bar, search, toolbar }
 
@@ -20,86 +22,82 @@ struct Chrome: View {
         }
     }
 
-    var body: some View {
-        // Scrolling down, the bar slides straight off the bottom and the
-        // page has the whole screen; scrolling up brings it straight back.
-        // Under the tab switcher it slides away while the switcher's own
-        // buttons come in, and back up as a card grows into the page.
-        let hidden = browser.chromeHidden || (browser.barCollapsed && mode == .bar && tabs.current != nil)
-        ZStack(alignment: .bottom) {
-            bar
-                .background(alignment: .top) {
-                    Rectangle().fill(.bar)
-                        .overlay(alignment: .top) { Rectangle().fill(Q.hairline).frame(height: 0.5) }
-                        .ignoresSafeArea(edges: .bottom)
-                }
-                // Its buttons give way as the sheet comes up over it.
-                .opacity(mode == .bar ? 1 : 0)
-                .animation(.easeOut(duration: mode == .bar ? 0.2 : 0.1), value: mode)
-                .offset(y: hidden ? 150 : 0)
-                .allowsHitTesting(!hidden && mode == .bar)
-                .animation(browser.chromeHidden ? TabSwitcher.move : .easeOut(duration: hidden ? 0.16 : 0.2), value: hidden)
+    /// What the surface holds: a search while a finger draws it up.
+    private var shown: Mode { state.drawing ? .search : mode }
 
-            if mode != .bar {
-                sheet
-                    // Up from the bottom in one piece, what's in it with it,
-                    // and down off the screen the same way: by the screen's
-                    // height, as the keyboard leaving moves it too.
-                    .transition(.asymmetric(insertion: .move(edge: .bottom),
-                                            removal: .offset(y: UIScreen.main.bounds.height)))
-            }
-        }
+    var body: some View {
+        ZStack(alignment: .top) { current }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(reduceMotion ? .easeOut(duration: 0.18) : Q.snap, value: browser.panel)
+            .animation(reduceMotion ? .easeOut(duration: 0.18) : Q.snap, value: state.drawing)
     }
 
-    private var sheet: some View {
-        VStack(spacing: 0) {
-            Capsule()
-                .fill(Q.faint)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-            switch mode {
-            case .bar:
-                EmptyView()
-            case .search:
+    @ViewBuilder private var current: some View {
+        switch shown {
+        case .bar:
+            bar.transition(ChromeContent.swap)
+        case .search:
+            Group {
                 if case let .search(prefill, _) = browser.panel {
                     SearchPanel(browser: browser, prefill: prefill, morph: morph)
-                        .transition(.opacity)
-                }
-            case .toolbar:
-                if let tab = tabs.current {
-                    ToolbarPanel(browser: browser, tab: tab)
-                        .transition(.opacity)
+                        .transition(ChromeContent.swap)
+                } else {
+                    SearchPanel(browser: browser, prefill: nil, morph: morph, drawnRow: AnyView(drawnBar))
+                        .transition(ChromeContent.swap)
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measure(\.searchHeight, $0) }
+        case .toolbar:
+            if let tab = tabs.current {
+                ToolbarPanel(browser: browser, tab: tab)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measure(\.toolbarHeight, $0) }
+                    .transition(ChromeContent.swap)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .background(alignment: .top) {
-            ChromeGround(open: true, dark: mode == .search && browser.searchIncognito)
-                .ignoresSafeArea(edges: .bottom)
-        }
-        .offset(y: max(0, drag))
-        .gesture(closing)
     }
 
-    /// Pulled down far enough, the sheet goes back to being the bar.
-    private var closing: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in drag = value.translation.height }
-            .onEnded { value in
-                let far = value.translation.height > 90 || value.predictedEndTranslation.height > 220
-                withAnimation(Q.snap) {
-                    if far { browser.panel = .none }
-                    drag = 0
-                }
-            }
+    private func measure(_ key: ReferenceWritableKeyPath<ChromeState, CGFloat>, _ height: CGFloat) {
+        guard height > 1, abs(state[keyPath: key] - height) > 0.5 else { return }
+        state[keyPath: key] = height
+        state.measured?()
+    }
+
+    /// What's in the surface gives way quickly as the surface changes size.
+    /// What's coming in a touch slower than what's going, so the surface
+    /// never shows two things at once for long.
+    static let swap = AnyTransition.asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.18)),
+        removal: .opacity.animation(.easeOut(duration: 0.1))
+    )
+
+    /// The bar's row as it stands in a search being drawn out of it: its +
+    /// in place, the tabs and ^ fading as the surface grows.
+    private var drawnBar: some View {
+        row(sides: Double(max(0, 1 - state.drawn * 2.5)))
     }
 
     private var bar: some View {
+        row(sides: 1, measured: true)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measure(\.barHeight, $0) }
+    }
+
+    private func row(sides: Double, measured: Bool = false) -> some View {
         HStack {
-            Button { browser.showSwitcher() } label: { TabStack(tab: tabs.current, count: tabs.all.count) }
+            // The tab you were on before, ready to hop back to. Easy to catch:
+            // its touch reaches well past the card on either side.
+            Button { browser.showSwitcher() } label: {
+                TabStack(tab: tabs.previous ?? tabs.current, count: tabs.all.count, hidingFront: browser.hopping)
+                    .padding(.horizontal, 12)
+                    .contentShape(Rectangle())
+            }
                 .buttonStyle(PressStyle())
                 .accessibilityLabel("Tabs")
                 .accessibilityIdentifier("bar.tabs")
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { if measured { state.tabButton = $0 } }
+                .opacity(sides)
 
             Spacer()
 
@@ -108,8 +106,12 @@ struct Chrome: View {
                     .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(Q.ink)
                     .frame(width: 84, height: 46)
-                    .background(Q.tile, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Q.hairline))
+                    .background {
+                        // The capsule that stretches into the search field.
+                        Capsule().fill(Q.tile)
+                            .overlay(Capsule().strokeBorder(Q.hairline))
+                            .matchedGeometryEffect(id: "plus", in: morph)
+                    }
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel("New search")
@@ -124,39 +126,18 @@ struct Chrome: View {
                     .frame(width: 46, height: 46)
                     .background(Q.tile, in: Circle())
                     .overlay(Circle().strokeBorder(Q.hairline))
+                    // As easy to hit as the tab button, and the + stays centred.
+                    .padding(.horizontal, 12)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel(tabs.current != nil ? "Toolbar" : "Settings")
             .accessibilityIdentifier("bar.toolbar")
+            .opacity(sides)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 10)
         .padding(.top, 10)
         .padding(.bottom, 6)
-        .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 20).onEnded { value in
-            // A swipe up on the bar opens the toolbar, as on the ^.
-            if value.translation.height < -30, tabs.current != nil { browser.panel = .toolbar }
-        })
-    }
-}
-
-/// What the bar stands on: the bar's own material while it's a bar, and the
-/// sheet's ground, its top corners rounding, as it grows into a sheet.
-private struct ChromeGround: View {
-    let open: Bool
-    let dark: Bool
-
-    var body: some View {
-        let shape = UnevenRoundedRectangle(topLeadingRadius: open ? 28 : 0, topTrailingRadius: open ? 28 : 0, style: .continuous)
-        ZStack {
-            Rectangle().fill(.bar).opacity(open ? 0 : 1)
-            Rectangle().fill(dark ? AnyShapeStyle(Color(white: 0.13)) : AnyShapeStyle(Q.sheet)).opacity(open ? 1 : 0)
-        }
-        .clipShape(shape)
-        .overlay {
-            shape.strokeBorder(Q.hairline, lineWidth: open ? 1 : 0.5)
-        }
-        .shadow(color: .black.opacity(open ? 0.18 : 0), radius: 20, y: -4)
     }
 }
 
@@ -164,6 +145,8 @@ private struct ChromeGround: View {
 private struct TabStack: View {
     let tab: Tab?
     let count: Int
+    /// Its card is out under a finger: the stack under it stays.
+    var hidingFront = false
 
     var body: some View {
         ZStack {
@@ -180,21 +163,38 @@ private struct TabStack: View {
                 .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Q.hairline))
                 .rotationEffect(.degrees(6))
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                .opacity(hidingFront ? 0 : 1)
         }
         .frame(width: 46, height: 46)
     }
 
     @ViewBuilder private var card: some View {
-        if let image = tab?.thumbnail {
-            Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
-                .frame(width: 30, height: 40, alignment: .top)
+        if let tab {
+            StackCard(tab: tab)
         } else {
-            ZStack {
-                Q.ground
-                Text(count == 0 ? "" : "\(count)")
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(Q.ink)
+            Q.ground
+        }
+    }
+}
+
+/// The tab's picture on the stack, kept up as it changes; read from disk
+/// for a tab not looked at since Quo opened.
+private struct StackCard: View {
+    @ObservedObject var tab: Tab
+
+    var body: some View {
+        Group {
+            if let image = tab.thumbnail {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: 30, height: 40, alignment: .top)
+            } else {
+                ZStack {
+                    Color(tab.topColor)
+                    SiteMark(host: tab.host, size: 16)
+                }
             }
         }
+        .onAppear { tab.loadThumbnail() }
+        .onChange(of: tab.id) { _, _ in tab.loadThumbnail() }
     }
 }

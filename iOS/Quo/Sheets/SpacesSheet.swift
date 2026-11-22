@@ -8,7 +8,9 @@ struct SpacesSheet: View {
     @ObservedObject private var sync = MacSync.shared
     /// How far it's being pulled down: back to nothing on its own when a
     /// drag ends or is cancelled.
-    @GestureState private var drag: CGFloat = 0
+    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.3, dampingFraction: 0.9))) private var drag: CGFloat = 0
+    /// Where it was let go, held as it goes down and away.
+    @State private var released: CGFloat = 0
 
     private func dismiss() { browser.spacesOpen = false }
 
@@ -17,6 +19,7 @@ struct SpacesSheet: View {
             HStack {
                 Text(sync.currentSpace?.name ?? "Personal")
                     .font(.title2.weight(.semibold))
+                    .titleTracking()
                     .foregroundStyle(.white)
                     .contentTransition(.opacity)
                     .animation(Q.quick, value: sync.currentSpaceID)
@@ -33,9 +36,6 @@ struct SpacesSheet: View {
             .padding(.horizontal, 22)
             .padding(.top, 24)
             .padding(.bottom, 8)
-            .contentShape(Rectangle())
-            // Pulled down by its header, it goes.
-            .gesture(closing)
 
             TabView(selection: $sync.currentSpaceID) {
                 ForEach(sync.spaces) { space in
@@ -44,6 +44,8 @@ struct SpacesSheet: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            // Each space landed on is felt, as a picker's step is.
+            .onChange(of: sync.currentSpaceID) { _, _ in Haptics.pick() }
             .animation(Q.snap, value: sync.currentSpaceID)
 
             foot
@@ -55,8 +57,9 @@ struct SpacesSheet: View {
         .padding(.top, 10)
         .ignoresSafeArea(edges: .bottom)
         .environment(\.colorScheme, .dark)
-        .offset(y: drag)
-        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: drag == 0)
+        .offset(y: max(drag, released))
+        // Anywhere on it, measured on the screen so it follows the finger.
+        .simultaneousGesture(closing)
     }
 
     /// Dark, washed with the space's colour, which crossfades as you go
@@ -73,12 +76,22 @@ struct SpacesSheet: View {
         .animation(.easeOut(duration: 0.25), value: sync.currentSpaceID)
     }
 
-    /// Pulled down far enough, it goes; not far enough, it settles back.
+    /// Pulled down, it follows the finger; let go far enough or fast
+    /// enough and it goes on down, otherwise it springs back.
     private var closing: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .updating($drag) { value, state, _ in state = max(0, value.translation.height) }
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .updating($drag) { value, state, _ in
+                let t = value.translation
+                guard abs(t.height) > abs(t.width) else { return }
+                state = t.height > 0 ? t.height : t.height / 6
+            }
             .onEnded { value in
-                if value.translation.height > 110 || value.predictedEndTranslation.height > 260 { dismiss() }
+                let t = value.translation
+                guard abs(t.height) > abs(t.width) else { return }
+                if t.height > 120 || (t.height > 30 && value.predictedEndTranslation.height > 320) {
+                    released = t.height
+                    dismiss()
+                }
             }
     }
 

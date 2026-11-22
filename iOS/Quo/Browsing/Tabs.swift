@@ -6,8 +6,11 @@ import WebKit
 final class Tabs: ObservableObject {
     static let shared = Tabs()
 
-    @Published private(set) var all: [Tab] = []
-    @Published var current: Tab?
+    @Published private(set) var all: [Tab] = [] { didSet { changed?() } }
+    @Published var current: Tab? { didSet { if current !== oldValue { changed?() } } }
+    /// Told the moment the tabs or the one in front change, for the screen
+    /// to put the right page in front in the same frame.
+    var changed: (() -> Void)?
     @Published private(set) var archived: [Archived] = []
 
     struct Saved: Codable {
@@ -47,6 +50,8 @@ final class Tabs: ObservableObject {
         let front = UserDefaults.standard.string(forKey: "tabs.front").flatMap(UUID.init(uuidString:))
         current = all.first { $0.id == front }
         all.forEach(wire)
+        // Every card's picture ready before the switcher is opened.
+        all.forEach { $0.loadThumbnail() }
     }
 
     var regular: [Tab] { all.filter { !$0.incognito } }
@@ -76,6 +81,12 @@ final class Tabs: ObservableObject {
         if front { select(tab) }
         save()
         return tab
+    }
+
+    /// The tab you were on before this one: what the tab button shows, and
+    /// where a hop from it lands.
+    var previous: Tab? {
+        all.filter { $0.id != current?.id }.max { $0.lastActive < $1.lastActive }
     }
 
     func select(_ tab: Tab) {

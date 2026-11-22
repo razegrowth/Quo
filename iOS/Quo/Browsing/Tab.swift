@@ -157,26 +157,66 @@ final class Tab: ObservableObject, Identifiable {
 
     /// A picture of the page for the tab switcher.
     func snapshot() async {
-        guard let web, web.bounds.width > 0 else { return }
+        // Only of a page on screen: one already taken off it can come out
+        // laid out at another size, and its card would then show it zoomed.
+        guard let web, web.bounds.width > 0, web.window != nil else { return }
         let config = WKSnapshotConfiguration()
-        config.snapshotWidth = NSNumber(value: Double(min(web.bounds.width, 430)))
+        // Half the page's width in points: at the screen's scale that's one
+        // and a half pixels a point, sharp on a card, a quarter of the
+        // memory of a full-size picture and quick to put on screen.
+        config.snapshotWidth = NSNumber(value: Double(min(web.bounds.width, 430) / 2))
         if let image = try? await web.takeSnapshot(configuration: config) {
             thumbnail = image
-            if !incognito, let data = image.jpegData(compressionQuality: 0.6) {
-                try? data.write(to: Tab.thumbnailURL(id))
+            guard !incognito else { return }
+            // Kept for next time, encoded and written off the main thread:
+            // a JPEG takes long enough to cost the screen several frames.
+            let url = Tab.thumbnailURL(id)
+            nonisolated(unsafe) let shot = image
+            Task.detached(priority: .utility) {
+                if let data = shot.jpegData(compressionQuality: 0.6) { try? data.write(to: url) }
             }
         }
     }
 
-    static func thumbnailURL(_ id: UUID) -> URL {
+    private static let thumbs: URL = {
         let folder = Store.folder.appendingPathComponent("thumbs", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent(id.uuidString + ".jpg")
+        return folder
+    }()
+
+    static func thumbnailURL(_ id: UUID) -> URL {
+        thumbs.appendingPathComponent(id.uuidString + ".jpg")
     }
 
+    /// The picture from disk, read and decoded off the main thread, so
+    /// opening the tab switcher never waits on it.
     func loadThumbnail() {
-        guard thumbnail == nil, let data = try? Data(contentsOf: Tab.thumbnailURL(id)) else { return }
-        thumbnail = UIImage(data: data)
+        guard thumbnail == nil, !loadingThumbnail else { return }
+        loadingThumbnail = true
+        let url = Tab.thumbnailURL(id)
+        Task { [weak self] in
+            let image = await Task.detached(priority: .userInitiated) {
+                (try? Data(contentsOf: url)).flatMap(UIImage.init(data:))?.preparingForDisplay()
+            }.value
+            guard let self else { return }
+            loadingThumbnail = false
+            if thumbnail == nil, let image { thumbnail = image }
+        }
+    }
+    private var loadingThumbnail = false
+
+    /// Whether the page has something to show yet: a tab not opened since
+    /// Quo started has to load first.
+    var hasDrawn: Bool {
+        guard let web else { return false }
+        return (web.estimatedProgress > 0 && !web.isLoading) || web.estimatedProgress > 0.5
+    }
+
+    /// Loaded: a fresh picture for its card while it's still on screen.
+    fileprivate func finished() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            Task { await self?.snapshot() }
+        }
     }
 
     /// Put away: the page closed, its place kept.
@@ -325,6 +365,7 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Trace.mark("finish \(webView.url?.host() ?? "")")
+        tab?.finished()
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
