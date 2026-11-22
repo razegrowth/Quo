@@ -496,6 +496,14 @@ final class Preferences: ObservableObject {
             ClickIDs.on = removesClickIDs
         }
     }
+    /// How many people use this fork, counted once a day (Telemetry.swift).
+    /// On unless turned off; Search itself has nothing to count with.
+    @Published var sharesUsage: Bool {
+        didSet {
+            store.set(sharesUsage, forKey: Telemetry.key)
+            Telemetry.set(on: sharesUsage)
+        }
+    }
     /// Whether sites may ask for a passkey here. Off sends them to the
     /// password instead — the only thing that works in a build without
     /// Apple's browser entitlement.
@@ -1032,6 +1040,7 @@ final class Preferences: ObservableObject {
 
     init() {
         Preferences.settleLittleLinks(in: store)
+        Telemetry.settleInstall(in: store)
         // Settled before anything below reads the lines they write.
         let ranBefore = SidebarDefault.ranBefore(in: Store.folder)
         SidebarDefault.settle(store, testing: Store.testing, ranBefore: ranBefore)
@@ -1082,7 +1091,7 @@ final class Preferences: ObservableObject {
         sideWidth = min(Metrics.sideMax, max(Metrics.sideMin, CGFloat(width)))
         cards = store.object(forKey: "layout.cards") as? Bool ?? true
         cardsInFullScreen = store.bool(forKey: "layout.cardsFullScreen")
-        glyph = store.string(forKey: "glyph").flatMap(Glyph.init) ?? .letters
+        glyph = store.string(forKey: "glyph").flatMap(Glyph.init) ?? .icons
         engine = store.string(forKey: "search.engine").flatMap(Engine.init) ?? .standard
         customEngine = store.string(forKey: "search.custom") ?? ""
         shiftEngine = store.string(forKey: "search.shift").flatMap(Engine.init)
@@ -1126,6 +1135,7 @@ final class Preferences: ObservableObject {
         let removes = store.object(forKey: "privacy.clickIDs") as? Bool ?? true
         removesClickIDs = removes
         ClickIDs.on = removes
+        sharesUsage = store.object(forKey: Telemetry.key) as? Bool ?? true
         // Offered by default only in a build that can actually do them —
         // one with Apple's browser entitlement and its profile embedded. A
         // choice made under the other kind of build is not a choice about
@@ -1340,7 +1350,7 @@ final class Preferences: ObservableObject {
         Swipe.bounces = bounces
         take(\.smoothWheel, "scroll.smoothWheel", store.object(forKey: "scroll.smoothWheel") as? Bool, or: true)
         SmoothWheel.on = smoothWheel
-        take(\.glyph, "glyph", store.string(forKey: "glyph").flatMap(Glyph.init), or: .letters)
+        take(\.glyph, "glyph", store.string(forKey: "glyph").flatMap(Glyph.init), or: .icons)
         take(\.tabsGive, store.bool(forKey: "tabs.give"))
         take(\.instantMotion, store.bool(forKey: Motion.instantKey))
         take(\.showsTabShortcuts, store.bool(forKey: "tabs.shortcuts"))

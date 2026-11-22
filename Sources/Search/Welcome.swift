@@ -54,9 +54,14 @@ struct WelcomePanel: View {
     @State private var usual: [String: String] = [:]
     @State private var bringing = false
     @State private var brought: String?
-    /// Arc's spaces and pins, brought over once this is done: Bring Things
-    /// Over is a tab, which would open under this.
+    /// Arc's spaces and pins, brought over once this is done, straight into
+    /// the sidebar it reveals: not by opening Bring Things Over, whose
+    /// switches all on and Bring them in read as if nothing had come yet,
+    /// and was pressed again.
     @State private var arcAfter = false
+    /// The Arc profile those come from: the one read for the rest, or nil
+    /// for every one.
+    @State private var arcProfile: String?
     /// Arc's spaces and pins asked for, on its row (see bring).
     @State private var wantsArcSpaces = true
 
@@ -732,9 +737,12 @@ struct WelcomePanel: View {
         let wantsPasswords = self.wantsPasswords && found?.passwords != 0
         let wantsBookmarks = self.wantsBookmarks && found?.bookmarks != 0
         let wantsHistory = self.wantsHistory && found?.places != 0
-        if source.name == "Arc", wantsArcSpaces, FileManager.default.fileExists(atPath: Arc.file.path) { arcAfter = true }
         let each = eachProfile(source)
         let profile = profile(of: source)
+        if source.name == "Arc", wantsArcSpaces, FileManager.default.fileExists(atPath: Arc.file.path) {
+            arcAfter = true
+            arcProfile = profile
+        }
         let extensions = wantsExtensions ? freshExtensions(previews[previewKey(source)]) : []
         bringing = true
         var lines: [String] = []
@@ -802,10 +810,27 @@ struct WelcomePanel: View {
         prefs.welcomed = true
         withAnimation(Motion.settle) { browser.welcoming = false }
         if arcAfter {
+            let profile = arcProfile
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                browser.lead(to: InternalPage(.importing, "Arc"))
+                Self.bringArc(into: browser, profile: profile)
             }
         }
+    }
+
+    /// Arc's spaces and pins, as Bring Things Over brings them, said once
+    /// they're in. Unreadable, the page is where it can be tried again.
+    static func bringArc(into browser: Browser, profile: String?) {
+        guard let sidebar = Arc.sidebar(profile: profile) else {
+            browser.lead(to: InternalPage(.importing, "Arc"))
+            return
+        }
+        // Its icons are read from Arc's own files, as the page does.
+        let source = Chromium.known.first { $0.name == "Arc" }.map(ImportSource.chromium)
+        let (spaces, pins, tabs) = browser.takeArc(sidebar, from: source, profile: profile)
+        ImportRecords.note("Arc", spaces: spaces, pinned: pins + tabs)
+        func count(_ n: Int, _ one: String) -> String { n == 1 ? "1 \(one)" : "\(n.formatted()) \(one)s" }
+        browser.announce(spaces + pins + tabs == 0 ? "Arc's spaces and pins were all here already"
+                         : "From Arc: \(count(spaces, "space")), \(count(pins + tabs, "pin"))")
     }
 }
 

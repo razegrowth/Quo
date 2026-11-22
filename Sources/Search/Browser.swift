@@ -2408,8 +2408,10 @@ final class Browser: NSObject, ObservableObject {
     /// the column on the right: where a Mac window has them, not in the
     /// column's far corner. The address bar's row, or, with the bar off, a
     /// bare one with back, forward and reload (bareRow). Folded away, the
-    /// column hides them, and brings them out with it.
-    var lightsInAddressBar: Bool { prefs.sidebar && !folded && prefs.sidePosition == .right }
+    /// column hides them, and brings them out with it. The column of icons
+    /// too, on either side: too narrow to hold them side by side, it had
+    /// them one above the other, which no Mac window does.
+    var lightsInAddressBar: Bool { prefs.sidebar && !folded && (prefs.sidePosition == .right || prefs.iconColumn) }
     /// With the column on the right and the address bar off: the row across
     /// the top that holds the window's buttons, and back, forward and reload
     /// after them, and nothing else.

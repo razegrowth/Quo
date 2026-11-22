@@ -163,6 +163,10 @@ final class Links: NSObject, NSApplicationDelegate {
             Launcher.shared.start()
             // Live folders fetched, and kept fresh (LiveFolders.swift).
             LiveFolders.start()
+            // Counted once a day, once launch has settled (Telemetry.swift).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                MainActor.assumeIsolated { Telemetry.set(on: Shared.prefs.sharesUsage) }
+            }
         }
         let plain = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
         guard !plain else { return }

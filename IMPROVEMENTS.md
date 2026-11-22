@@ -9,6 +9,10 @@ Everything Quo has added to or fixed in [Search](https://github.com/driceroland/
 
 ## Looks and feel
 
+- **The column of icons keeps the window's buttons where a Mac has them**: with Icons only, the three buttons sit side by side at the start of the address bar's row, the bar a touch tighter, and the column starts under it, on either side and with the bar on or off. Search stacked them one above the other at the column's top. *Nov 2026*
+- **Settings, simpler**: each section shows what most people come for, around half the rows it had, and folds the rest under Advanced at its foot, in the same groups, remembered per section. Find a setting still finds every one, and opens the fold when it has to. Rows lose their icon tiles, and with Roomy the switches, buttons, choices and menus in them are a size up, as the rows are. Search shows every switch at once, small. *Nov 2026*
+- **Site icons on from the start**: tabs and pins show each site's own icon unless you choose letters (Settings › Appearance). Search starts with letters. *Nov 2026*
+- **⌘T and ⌘L set the page back rather than washing it out**: the page behind the field is dimmed and very slightly blurred, in Light as in Dark. Search laid white over it in Light. *Nov 2026*
 - **Motion that answers at once and lands without a wobble**: following Apple's Designing Fluid Interfaces and Emil Kowalski's design-engineering rules, the interface's springs are critically damped, so a highlight, a card or a selection settles straight into place instead of overshooting and coming back; overshoot is kept for what the hand throws. Every button now gives a little under the pointer (97%, never a bounce). Nothing eases in any more: the column sliding back, a tooltip going and the little window closing all leave on a strong ease-out, shorter than they came. Nothing grows from almost nothing: badges, cards and controls start from 90% size. And what the keyboard does isn't animated at all: ⌘T and ⌘L's field opens and closes at once, and the arrow keys light their row at once, as Spotlight and Raycast do. Search's own motion overshot on most moves, eased some exits in, and animated the field on every ⌘L. *Nov 2026*
 - **A new space comes in smoothly**: + at the column's foot fades and settles the tabs and pins away and brings the new space's card in a part at a time; Cancel and Create go back the same way. The card is a size up with Roomy. Search slid the whole column sideways and snapped. *Nov 2026*
 - **The bookmarks list rises from the column's foot as a card**, with no popover arrow bent into the window's corner; a click anywhere else or Escape puts it away. *Nov 2026*
@@ -61,8 +65,13 @@ Everything Quo has added to or fixed in [Search](https://github.com/driceroland/
 
 - **A floating live stream fills its window**: YouTube's live player sat a quarter size in the window's corner. *Nov 2026*
 
+## Usage numbers
+
+- **Quo counts how many people use it, and nothing more**: once a day it tells TelemetryDeck it was opened, with its version and the Mac's or iPhone's model and OS, as a random number hashed on the device; never a page, an address or a search. Off in Settings › Privacy (Settings on the iPhone), and the number goes with it. Search counts nothing, and a build without an app ID, Search's own included, still sends nothing. *Nov 2026*
+
 ## Fixes
 
+- **Finishing the onboarding no longer asks you to bring Arc over twice**: with Arc's spaces and pins chosen, Start Browsing now brings them straight into the sidebar and says what came. Before, it opened Bring Things Over with every switch on and Bring them in waiting, which looked like nothing had come over yet. *Nov 2026*
 - **Icons in menus are back**: macOS 27 hides a menu item's icon unless it asks to be shown, so the spaces' icons, the Icon menu's choices and bookmarks' site icons had all gone. *Nov 2026*
 - **Bring Things Over finds Chrome on a Mac where it is the only browser**: recent macOS keeps Chrome's data folder from other apps until you allow it, and the onboarding then said no other browser was on the Mac at all. It now names Chrome (or any browser macOS keeps this way, wherever its app is) with an Allow Access button that opens its folder for one click, and Settings points to Full Disk Access for good. *Nov 2026*
 - **Extension badges sit in the middle**: a count was a little low and off to one side, and three or four characters made a wide slab across the icon. Now a circle for one character, a short capsule for more, in a condensed cut for three or four, cut at four as Chrome does. *Nov 2026*

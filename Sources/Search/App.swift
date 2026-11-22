@@ -930,7 +930,10 @@ struct ContentView: View {
             .overlay(alignment: .top) {
                 if addressShown, browser.lightsInAddressBar {
                     AddressBar(browser: browser, onFrame: cards)
-                        .padding(.leading, farGap)
+                        // Over the column, whichever side it is on, and to
+                        // the card's edge on the other.
+                        .padding(.leading, sideOnRight ? farGap : 0)
+                        .padding(.trailing, sideOnRight ? 0 : farGap)
                         .frame(maxHeight: .infinity, alignment: .top)
                         // From the window's very top, as the column is: the
                         // title bar's safe area put it a band too low, over
@@ -1297,8 +1300,7 @@ struct ContentView: View {
             browser.prefs.sidebar && browser.prefs.sidePosition == .right && !browser.lightsInAddressBar
                 ? window.frame.width - (edges.side ?? browser.prefs.columnWidth) + Lights.centre.x
                 : Lights.centre.x
-        }, vertical: { _ in browser.prefs.iconColumn && !browser.lightsInAddressBar },
-           height: { _ in browser.topBand }) { measureLights() }
+        }, height: { _ in browser.topBand }) { measureLights() }
         DispatchQueue.main.async { measureLights() }
 
         // The traffic lights are drawn — measured, they paint themselves — but

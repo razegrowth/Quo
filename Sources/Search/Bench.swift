@@ -1851,6 +1851,13 @@ final class Bench {
             }
             answer(["bar": bar, "folders": folders, "menu": menu, "list": rows(browser.bookmarks.roots, 0)])
 
+        case "welcome-arc":
+            // What the Welcome's Start Browsing does once Arc's spaces and
+            // pins were asked for: brought straight in, Bring Things Over
+            // left shut. Test runs only, from the made-up Arc (Chromium.base).
+            guard Store.testing else { answer(["error": "welcome-arc only works on a --test run"]); return }
+            WelcomePanel.bringArc(into: browser, profile: request["profile"] as? String)
+            answer(["said": browser.announcement ?? "", "importOpen": browser.bringingIn != nil])
         case "import":
             // Another browser's passwords, bookmarks and history, brought in
             // through the same calls the Welcome and the panels make. Only on
@@ -2120,6 +2127,31 @@ final class Bench {
                 guard let value = request["value"], SettingsIndex.apply(id, value, to: browser.prefs) else {
                     answer(["error": "settings set ID VALUE: unknown id or value"]); return
                 }
+            }
+            // picture: one section drawn offscreen as it is now, tall
+            // enough to need no scrolling, to a PNG.
+            if let path = request["picture"] as? String {
+                if let name = request["page"] as? String, let page = SettingsPanel.Page.named(name) { browser.settingsPage = page }
+                // As the tab it is (InternalPages.swift), not the old card.
+                let host = NSHostingView(rootView: SettingsPanel(browser: browser, prefs: browser.prefs)
+                    .environment(\.asTab, true)
+                    .environment(\.roomySettings, browser.prefs.roomyTabs)
+                    .frame(width: request["width"] as? Double ?? 1100, height: request["height"] as? Double ?? 1600)
+                    .background(Palette.ground))
+                host.frame = NSRect(origin: .zero, size: host.fittingSize)
+                let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+                window.appearance = NSApp.effectiveAppearance
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    if let picture = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                        host.cacheDisplay(in: host.bounds, to: picture)
+                        try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                    }
+                    window.contentView = nil
+                    answer(["saved": path])
+                }
+                return
             }
             var reply: [String: Any] = ["values": SettingsIndex.values(browser.prefs),
                                         "settingsPage": browser.settingsPage.rawValue]
@@ -4895,7 +4927,7 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
 
                 "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
             ]])

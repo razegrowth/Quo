@@ -22,9 +22,6 @@ extension Metrics {
     static let iconColumn: CGFloat = 52
     /// One tab's tile in it, and one pinned square's.
     static let iconTile: CGFloat = 32
-    /// The band the three traffic lights take, stacked, at its top
-    /// (Lights.stackTop and their own spacing, and the same air under them).
-    static let iconLights: CGFloat = 80
 }
 
 /// What the tiles say, for the bench (`icons`): where each one is, its

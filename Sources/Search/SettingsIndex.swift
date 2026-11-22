@@ -52,6 +52,10 @@ struct SettingsItem: Identifiable {
     /// Only the find field shows it (moved to a menu, or always on).
     var findOnly = false
 
+    /// Under its section's Advanced fold rather than with the rest (see
+    /// SettingsIndex.advanced): what most people never need to see.
+    var advanced: Bool { SettingsIndex.advanced.contains(id) }
+
     var page: SettingsPanel.Page { SettingsIndex.group(group)?.page ?? .general }
 }
 
@@ -90,6 +94,7 @@ enum SettingsIndex {
 
         .init(id: "blocking", page: .privacy, title: "Blocking", icon: "shield"),
         .init(id: "permissions", page: .privacy, title: "Site permissions", icon: "checkmark.shield"),
+        .init(id: "usage", page: .privacy, title: "Usage", icon: "chart.bar"),
         .init(id: "clear", page: .privacy, title: "Clear", icon: "trash"),
 
         .init(id: "mouse", page: .keyboard, title: "Mouse and trackpad", icon: "computermouse"),
@@ -105,6 +110,46 @@ enum SettingsIndex {
     static func group(_ id: String) -> SettingsGroup? { groups.first { $0.id == id } }
     static func groups(of page: SettingsPanel.Page) -> [SettingsGroup] { groups.filter { $0.page == page } }
     static func items(in group: String) -> [SettingsItem] { items.filter { $0.group == group && !$0.findOnly } }
+    /// A group's rows on its page, or under the page's Advanced fold.
+    static func items(in group: String, advanced: Bool) -> [SettingsItem] {
+        items(in: group).filter { $0.advanced == advanced }
+    }
+
+    /// Each section shows what most people come for, and folds the rest
+    /// away under Advanced at its foot, in the same groups: a setting is
+    /// still where you'd look for it, and Find a setting finds every one.
+    /// What's here is what people from Chrome and Arc rarely change, the
+    /// switches on how something already working behaves.
+    static let advanced: Set<String> = [
+        // General
+        "quit.confirm", "downloads.button", "downloads.open",
+        // Appearance
+        "pages.dusk", "inspector.chrome", "inspector.dark",
+        "sidebar.slides", "sidebar.foldIcons", "layout.cardsFullScreen", "toolbar.left", "tabs.compact",
+        "sidebar.player", "tabs.reading", "tabs.give",
+        "motion.light", "motion.instant",
+        // Tabs
+        "tabs.frontBeside", "tabs.newAfterLast", "tabs.closeGoesBack", "tabs.undoReopens",
+        "tabs.switcherBehindFirst", "tabs.switcherLeavesOutPins", "tabs.lazy", "tabs.popupWindows",
+        "tabs.shortcuts", "tabs.address", "tabs.mirror",
+        // Browsing
+        "search.shift", "search.keywords", "links.little.tabs",
+        "reader.twins", "reader.follows",
+        "float.style", "float.minimize", "media.click", "fullscreen.escapeTwice", "fullscreen.keepsWindow",
+        "pages.capture", "sites.styles", "pages.120",
+        // Spaces & Pins
+        "spaces.commandNumbers", "profiles.oneWindow", "spaces.links",
+        "pins.keep", "pins.links", "pins.commandNewTab",
+        "newtab.floating", "newtab.recent", "commandbar", "start.fresh",
+        // Passwords
+        "contacts.fill",
+        // Privacy
+        "privacy.clickIDs", "privacy.gpc", "notifications.ask", "privacy.forget",
+        // Keyboard & Mouse
+        "links.peek.stays", "links.optionSplit", "autoscroll", "scroll.smoothWheel", "pages.bounce", "swipe.history",
+        // About
+        "bench", "agents",
+    ]
 
     // MARK: - rows
 
@@ -478,6 +523,10 @@ enum SettingsIndex {
         .init(id: "privacy.forget", group: "permissions", icon: "arrow.uturn.backward.circle",
               title: "Camera, microphone, location and notifications", detail: "What each site was allowed or refused",
               words: ["permissions", "camera", "microphone", "location", "reset"]),
+        .init(id: "privacy.telemetry", group: "usage", icon: "chart.bar",
+              title: "Help count how many people use \(Store.name)", detail: "Once a day: the version, your Mac's model and macOS. Never what you browse",
+              more: "Counted by TelemetryDeck, with a random number standing in for you, so one Mac can be told from another without knowing whose. No page, address, search or tab is ever sent. Off, the number is forgotten.",
+              keys: [Telemetry.key], words: ["telemetry", "analytics", "usage", "statistics", "tracking", "telemetrydeck"]),
         .init(id: "clear.history", group: "clear", icon: "clock.arrow.circlepath",
               title: "History", detail: "Every address you have been to", words: ["clear history"]),
         .init(id: "clear.cookies", group: "clear", icon: "person.crop.circle.badge.xmark",
@@ -599,6 +648,7 @@ enum SettingsIndex {
         switch item.id {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
+        case "privacy.telemetry": return Telemetry.configured
         default: return true
         }
     }
@@ -893,6 +943,6 @@ extension SettingsIndex {
         ["id": item.id, "page": item.page.rawValue, "group": item.group,
          "groupTitle": group(item.group)?.title ?? "", "title": item.title, "detail": item.detail,
          "keys": item.keys, "findOnly": item.findOnly, "note": item.kind == .note,
-         "parent": item.parent ?? ""]
+         "parent": item.parent ?? "", "advanced": item.advanced]
     }
 }

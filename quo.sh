@@ -35,6 +35,11 @@ export SEARCH_NAME=Quo SEARCH_BUNDLE_ID=com.edinabazi.quo SEARCH_ICON=Icon/Quo.i
   SEARCH_FEED_URL="https://github.com/$REPO/releases/latest/download/appcast.json" \
   SEARCH_FEED_TEAM="$TEAM" SEARCH_NOTARY_PROFILE=quo SEARCH_NOTES=QUO_NOTES.md \
   SEARCH_MARK=Icon/quo-mark.svg SEARCH_MARK_FRACTION=0.56
+# How many people use Quo: TelemetryDeck, once a day (Telemetry.swift). The
+# app id isn't a secret, it ships inside the app. Every build but a release
+# sends as a test, which TelemetryDeck keeps out of the real numbers.
+export SEARCH_TELEMETRY_APP=AA491615-7111-480E-8F62-9CF27ED5EB91 SEARCH_TELEMETRY_NAMESPACE=com.razegrowth
+[ "${1:-}" = "release" ] || export SEARCH_TELEMETRY_TEST=1
 # Quo's version, and what's new in it (QUO_NOTES.md, newest first, one
 # paragraph each: the first is the line under the version in Settings).
 export SEARCH_VERSION="$(tr -d '[:space:]' < QUO_VERSION)"

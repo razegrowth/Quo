@@ -24,18 +24,15 @@ final class Lights: NSObject {
     /// Starts looking after a window's lights, once. `moved` hears each time
     /// they have been put in place. Neither may hold the window: it is
     /// handed to `centreX`, so that a window closed for good is freed.
-    /// `vertical`: the three one above the other, for a column too narrow
-    /// to hold them side by side (the column of icons, Metrics.iconColumn).
     /// `height`: the bar they are centred in, for a window whose bar isn't
     /// the strip (the small window for a link, Roomy).
     static func keep(_ window: NSWindow, centreX: @escaping (NSWindow) -> CGFloat,
-                     vertical: @escaping (NSWindow) -> Bool = { _ in false },
                      height: ((NSWindow) -> CGFloat)? = nil, moved: @escaping () -> Void) {
         // A freed window's entry goes, and with it the one a new window at
         // the same address would otherwise be taken for.
         kept = kept.filter { $0.value.window != nil }
         guard kept[ObjectIdentifier(window)] == nil else { return }
-        kept[ObjectIdentifier(window)] = Lights(window, centreX: centreX, vertical: vertical, height: height, moved: moved)
+        kept[ObjectIdentifier(window)] = Lights(window, centreX: centreX, height: height, moved: moved)
     }
 
     static func refresh(_ window: NSWindow?) {
@@ -53,7 +50,6 @@ final class Lights: NSObject {
     private weak var window: NSWindow?
     private let moved: () -> Void
     private let centreX: (NSWindow) -> CGFloat
-    private let vertical: (NSWindow) -> Bool
     private let height: ((NSWindow) -> CGFloat)?
     private var placing = false
     /// AppKit's own spacing between the three, read once from its first
@@ -65,10 +61,9 @@ final class Lights: NSObject {
     private let spacing: CGFloat
 
     private init(_ window: NSWindow, centreX: @escaping (NSWindow) -> CGFloat,
-                 vertical: @escaping (NSWindow) -> Bool, height: ((NSWindow) -> CGFloat)?, moved: @escaping () -> Void) {
+                 height: ((NSWindow) -> CGFloat)?, moved: @escaping () -> Void) {
         self.window = window
         self.centreX = centreX
-        self.vertical = vertical
         self.height = height
         self.moved = moved
         let row = [NSWindow.ButtonType.closeButton, .miniaturizeButton].compactMap { window.standardWindowButton($0) }
@@ -111,26 +106,17 @@ final class Lights: NSObject {
         return false
     }
 
-    /// How tall the title bar is: the strip's height, or, with the three
-    /// stacked, as tall as they need.
+    /// How tall the title bar is: the strip's height, or the bar's given.
     private func band(_ window: NSWindow) -> CGFloat {
-        vertical(window) ? Metrics.iconLights : height?(window) ?? Metrics.strip
+        height?(window) ?? Metrics.strip
     }
 
-    /// Where one button goes: along the row, or down the column, the
-    /// spacing AppKit gave them either way.
+    /// Where one button goes along the row, the spacing AppKit gave them.
     private func origin(of button: NSButton, at index: Int, in bar: NSView, _ window: NSWindow) -> NSPoint {
         let size = button.frame.size
-        if vertical(window) {
-            return NSPoint(x: centreX(window) - size.width / 2,
-                           y: bar.bounds.height - (Lights.stackTop + CGFloat(index) * spacing) - size.height / 2)
-        }
         return NSPoint(x: centreX(window) - size.width / 2 + CGFloat(index) * spacing,
                        y: bar.bounds.height - band(window) / 2 - size.height / 2)
     }
-
-    /// The close button's centre from the top, with the three stacked.
-    static let stackTop: CGFloat = 22
 
     @objc private func place() {
         // Full screen keeps its title bar in a window of its own, laid out by

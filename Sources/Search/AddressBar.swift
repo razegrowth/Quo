@@ -22,9 +22,14 @@ struct AddressBar: View {
 
     /// The bar's height: the field as tall as a row of the column, with
     /// Roomier tabs as with the others, and 6 points above and below it.
-    @MainActor static func height(_ prefs: Preferences) -> CGFloat { field(prefs) + 12 }
-    /// The field's own height, a row of the column's (Preferences.sideRow).
-    @MainActor static func field(_ prefs: Preferences) -> CGFloat { prefs.roomyTabs ? 36 : 28 }
+    /// Beside the column of icons, a little tighter: 5 points, over tiles
+    /// rather than rows.
+    @MainActor static func height(_ prefs: Preferences) -> CGFloat { field(prefs) + (prefs.iconColumn ? 10 : 12) }
+    /// The field's own height, a row of the column's (Preferences.sideRow),
+    /// and a little shorter beside the column of icons, which has no rows.
+    @MainActor static func field(_ prefs: Preferences) -> CGFloat {
+        prefs.iconColumn ? (prefs.roomyTabs ? 32 : 26) : prefs.roomyTabs ? 36 : 28
+    }
     /// Its text, a little larger with Roomier tabs, as the titles are.
     /// A touch under the titles' size: in a field on its own, the same size
     /// reads larger than it does in a row.
@@ -55,7 +60,7 @@ struct AddressBar: View {
         }
         // The window's buttons at its start, with the column on the right.
         .padding(.leading, browser.lightsInAddressBar && !browser.fullScreen ? Metrics.sideLights : 8)
-        .padding(.trailing, browser.lightsInAddressBar ? 10 : onFrame ? 0 : 8)
+        .padding(.trailing, browser.lightsInAddressBar && browser.prefs.sidePosition == .right ? 10 : onFrame ? 0 : 8)
         .frame(height: AddressBar.height(browser.prefs))
         .frame(maxWidth: .infinity)
         .background {

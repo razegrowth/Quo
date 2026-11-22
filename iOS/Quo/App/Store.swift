@@ -81,6 +81,14 @@ final class AppSettings: ObservableObject {
     /// The language pages are translated into.
     @Published var translateTo: String { didSet { defaults.set(translateTo, forKey: "translate.to") } }
     @Published var onboarded: Bool { didSet { defaults.set(onboarded, forKey: "onboarded") } }
+    /// How many people use Quo, counted once a day (Telemetry.swift).
+    @Published var sharesUsage: Bool {
+        didSet {
+            defaults.set(sharesUsage, forKey: Telemetry.key)
+            let on = sharesUsage
+            DispatchQueue.main.async { Telemetry.set(on: on) }
+        }
+    }
     /// The custom engine's template, as the Mac's, when one is synced.
     @Published var customTemplate: String = ""
     /// The engine the Mac uses, as synced.
@@ -89,7 +97,7 @@ final class AppSettings: ObservableObject {
     var engine: Engine { engineChoice ?? macEngine ?? .standard }
 
     private init() {
-        defaults.register(defaults: ["keyboard.auto": true, "search.suggest": true])
+        defaults.register(defaults: ["keyboard.auto": true, "search.suggest": true, Telemetry.key: true])
         autoKeyboard = defaults.bool(forKey: "keyboard.auto")
         archiveAfter = ArchiveAfter(rawValue: defaults.string(forKey: "tabs.archive") ?? "") ?? .week
         appLinks = AppLinks(rawValue: defaults.string(forKey: "links.app") ?? "") ?? .app
@@ -98,6 +106,9 @@ final class AppSettings: ObservableObject {
         translateTo = defaults.string(forKey: "translate.to") ?? (Locale.current.language.languageCode?.identifier ?? "en")
         onboarded = defaults.bool(forKey: "onboarded")
         customTemplate = defaults.string(forKey: "search.custom") ?? ""
+        sharesUsage = defaults.bool(forKey: Telemetry.key)
+        let on = sharesUsage
+        DispatchQueue.main.async { Telemetry.start(on: on) }
     }
 
     /// The address for typed words: a URL as it is, else a search.

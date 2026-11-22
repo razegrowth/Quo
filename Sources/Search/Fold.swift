@@ -439,11 +439,11 @@ struct Fold: View {
         // A column folded for good is folded before there is a window to
         // hide the lights of; they go once there is one.
         .background(WindowSetup { window in
-            window.standardWindowButton(.closeButton)?.superview?.isHidden = lightsOff && !window.styleMask.contains(.fullScreen)
+            window.standardWindowButton(.closeButton)?.superview?.isHidden = barOff && !window.styleMask.contains(.fullScreen)
             pointer.window = window
             watch()
         })
-        .onChange(of: lightsOff) { _, _ in hideLights() }
+        .onChange(of: barOff) { _, _ in hideLights() }
         // Into full screen, the buttons are given back to macOS; out of it,
         // they go the way the fold says again.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { note in
@@ -473,7 +473,7 @@ struct Fold: View {
             // hideLights); hidden here, they were missing from the bar that
             // comes down with the menu bar until the column next came out.
             if let window = browser.window, let bar = window.standardWindowButton(.closeButton)?.superview {
-                Fold.reset(bar, hidden: lightsOff && !window.styleMask.contains(.fullScreen))
+                Fold.reset(bar, hidden: barOff && !window.styleMask.contains(.fullScreen))
             }
         }
         .onChange(of: prefs.columnWidth) { _, _ in
@@ -513,6 +513,14 @@ struct Fold: View {
 
     private var lightsOff: Bool {
         browser.folded && !browser.peeking
+    }
+
+    /// The window's buttons hidden: with the column folded away, and while
+    /// the column of icons comes out over the page too. 52 points can't
+    /// hold them side by side, and one above the other is no Mac window's;
+    /// they're back in the address bar's row once it is out to stay.
+    private var barOff: Bool {
+        lightsOff || (browser.folded && prefs.iconColumn)
     }
 
     private var onRight: Bool {
@@ -673,7 +681,7 @@ struct Fold: View {
             return
         }
         if prefs.sidebar {
-            Fold.slide(bar, off: lightsOff, by: prefs.columnWidth, right: onRight)
+            Fold.slide(bar, off: barOff, by: prefs.columnWidth, right: onRight)
         } else {
             Fold.slide(bar, off: lightsOff, by: Metrics.strip, up: true)
         }

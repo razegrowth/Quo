@@ -5,7 +5,7 @@ Build first (`./build.sh`), then `python3 Tests/icon_column.py`. It uses the
 split suite's harness: started hidden in a world of its own, no window made,
 shown or brought forward, everything removed afterwards. Checked through
 the bench (`icons`, `split`): the setting turns the rows into tiles of a
-fixed narrow width, the lights stack in the column, a tile's tooltip is its
+fixed narrow width, the lights stay side by side in the address bar's row, a tile's tooltip is its
 title (and what the row would have said beside it), a drag still moves a
 tab, a pair is one tile of two marks, a group's tiles fold with it, and
 turning it off gives the column its pulled width back. What can only be
@@ -62,10 +62,10 @@ try:
     steps = {round(ys[i + 1] - ys[i]) for i in range(4)}
     t.ok("on: a tile and a 2 pt gap apart", steps == {34}, steps)
     lights = r["lights"]
-    t.ok("on: the lights stacked, one above the other",
-         len({x for x, _ in lights}) == 1 and [y for _, y in lights] == sorted(y for _, y in lights) and len({y for _, y in lights}) == 3, lights)
-    t.ok("on: the lights over the column, clear of the first tile",
-         all(x + 14 <= 52 for x, _ in lights) and max(y for _, y in lights) + 7 < ys[0], (lights, ys[0]))
+    t.ok("on: the lights side by side, as a Mac window has them",
+         len({y for _, y in lights}) == 1 and [x for x, _ in lights] == sorted(x for x, _ in lights) and len({x for x, _ in lights}) == 3, lights)
+    t.ok("on: in the address bar's row, above the first tile",
+         max(y for _, y in lights) + 14 < ys[0], (lights, ys[0]))
 
     # The tooltip: the title, nothing sliding out.
     t.ok("tooltip: a tab's title", ts[b]["tip"].split("\n")[0] == "b", ts[b]["tip"])
@@ -120,10 +120,10 @@ try:
     r = settle(lambda r: c not in tiles(r))
     t.ok("close: its tile goes", c not in tiles(r), list(tiles(r)))
 
-    # Off: the titles and the width pulled come back, the lights a row again.
+    # Off: the titles and the width pulled come back, the lights still a row.
     r = icons(on=False); time.sleep(0.6); r = icons()
     t.ok("off: the column's own width again", r["on"] is False and r["columnWidth"] == r["sideWidth"] and r["columnWidth"] >= 176, r)
-    t.ok("off: the lights a row again", len({y for _, y in r["lights"]}) == 1, r["lights"])
+    t.ok("off: the lights still a row", len({y for _, y in r["lights"]}) == 1, r["lights"])
     t.ok("off: no tiles left", tiles(r) == {}, list(tiles(r)))
 finally:
     sv.finish()

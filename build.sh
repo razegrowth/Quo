@@ -70,6 +70,13 @@ FEEDBACK="${SEARCH_FEEDBACK:-}"
 # the plist, where Updater looks. Without them a fork doesn't update itself.
 FEEDURL="${SEARCH_FEED_URL:-}"
 FEEDTEAM="${SEARCH_FEED_TEAM:-}"
+# A fork that counts how many people use it (Telemetry.swift): its
+# TelemetryDeck app id and namespace, and SEARCH_TELEMETRY_TEST=1 for a build
+# that isn't a release, whose signals TelemetryDeck keeps out of the real
+# numbers. Without an app id nothing is ever sent, as in Search itself.
+TELEMETRYAPP="${SEARCH_TELEMETRY_APP:-}"
+TELEMETRYSPACE="${SEARCH_TELEMETRY_NAMESPACE:-}"
+TELEMETRYTEST="${SEARCH_TELEMETRY_TEST:-}"
 APP="$OUT/$NAME.app"
 # Asked for with SEARCH_DEV=1, a dev build, on a yellow plate and named for
 # the feature it's built from: "Search-split-view" in the menu bar, the Dock
@@ -234,6 +241,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>SearchFeedback</key><string>$FEEDBACK</string>
   <key>SearchFeed</key><string>$FEEDURL</string>
   <key>SearchFeedTeam</key><string>$FEEDTEAM</string>
+  <key>SearchTelemetryApp</key><string>$TELEMETRYAPP</string>
+  <key>SearchTelemetryNamespace</key><string>$TELEMETRYSPACE</string>
+  <key>SearchTelemetryTest</key><string>$TELEMETRYTEST</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>

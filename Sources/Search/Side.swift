@@ -89,12 +89,14 @@ struct SideBar: View {
 
     private var onRight: Bool { prefs.sidePosition == .right }
     /// Icons only (SideIcons.swift): tiles for rows, a fixed width, the
-    /// lights and the three doors stacked at the top.
+    /// the three doors stacked at the top, unless the address bar's row,
+    /// which holds the lights, has them.
     private var icons: Bool { prefs.iconColumn }
-    /// With icons only, the band the stacked lights take: gone in full
-    /// screen, with them.
+    /// With icons only, the band over the doors: the address bar's row,
+    /// which holds the lights; or, folded away, where the lights are hidden
+    /// (Fold.barOff), and in full screen, a little air.
     private var lightsBand: CGFloat {
-        browser.lightsInAddressBar ? AddressBar.height(prefs) : browser.fullScreen ? 8 : Metrics.iconLights
+        browser.lightsInAddressBar ? AddressBar.height(prefs) : 8
     }
     /// The band over the pins: the strip's height, or, with the address bar
     /// beside the column or over it, the bar's (Browser.topBand).
@@ -148,7 +150,8 @@ struct SideBar: View {
                 // bar, moved beside the lights since there's no far end of a
                 // row to put them at in this mode.
                 if icons {
-                    // The lights stacked in their band (Lights, vertical),
+                    // The band over them (lightsBand): the address bar's
+                    // row, the lights in it,
                     // the three doors one above the other under them.
                     Color.clear.frame(height: lightsBand)
                     // With the address bar up, the three doors are in it.

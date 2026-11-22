@@ -38,6 +38,8 @@ struct SettingsPanel: View {
     @FocusState private var finding: Bool
     /// A row gone to from a result, lit for a moment.
     @State private var lit: String?
+    /// The sections whose Advanced fold is open, kept between visits.
+    @State private var unfolded = Set(Store.settings.stringArray(forKey: "settings.advanced") ?? [])
     /// What Set Up Like Arc changed, for Undo.
     @State private var arcBefore: Preferences.ArcSetup? = SettingsPanel.arcBefore
     @MainActor static var arcBefore: Preferences.ArcSetup?
@@ -102,9 +104,9 @@ struct SettingsPanel: View {
     private var roomy: Bool { prefs.roomyTabs }
     private static let width: CGFloat = 720
     private static let height: CGFloat = 540
-    /// Where a row's words start, past its icon. What goes under a row's
-    /// words (pictures, lists, fields) starts there too.
-    static let textInset: CGFloat = 52
+    /// Where a row's words start. What goes under a row's words
+    /// (pictures, lists, fields) starts there too.
+    static let textInset: CGFloat = 14
     /// A list under a row's words starts this far in, its lines adding
     /// their own 14 to reach textInset.
     static let listInset: CGFloat = textInset - 14
@@ -253,10 +255,10 @@ struct SettingsPanel: View {
             Button(action: act) {
                 HStack(spacing: roomy ? 11 : 9) {
                     Image(systemName: page.icon)
-                        .font(.system(size: roomy ? 13.5 : 12, weight: .medium))
-                        .frame(width: roomy ? 18 : 16)
+                        .font(.system(size: roomy ? 14.5 : 12, weight: .medium))
+                        .frame(width: roomy ? 20 : 16)
                     Text(page.title)
-                        .font(.system(size: roomy ? 14 : 13, weight: on ? .medium : .regular))
+                        .font(.system(size: roomy ? 14.5 : 13, weight: on ? .medium : .regular))
                     Spacer(minLength: 0)
                     if let count, count > 0 {
                         Text("\(count)")
@@ -270,7 +272,7 @@ struct SettingsPanel: View {
                 .foregroundStyle(on ? Palette.ink : (hovering ? Palette.ink.opacity(0.75) : Palette.muted))
                 .opacity(count == 0 ? 0.4 : 1)
                 .padding(.horizontal, 10)
-                .frame(height: roomy ? 36 : 30)
+                .frame(height: roomy ? 38 : 30)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(on ? Palette.ground : (hovering ? Palette.hover : .clear))
@@ -314,6 +316,9 @@ struct SettingsPanel: View {
                         if searching { results } else { section(page) }
                     }
                     .environment(\.ruleInset, 0)
+                    // The Mac's own menus and fields in the rows, a size up
+                    // with the rest in Roomy.
+                    .controlSize(roomy ? .large : .regular)
                     .padding(.bottom, roomy ? 40 : 24)
                     // Keep the rows narrow, not the scroll view: the empty
                     // space beside them must receive scrolling too.
@@ -344,9 +349,10 @@ struct SettingsPanel: View {
                 ShortcutsPage(browser: browser, store: .shared, prefs: prefs)
             }
         case .privacy:
-            groups(of: page)
-            GroupBlock(title: "Proxy", icon: "network") {
-                ProxySettings()
+            groups(of: page) {
+                GroupBlock(title: "Proxy", icon: "network") {
+                    ProxySettings()
+                }
             }
         case .extensions:
             ExtensionsPage(browser: browser)
@@ -357,12 +363,42 @@ struct SettingsPanel: View {
         }
     }
 
-    private func groups(of page: Page) -> some View {
-        ForEach(SettingsIndex.groups(of: page)) { group in
-            GroupBlock(title: group.title, icon: group.icon) {
-                Card { rows(SettingsIndex.items(in: group.id).filter(shown), searched: false) }
+    /// A section's groups, and under them its Advanced fold: the same
+    /// groups again with the rest of their rows, and `more` (a section's
+    /// own block, like Privacy's proxy) at the end of it.
+    @ViewBuilder
+    private func groups(of page: Page, @ViewBuilder more: () -> some View = { EmptyView() }) -> some View {
+        groupBlocks(of: page, advanced: false)
+        let rest = SettingsIndex.groups(of: page).flatMap { SettingsIndex.items(in: $0.id, advanced: true) }
+        if !rest.isEmpty {
+            let open = unfolded.contains(page.rawValue)
+            AdvancedFold(open: open, count: rest.filter(shown).count) { fold(page, open: !open) }
+            if open {
+                VStack(alignment: .leading, spacing: roomy ? 32 : 22) {
+                    groupBlocks(of: page, advanced: true)
+                    more()
+                }
+                .transition(.opacity.combined(with: .offset(y: -6)))
             }
         }
+    }
+
+    private func groupBlocks(of page: Page, advanced: Bool) -> some View {
+        ForEach(SettingsIndex.groups(of: page)) { group in
+            let items = SettingsIndex.items(in: group.id, advanced: advanced).filter(shown)
+            if !items.isEmpty {
+                GroupBlock(title: group.title, icon: group.icon) {
+                    Card { rows(items, searched: false) }
+                }
+            }
+        }
+    }
+
+    private func fold(_ page: Page, open: Bool) {
+        withAnimation(Motion.settle) {
+            if open { unfolded.insert(page.rawValue) } else { unfolded.remove(page.rawValue) }
+        }
+        Store.settings.set(Array(unfolded).sorted(), forKey: "settings.advanced")
     }
 
     /// In its section, a dependent row is there only while it counts.
@@ -410,6 +446,10 @@ struct SettingsPanel: View {
                     let first = byGroup[group.id]?.first
                     query = ""
                     page = group.page
+                    if first?.advanced == true, !unfolded.contains(group.page.rawValue) {
+                        unfolded.insert(group.page.rawValue)
+                        Store.settings.set(Array(unfolded).sorted(), forKey: "settings.advanced")
+                    }
                     lit = first?.findOnly == false ? first?.id : nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation(Motion.quick) { lit = nil } }
                 } label: {
@@ -825,6 +865,7 @@ struct SettingsPanel: View {
         case "sites.keep": Switch(on: Binding(get: { !prefs.keepsSignIns }, set: { prefs.keepsSignIns = !$0 }))
         case "privacy.clickIDs": Switch(on: $prefs.removesClickIDs)
         case "privacy.gpc": Switch(on: $prefs.sendsPrivacySignal)
+        case "privacy.telemetry": Switch(on: $prefs.sharesUsage)
         case "notifications.ask": Switch(on: $prefs.siteNotifications)
         case "privacy.forget": Pill("Forget choices") { browser.forgetCaptureChoices() }
         case "clear.history": Pill("Clear") { browser.clearHistory() }
@@ -1259,6 +1300,46 @@ extension EnvironmentValues {
     }
 }
 
+/// The foot of a section: Advanced, and how many settings are folded
+/// under it. A quiet line rather than a card, so the eye stops at the
+/// settings above it; the chevron turns as it opens.
+struct AdvancedFold: View {
+    let open: Bool
+    let count: Int
+    let act: () -> Void
+    @State private var hovering = false
+    @Environment(\.roomySettings) private var roomy
+
+    var body: some View {
+        Button(action: act) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: roomy ? 11 : 10, weight: .semibold))
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .frame(width: 12)
+                Text("Advanced")
+                    .font(.system(size: roomy ? 14 : 13, weight: .medium))
+                if !open, count > 0 {
+                    Text(count == 1 ? "1 more setting" : "\(count) more settings")
+                        .font(.system(size: roomy ? 13 : 12))
+                        .foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(hovering || open ? Palette.ink : Palette.ink.opacity(0.72))
+            .padding(.horizontal, 14)
+            .frame(height: roomy ? 44 : 36)
+            .background(hovering ? Palette.hover : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(PressStyle(scale: 0.99))
+        .onHover { hovering = $0 }
+        .animation(Motion.quick, value: hovering)
+        .animation(Motion.settle, value: open)
+        .accessibilityLabel(open ? "Hide advanced settings" : "Show advanced settings")
+    }
+}
+
 struct GroupBlock<Content: View>: View {
     let title: String
     let icon: String
@@ -1281,9 +1362,10 @@ struct GroupBlock<Content: View>: View {
     }
 }
 
-/// One setting: its icon in a soft tile, what it is, one line on what it
-/// does (the rest behind the (i)), and its control. A wide control goes
-/// under the words.
+/// One setting: what it is, one line on what it does (the rest behind the
+/// (i)), and its control. A wide control goes under the words. No icon of
+/// its own: the group's heading has one, and a tile on every row made a
+/// page of thirty of them read as a wall of little squares.
 struct SettingRow<Control: View>: View {
     let icon: String
     let title: String
@@ -1294,18 +1376,13 @@ struct SettingRow<Control: View>: View {
     @ViewBuilder let control: () -> Control
 
     @State private var open = false
-    /// Roomy: taller, with larger words, its icon and text where they were
-    /// across (SettingsPanel.textInset), so what goes under it still lines up.
+    /// Roomy: taller, with larger words, its text where it was across
+    /// (SettingsPanel.textInset), so what goes under it still lines up.
     @Environment(\.roomySettings) private var roomy
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Palette.ink.opacity(0.78))
-                    .frame(width: 26, height: roomy ? 28 : 26)
-                    .background(Palette.wash, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 VStack(alignment: .leading, spacing: roomy ? 3 : 2) {
                     HStack(spacing: 5) {
                         Text(title)
@@ -1345,10 +1422,9 @@ struct SettingRow<Control: View>: View {
             }
             if wide {
                 control()
-                    .padding(.leading, 38)
             }
         }
-        .padding(.leading, 14)
+        .padding(.leading, SettingsPanel.textInset)
         .padding(.trailing, 14)
         .padding(.vertical, roomy ? 14 : 10)
         .background(lit ? Palette.hover : .clear)
@@ -1564,8 +1640,10 @@ struct Segmented<Option: Hashable>: View {
     /// True when the control has the whole width to itself, so the choices
     /// share it evenly instead of each taking only what its word needs.
     var wide = false
-    /// A size up, for Roomy.
+    /// A size up, for Roomy: asked for, or Settings' own Roomy.
     var large = false
+    @Environment(\.roomySettings) private var roomy
+    private var big: Bool { large || roomy }
 
     @Namespace private var slide
 
@@ -1573,13 +1651,13 @@ struct Segmented<Option: Hashable>: View {
         HStack(spacing: 2) {
             ForEach(options, id: \.0) { option, title in
                 Text(title)
-                    .font(.system(size: large ? 13 : 11.5, weight: option == selection ? .medium : .regular))
+                    .font(.system(size: big ? 13 : 11.5, weight: option == selection ? .medium : .regular))
                     .foregroundStyle(option == selection ? Palette.ink : Palette.muted)
                     .lineLimit(1)
                     .fixedSize(horizontal: !wide, vertical: false)
                     .frame(maxWidth: wide ? .infinity : nil)
-                    .padding(.horizontal, wide ? 4 : 10)
-                    .padding(.vertical, large ? 7 : 5)
+                    .padding(.horizontal, wide ? 4 : big ? 12 : 10)
+                    .padding(.vertical, big ? 7 : 5)
                     .background {
                         if option == selection {
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -1603,11 +1681,13 @@ struct Segmented<Option: Hashable>: View {
 /// On or off, in ink rather than in blue.
 struct Switch: View {
     @Binding var on: Bool
+    /// A size up in Roomy, as the rows are.
+    @Environment(\.roomySettings) private var roomy
 
     var body: some View {
         Capsule()
             .fill(on ? Palette.ink : Palette.faint)
-            .frame(width: 30, height: 18)
+            .frame(width: roomy ? 38 : 30, height: roomy ? 22 : 18)
             .overlay(alignment: on ? .trailing : .leading) {
                 Circle()
                     .fill(Palette.ground)
@@ -1638,10 +1718,10 @@ struct Steps: View {
             Step(icon: "minus", to: below) { value = $0 }
             Button { value = home } label: {
                 Text(label(value))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: roomy ? 13 : 11.5))
                     .monospacedDigit()
                     .foregroundStyle(Palette.ink)
-                    .frame(minWidth: 36)
+                    .frame(minWidth: roomy ? 42 : 36)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
@@ -1649,23 +1729,26 @@ struct Steps: View {
             Step(icon: "plus", to: above) { value = $0 }
         }
         .padding(.horizontal, 2)
-        .frame(height: 24)
+        .frame(height: roomy ? 30 : 24)
         .background(Palette.ground, in: Capsule())
         .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
     }
+
+    @Environment(\.roomySettings) private var roomy
 
     private struct Step: View {
         let icon: String
         let to: Double?
         let act: (Double) -> Void
         @State private var hovering = false
+        @Environment(\.roomySettings) private var roomy
 
         var body: some View {
             Button { if let to { act(to) } } label: {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: roomy ? 10.5 : 9, weight: .semibold))
                     .foregroundStyle(to == nil ? Palette.faint : Palette.ink)
-                    .frame(width: 20, height: 20)
+                    .frame(width: roomy ? 26 : 20, height: roomy ? 26 : 20)
                     .background(hovering && to != nil ? Palette.hover : .clear, in: Circle())
                     .contentShape(Circle())
             }
@@ -1688,6 +1771,9 @@ struct Pill: View {
     let action: () -> Void
 
     @State private var hovering = false
+    /// Settings' Roomy (and the pages that follow it) sizes every pill up.
+    @Environment(\.roomySettings) private var roomy
+    private var big: Bool { large || roomy }
 
     init(_ title: String, filled: Bool = false, tint: Color = Palette.ink, large: Bool = false,
          action: @escaping () -> Void) {
@@ -1701,10 +1787,10 @@ struct Pill: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: large ? 13 : 11.5))
+                .font(.system(size: big ? 13 : 11.5))
                 .foregroundStyle(filled ? Palette.ground : tint)
-                .padding(.horizontal, large ? 13 : 10)
-                .padding(.vertical, large ? 7 : 5)
+                .padding(.horizontal, big ? 13 : 10)
+                .padding(.vertical, big ? 7 : 5)
                 .background(filled ? Palette.ink : (hovering ? Palette.hover : Palette.ground), in: Capsule())
                 .overlay(Capsule().strokeBorder(filled ? .clear : Palette.hairline, lineWidth: 1))
                 .contentShape(Capsule())

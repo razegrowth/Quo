@@ -2,6 +2,18 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.6.0 · 22 November 2026
+
+A simpler Settings, motion that answers at once, and a calmer ⌘T.
+
+Each page of Settings now shows what most people come for, with everything else folded under Advanced at the bottom of the page, and the switches and buttons are a size up with Roomy. Find a setting still finds all of them.
+
+Everything moves on a firmer curve: buttons give a little when pressed and come straight back, cards and highlights land without a wobble, and ⌘T and ⌘L open the moment you press them. The page behind ⌘T is dimmed and very slightly blurred instead of washed out in white.
+
+With Icons only, the window's three buttons sit in a row at the start of the address bar again instead of stacked up the column. Site icons are on from the start. Bringing Arc over during the first run brings it straight in, without asking a second time.
+
+Quo now counts how many people use it: once a day it tells TelemetryDeck it was opened, with its version and your Mac's model and macOS, as a random number hashed on your Mac. Never what you browse. Turn it off in Settings › Privacy.
+
 ## 0.5.0 · 21 November 2026
 
 Your open tabs follow you: what's open on your other Macs comes up in ⌘T, ready to pick up where you left off.

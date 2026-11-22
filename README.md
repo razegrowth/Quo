@@ -78,6 +78,20 @@ Everything that's changed since the fork is in [IMPROVEMENTS.md](IMPROVEMENTS.md
 
 ---
 
+## What Quo sends
+
+I wanted to know how many people actually use Quo, so it tells [TelemetryDeck](https://telemetrydeck.com) once a day that it was opened. That's it.
+
+- **Once a day:** "App.opened", with Quo's version and build, your Mac's or iPhone's model (like `Mac15,3`) and its OS version.
+- **Once per install:** a "new install" event, with the same.
+- **Never:** a page, an address, a search, a tab or anything else about what you do in it.
+
+You show up as a random number made on your device and hashed before it leaves, so one Mac can be told from another without anyone knowing whose. TelemetryDeck hashes it again and doesn't look at your IP for these. Turn it off in Settings › Privacy on the Mac or in Settings on the iPhone, and the number is forgotten.
+
+It's all in [`Telemetry.swift`](Sources/Search/Telemetry.swift) (and [the iPhone's](iOS/Quo/App/Telemetry.swift)), one short file each, no SDK. A build without an app ID, like Search itself or your own fork, sends nothing at all.
+
+---
+
 ## Building it
 
 You'll need macOS 14 or later and Xcode 16 (or a Swift 6 toolchain). No dependencies beyond what ships with macOS.

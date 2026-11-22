@@ -77,6 +77,12 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle(isOn: $settings.sharesUsage) { label("chart.bar", "Help count how many people use Quo") }
+                } footer: {
+                    Text("Once a day: the version, your iPhone\u{2019}s model and iOS. Never what you browse.")
+                }
+
+                Section {
                     Button { onboarding = true } label: { label("hand.wave", "Show onboarding") }
                     NavigationLink { PrivacyView() } label: { label("hand.raised", "Privacy policy") }
                     NavigationLink { LicencesView() } label: { label("doc.text", "Open source licences") }
@@ -406,7 +412,8 @@ struct PrivacyView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Quo has no account, no server and no analytics. Nothing you do in it is sent to us, because there is nowhere for it to go.")
+                Text("Quo has no account and no server. Nothing you do in it is sent to us: no page, address, search or tab.")
+                Text("To know how many people use it, Quo tells TelemetryDeck once a day that it was opened, with its version and your iPhone\u{2019}s model and iOS version. You stand in as a random number, hashed before it leaves, and TelemetryDeck doesn\u{2019}t look at your IP address. Turn it off in Settings and the number is forgotten.")
                 Text("Your history, open tabs and site settings are kept on this iPhone. Sync goes through your own iCloud, end to end encrypted with a key in your iCloud Keychain, so neither Apple nor we can read it.")
                 Text("Sites you visit see what any browser shows them. Quo blocks ads, trackers and cookie banners, and takes tracking IDs off links, unless you turn that off for a site.")
                 Text("What you type in the address field goes to your search engine for suggestions, never in Incognito. Voice search turns speech into words on this iPhone where it can. Translation happens on this iPhone.")

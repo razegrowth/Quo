@@ -107,9 +107,11 @@ struct Omnibox: View {
             // page's cover fades without pulling its edges into view.
             if browser.fieldShowing {
                 if over {
-                    // The page is still there, just out of the way.
-                    Rectangle()
-                        .fill(Palette.ground.opacity(0.74))
+                    // The page is still there, just out of the way: dimmed
+                    // and softened a touch, never washed out. It was the
+                    // window's ground at 74%, white in Light, which lifted
+                    // the page towards the field instead of setting it back.
+                    Cover()
                         .ignoresSafeArea(.all, edges: fitted ? [] : .all)
                         .onTapGesture { browser.dismiss() }
                         .transition(.opacity)
@@ -911,5 +913,25 @@ final class RoomyFieldCell: NSTextFieldCell {
                          delegate: Any?, start selStart: Int, length selLength: Int) {
         super.select(withFrame: Self.short(rect), in: controlView, editor: textObj, delegate: delegate,
                      start: selStart, length: selLength)
+    }
+}
+
+/// What lies over the page while the field is up: a faint blur of it, a
+/// third of a material's, and black over that, 14% in Light and more in Dark,
+/// where a page is already dark and 14% would hardly show.
+private struct Cover: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ZStack {
+            // In the window's own appearance, so the blur doesn't tint:
+            // the black alone does the dimming.
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.3)
+            Rectangle()
+                .fill(Color.black.opacity(scheme == .dark ? 0.3 : 0.14))
+        }
+        .contentShape(Rectangle())
     }
 }
