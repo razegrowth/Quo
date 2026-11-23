@@ -1,80 +1,75 @@
 # Quo
 
-A fast, quiet browser for the Mac, with all the Arc habits I couldn't give up.
+A tiny Mac browser that feels and works like Arc. Safari's speed, Chrome's extensions, fully agentic, completely free and open source.
 
-**[Download Quo →](https://github.com/razegrowth/Quo/releases/latest)** · macOS 14 or later · free
+**[Download Quo →](https://github.com/razegrowth/Quo/releases/latest)** · macOS 14 or later · Apple silicon · free · [quobrowser.com](https://quobrowser.com)
 
 ---
 
-## Why I made it
+## Why it exists
 
-I loved Arc. Spaces, pinned tabs that remember their site, tabs down the side, the little window for links from other apps. Then Arc stopped getting better, and everything that tried to replace it was another heavy Chromium browser with an AI sidebar bolted on.
+I loved Arc. Then they killed it, and everything that tried to replace it was another heavy Chromium browser with an AI sidebar bolted on.
 
-That's when I found [Search](https://github.com/driceroland/Search), a tiny WebKit browser by Office Commun, and honestly loved it. It was fast and quiet in a way nothing else was. The team has a very clear idea of what Search should be though, and keeping it small means saying no to a lot of things, some of which I really wanted. Totally fair, it's their browser.
+Then I found [Search](https://github.com/driceroland/Search), a tiny WebKit browser by Office Commun, and honestly loved it. The one thing I really wanted, an address bar above the page with the tabs down the side, wasn't something they wanted in Search. Totally fair, it's their browser.
 
-The big one was an address bar above the page while the tabs are down the side. I keep the sidebar open all day and wanted the whole address in front of me, like Dia or Chrome. The Search team decided against it, and that one feature is basically why this fork exists.
+So I forked it. Quo started with that address bar, then all the Arc parts I missed, and it's turned into its own thing since.
 
-So I forked it and started building those things myself, the address bar first, then the Arc parts I missed. Quo is still a fork of Search under the hood, but it's turned into its own thing since.
+## The basics
 
-## It's quick
+It runs on WebKit, the engine already inside your Mac, so there's no Chromium to carry around.
 
-Quo runs on WebKit, the engine that's already inside your Mac (it's what Safari uses). There's no second copy of Chromium to download, update and keep in memory.
+- **About a 9 MB download**, 14 MB on disk. Arc is 892 MB, Dia 1.2 GB, Chrome 1.4 GB.
+- **Tabs sleep.** The ones you're not using let go on their own and come back where you left them.
+- **Ads and trackers blocked** before the page loads, inside the engine, so pages come in faster.
+- **Synced through your own iCloud.** History and open tabs between your Macs and iPhone, end-to-end encrypted.
+- **Passwords and cards.** Strong passwords made for you, cards filled in at checkout, all in your keychain.
+- **Handoff** for the page you're on.
+- **Apple Intelligence, if you want it.** Shorter tab names, groups that name themselves, Writing Tools in text boxes, history you can search by meaning. Each one has its own switch.
+- **No account.** Download it and go.
 
-- About a 9 MB download, 14 MB on disk.
-- Opens instantly, with your tabs from last time ready and costing nothing until you click them.
-- Tabs you're not using go to sleep on their own.
-- The ad blocker works inside the engine, before a page loads, so pages come in faster instead of slower.
+## Your Chrome extensions
 
-And on top of what Search already does, I've made it faster where it was slow for me:
+No Chromium needed (macOS 15.4 or later).
 
-- Hovering in heavy pages like Gmail is smoother. The window used to do extra work on every move of the pointer, and now it doesn't.
-- The extension helper that rides along in every page is less than half the size it was (about 120 KB, down from 275 KB).
-- Extensions that slow pages down get caught and offered On click, so they stop running in every page you open.
+- Straight from the Chrome Web Store. Hit Add to Chrome like you always have.
+- They work like they do in Chrome, popups, buttons and notifications included.
+- Import from Chrome, Dia or Arc and their extensions install too.
+- One that drags your pages down gets offered On click, so it stops running everywhere.
 
-## What Search already gets right
+## Everything you miss from Arc
 
-Tabs down the side, spaces and profiles, pinned tabs, Split View, Peek, a small window for links from other apps, an ad blocker that runs before the page, passwords in your Mac's keychain and Chrome extensions on WebKit. That's all Search, and it's great.
+On from the start, and your Arc spaces, pins, profiles and extensions come over in a click.
 
-## What I added on top
+- Spaces you swipe between, or ⌥⌘← and →.
+- Pins that keep their site. Links elsewhere open beside the pin, not over it.
+- Pinned Calendar and Gmail with your next meeting and new mail right on the pin.
+- ⌘T with your open tabs, plus every command in the app.
+- Little windows for links from Slack, Mail and the rest.
+- Split view and Peek.
+- Tab groups, Tidy Tabs, the Library, and downloads as cards in the column.
+- The whole address above the page, with vertical tabs down the side.
 
-**More Arc**
-- Arc's habits switched on from the start: spaces, ⌘T floating over the page, pinned rows and folders.
-- Every space as a row of icons at the bottom of the sidebar, like Arc's, with a colour wheel for each one (gradients and grain included).
-- ⌘T lists your open tabs and every command in the app, not just places to go.
-- ⌥⌘← and ⌥⌘→ to move between spaces.
-- An empty tab is your space's home: your most visited sites and what you closed last.
-- The little window for links rebuilt to feel like Little Arc, flying into its place when you keep it.
-- Pins keep their site. Links elsewhere open in a new tab beside the pin instead of taking it over.
-- Downloads show up as cards in the sidebar.
-- An onboarding like Arc's and Dia's, with a proper opening the first time you launch it.
+## Agentic, if you want it
 
-**The address bar** (the reason this fork exists)
-- Above the page with the tabs down the side: the whole address, back, forward, reload and your extensions, right where you'd expect them.
+Off until you turn it on, in Settings › AI & Agents.
 
-**Looks and feel**
-- Roomy or Compact, with Roomy as the default.
-- The sidebar lines up with the page, and the address field takes your space's colour.
-- Smooth scrolling for mouse wheels.
+- **Quo is its own MCP server.** Nothing to install. Hit Add to Claude Code, or:
 
-**Bringing your stuff over**
-- Every profile from Chrome, Dia, Arc, Brave, Edge and the rest, each with its own bookmarks and history.
-- Their extensions come too, with a card that tells you which one is installing and what it's waiting on.
+  ```bash
+  claude mcp add quo -- /Applications/Quo.app/Contents/MacOS/Quo --mcp
+  ```
 
-**Blocking**
-- Real filter lists (EasyList, EasyPrivacy, Fanboy's Annoyances, cookie notices) a click away, on top of Search's own blocker.
+- **Agents can do what you do.** With full control on, Claude Code, Codex or any MCP agent can work your tabs, spaces, windows, bookmarks, history, settings and every menu command, and use pages with your sign-ins.
+- **You stay in charge.** Each agent asks you in the window first, and Stop ends it. It never sees saved passwords, cards, one-time codes or private tabs.
+- **Claude and ChatGPT's extensions work.** Their agents can actually click, type and scroll in pages here.
 
-**Extensions**
-- Agent extensions like Claude and ChatGPT's agent can actually click, type and scroll in a page.
-- Tools like SEO and font inspectors start On click when you install them, instead of running in every page.
-- Lighter on every page, with notifications, popups and error reporting working like they do in Chrome.
+## Quo for iPhone
 
-**Under the hood**
-- Sync through your own iCloud, end-to-end encrypted, no account.
-- Its own updates, signed and notarized.
-- Chrome's reload keys (⇧⌘R reloads from the server).
-- Right-click an address you've selected to go straight to it.
+There's an iPhone app too, in TestFlight for now. It keeps up with the Mac: your spaces, pins, bookmarks, history and open tabs come through your own iCloud, and you can send a page between them. The code's in [`iOS/`](iOS).
 
-Everything that's changed since the fork is in [IMPROVEMENTS.md](IMPROVEMENTS.md), and how it all looks and moves is in [DESIGN.md](DESIGN.md).
+## What's new
+
+Quo updates itself. Every release and its notes are on the [releases page](https://github.com/razegrowth/Quo/releases) and the [changelog](https://quobrowser.com/changelog), and everything that's changed since the fork is in [IMPROVEMENTS.md](IMPROVEMENTS.md). How it all looks and moves is in [DESIGN.md](DESIGN.md).
 
 ---
 
