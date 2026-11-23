@@ -22,6 +22,9 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         var received: Int64 = 0
         /// The size the server gave, or 0 when it didn't.
         var expected: Int64 = 0
+        /// A clearer name from the file's own text, offered, never taken
+        /// on its own (FileNames).
+        var suggested: String?
 
         var running: Bool { !done && !failed }
         var fraction: Double? { expected > 0 ? min(1, Double(received) / Double(expected)) : nil }
@@ -138,6 +141,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         if let id = running[key]?.item, let item = items.first(where: { $0.id == id }), let file = item.file {
             Haptics.done()
             Browser.shared.say("Downloaded \(item.name)") { Browser.shared.preview(file) }
+            offerName(for: id, file: file)
         }
         running[key] = nil
     }
@@ -187,6 +191,40 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
     }
 
     var finishedFiles: [URL] { items.filter(\.done).compactMap(\.file) }
+
+    // MARK: - clearer names
+
+    /// A messy name's suggestion, worked out in the background.
+    func offerName(for id: UUID, file: URL) {
+        Task {
+            guard let name = await FileNames.suggest(for: file), name != file.lastPathComponent,
+                  let index = items.firstIndex(where: { $0.id == id }) else { return }
+            Trace.mark("download name suggested \(name) for \(file.lastPathComponent)")
+            items[index].suggested = name
+        }
+    }
+
+    /// The suggestion taken: the file renamed on disk (another number on
+    /// the end if the name's taken), as Files will show it.
+    func takeName(_ item: Item) {
+        guard let file = item.file, let name = item.suggested,
+              let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let target = freeName(name)
+        do {
+            try FileManager.default.moveItem(at: file, to: target)
+            items[index].file = target
+            items[index].name = target.lastPathComponent
+            items[index].suggested = nil
+            Haptics.tap()
+        } catch {
+            items[index].suggested = nil
+        }
+    }
+
+    func ignoreName(_ item: Item) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].suggested = nil
+    }
 }
 
 extension Downloads.Item {

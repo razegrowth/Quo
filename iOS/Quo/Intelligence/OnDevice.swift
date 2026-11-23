@@ -184,9 +184,10 @@ enum OnDevice {
         if #available(iOS 26, *), available {
             let session = LanguageModelSession(instructions: """
                 You name downloaded files so a person can find them again. Given the start of a file's text, answer \
-                with a short file name alone: two to six words, in the document's language, with what it is and \
-                whose or what it's about, and a date or number if it has an important one (like "Acme invoice \
-                March 2026" or "Lease agreement 14 Elm Street"). No quotes, no extension, no slashes, no full stop. \
+                with a short file name alone: two to six words, in the document's language, saying what kind of \
+                document it is and who it's from or about (a company, person or place named in it), and its date \
+                if it has one, like "Acme Supplies invoice March 2026" or "Lease agreement 14 Elm Street". Leave \
+                out reference numbers unless nothing else says what it is. No quotes, no extension, no slashes, no full stop. \
                 If the text says nothing a name could use, answer with the single word NONE.
                 """)
             let prompt = "Current name: \(current)\n\nText:\n\(String(text.prefix(3_000)))"

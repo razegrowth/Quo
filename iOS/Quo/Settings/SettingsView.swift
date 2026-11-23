@@ -599,6 +599,27 @@ private struct DownloadRow: View {
                         .font(Q.footnote)
                         .foregroundStyle(Q.muted)
                         .monospacedDigit()
+                    if let suggested = item.suggested {
+                        HStack(spacing: 6) {
+                            Button { Downloads.shared.takeName(item) } label: {
+                                Label("Rename to \u{201C}\(suggested)\u{201D}", systemImage: "apple.intelligence")
+                                    .font(Q.footnote.weight(.medium))
+                                    .foregroundStyle(Q.ink)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Q.tile, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("download.rename")
+                            Button { Downloads.shared.ignoreName(item) } label: {
+                                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Q.muted)
+                                    .frame(width: 26, height: 26)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Keep the name")
+                        }
+                        .padding(.top, 2)
+                    }
                 }
                 Spacer(minLength: 0)
             }
