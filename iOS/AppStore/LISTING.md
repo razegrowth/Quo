@@ -51,12 +51,13 @@ The first public version of Quo for iPhone.
 
 ## Screenshots (6.9" iPhone, 1320 x 2868)
 
-In `iOS/AppStore/screenshots/`, in this order:
+In `iOS/AppStore/screenshots/`, in this order. Made by `design/make.py` from the app's own screens in `raw/` (run `python3 design/make.py` to remake them).
 
-1. `1-page.png`: a page with Quo's one bar at the bottom
-2. `2-tabs.png`: the tab switcher
-3. `3-toolbar.png`: the ^ menu (Find, Pin, Share, Ask this page, blocking)
-4. `4-settings.png`: Settings
+1. `1-page.png`: The web, and nothing in the way.
+2. `2-tabs.png`: Tabs that tidy themselves.
+3. `3-blocking.png`: Ads, trackers and cookie banners, gone.
+4. `4-toolbar.png`: Ask the page you're on.
+5. `5-quiet.png`: No account. No servers. Just a browser.
 
 ## App Privacy (the "nutrition label")
 
