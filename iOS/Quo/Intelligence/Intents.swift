@@ -1,8 +1,8 @@
 import AppIntents
 import Foundation
 
-// Quo for Siri, Spotlight and Shortcuts: what the page in front says, read
-// it aloud, send your tabs to your Mac, and open a link in Quo. Each is an
+// Quo for Siri, Spotlight and Shortcuts: what the page in front says, send
+// your tabs to your Mac, and open a link in Quo. Each is an
 // App Shortcut, so it works by voice with no setting up ("Summarise this
 // page in Quo").
 
@@ -36,19 +36,6 @@ struct SummarisePageIntent: AppIntent {
             return .result(value: "", dialog: "Couldn\u{2019}t read \(title) just now.")
         }
         return .result(value: said, dialog: "\(said)")
-    }
-}
-
-/// The page in front read aloud (Listen to Page), Quo opening to start it.
-struct ReadAloudIntent: AppIntent {
-    static let title: LocalizedStringResource = "Read This Page Aloud"
-    static let description = IntentDescription("Reads the page in front of Quo aloud, with a Live Activity to pause or stop it.")
-    static let openAppWhenRun = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        if let tab = Tabs.shared.current, !Listener.shared.reading(tab) { Listener.shared.toggle(tab) }
-        return .result()
     }
 }
 
@@ -101,10 +88,6 @@ struct QuoShortcuts: AppShortcutsProvider {
             "Summarize this page in \(.applicationName)",
             "What's this page about in \(.applicationName)",
         ], shortTitle: "Summarise This Page", systemImageName: "apple.intelligence")
-        AppShortcut(intent: ReadAloudIntent(), phrases: [
-            "Read this page in \(.applicationName)",
-            "Read this aloud in \(.applicationName)",
-        ], shortTitle: "Read This Aloud", systemImageName: "headphones")
         AppShortcut(intent: SendTabsToMacIntent(), phrases: [
             "Send my tabs to my Mac with \(.applicationName)",
             "Send my \(.applicationName) tabs to my Mac",

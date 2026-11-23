@@ -2,8 +2,8 @@ import WebKit
 
 /// The words of the page in front, as a person would read them: the article
 /// (the block with the most prose), or what you've selected, in order, by
-/// heading and paragraph. For Ask This Page, a held card's summary and
-/// Listen to Page. The Mac's own script (Sources/Search/Listen.swift), but
+/// heading and paragraph. For Ask This Page and a held card's summary.
+/// The Mac's own script (Sources/Search/Listen.swift), but
 /// paragraphs that aren't drawn don't count (a phone site's folded sections
 /// would win otherwise), and a page with too little falls back on its text.
 struct PageText: Equatable {

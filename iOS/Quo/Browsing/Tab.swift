@@ -121,7 +121,6 @@ final class Tab: ObservableObject, Identifiable {
                 guard let self, let url = web.url else { return }
                 if Sites.key(url.host()) != Sites.key(self.url?.host()) { self.bare = false; self.blocked = 0 }
                 self.url = url
-                Listener.shared.left(self)
                 if !self.incognito { Tabs.shared.saveSoon() }
             } },
             web.observe(\.estimatedProgress) { [weak self] web, _ in MainActor.assumeIsolated { self?.progress = web.estimatedProgress } },

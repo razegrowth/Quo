@@ -7,7 +7,6 @@ import NaturalLanguage
 ///   QUO_ROUTE_TEST="github|how do I boil an egg"  where typed words go (Routing)
 ///   QUO_MEANING_TEST="cheap flights to lisbon"    history pages near in meaning (Meaning)
 ///   QUO_FAKE_MODEL=1                              a stand-in for Apple's model (OnDevice)
-///   QUO_QUIET=1                                   Listen to Page reads silently
 @MainActor
 enum TestRuns {
     static func start() {
