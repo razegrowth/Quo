@@ -75,7 +75,7 @@ This matches `iOS/Quo/PrivacyInfo.xcprivacy` and quobrowser.com/privacy.
 
 ## Age rating
 
-Answer "None" to everything except **Unrestricted Web Access: Yes**, which makes it 18+. Every browser gets that.
+Answer "None" or "No" to everything except **Unrestricted Web Access: Yes**. That alone makes it 16+ (A16 in Brazil, 15+ in Korea), the same as any browser that can open any site. Done in App Store Connect.
 
 ## Encryption
 
