@@ -2,6 +2,16 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.1 · 23 November 2026
+
+AI and agents get their own page in Settings, and every Apple Intelligence feature has its own switch.
+
+Settings › AI & Agents is second in the sidebar. Agents come first, with Add to Claude Code right there, then Apple Intelligence and Writing Tools.
+
+New groups name themselves from their tabs, "Recipes" instead of "Group 3". A download called "document(3).pdf" gets a name that says what it is, a click away. Writing Tools show up first when you right-click a text box. And in History, "japan trip" finds the Tokyo pages you looked at. Each one turns off on its own.
+
+An extension's side panel shows the icon its button shows, so it doesn't vanish in dark mode, and onboarding's switch rows stop wiggling when you click them.
+
 ## 0.8.0 · 23 November 2026
 
 AI agents on your Mac can now control Quo for you, over MCP.
