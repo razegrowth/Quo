@@ -600,6 +600,9 @@ struct DownloadsPanel: View {
             .contentShape(Rectangle())
             .contextMenu { if let address = keep.address { CopyAddress(address: address) } }
             .onTapGesture { if keep.stillThere { open() } }
+            // Dragged out like a file in Finder: onto a page's upload box,
+            // the Desktop, Mail, Slack. Nothing to drag once it's gone.
+            .onDrag { keep.stillThere ? Loot.dragged(keep.url) : NSItemProvider() }
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
         }

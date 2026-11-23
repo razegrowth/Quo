@@ -438,6 +438,8 @@ private struct LibraryMedia: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
                         ForEach(media) { keep in
                             Thumb(keep: keep) { loot.open(keep) }
+                                // Dragged out onto a page's upload box, the Desktop or another app.
+                                .onDrag { keep.stillThere ? Loot.dragged(keep.url) : NSItemProvider() }
                                 .contextMenu {
                                     Button("Show in Finder") { loot.reveal(keep) }
                                     Button("Remove from List") { loot.forget(keep) }

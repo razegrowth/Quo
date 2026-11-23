@@ -91,6 +91,17 @@ final class Loot: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([keep.url])
     }
 
+    /// A file dragged out of the Downloads list, the Library or a download's
+    /// card: its own file URL, as a drag out of Finder carries, so a page's
+    /// upload box, Finder, Mail or a chat app takes the file itself. A
+    /// provider made from the file's contents reached apps as a promise of a
+    /// file, which a page's drop box never took.
+    nonisolated static func dragged(_ file: URL) -> NSItemProvider {
+        let provider = NSItemProvider(object: file as NSURL)
+        provider.suggestedName = file.lastPathComponent
+        return provider
+    }
+
     func open(_ keep: Keep) {
         NSWorkspace.shared.open(keep.url)
     }

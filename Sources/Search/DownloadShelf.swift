@@ -398,8 +398,8 @@ private struct ArrivedCard: View {
         // A name offered: a little longer on show, to be read.
         .onChange(of: suggested) { _, now in if now != nil, !hovering { leave(after: ArrivedCard.staysWithName) } }
         .onTapGesture { open() }
-        // Dragged out like a file in Finder: to the Desktop, Mail, Slack.
-        .onDrag { NSItemProvider(contentsOf: arrival.file) ?? NSItemProvider() }
+        // Dragged out like a file in Finder: to a page, the Desktop, Mail, Slack.
+        .onDrag { Loot.dragged(arrival.file) }
         .contextMenu {
             Button("Open") { open() }
             Button("Show in Finder") { reveal() }

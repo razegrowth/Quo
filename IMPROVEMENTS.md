@@ -106,6 +106,8 @@ Everything Quo has added to or fixed in [Search](https://github.com/driceroland/
 
 ## Fixes
 
+- **Drag a download straight onto a site**: files in the Library's Downloads and Media, and on a download's card, drag out like they do from Finder, onto a page's upload box, the Desktop, Mail or a chat app. The card's drag used to hand over a promise of a file, which pages didn't take. *Nov 2026*
+- **Replacing a file when you save a download works**: with Ask where to save on, choosing a name that's already in the folder and saying Replace used to leave the download stuck at nothing, since WebKit never writes over a file. The old one now goes to the Bin first, where you can still get it back. *Nov 2026*
 - **Finishing the onboarding no longer asks you to bring Arc over twice**: with Arc's spaces and pins chosen, Start Browsing now brings them straight into the sidebar and says what came. Before, it opened Bring Things Over with every switch on and Bring them in waiting, which looked like nothing had come over yet. *Nov 2026*
 - **Icons in menus are back**: macOS 27 hides a menu item's icon unless it asks to be shown, so the spaces' icons, the Icon menu's choices and bookmarks' site icons had all gone. *Nov 2026*
 - **Bring Things Over finds Chrome on a Mac where it is the only browser**: recent macOS keeps Chrome's data folder from other apps until you allow it, and the onboarding then said no other browser was on the Mac at all. It now names Chrome (or any browser macOS keeps this way, wherever its app is) with an Allow Access button that opens its folder for one click, and Settings points to Full Disk Access for good. *Nov 2026*

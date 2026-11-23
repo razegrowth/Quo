@@ -9436,8 +9436,19 @@ extension Browser: WKDownloadDelegate {
         panel.nameFieldStringValue = name
         panel.directoryURL = downloadsFolder
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK else { return nil }
-        return panel.url
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return Browser.replacing(url)
+    }
+
+    /// A file the save panel said to replace: WebKit never writes over one
+    /// that's there, and the download sat at nothing for good. The one there
+    /// goes to the Bin, where it can still be had back; if it can't, the
+    /// download takes a free name beside it instead.
+    static func replacing(_ url: URL) -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else { return url }
+        if (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) != nil,
+           !FileManager.default.fileExists(atPath: url.path) { return url }
+        return free(url.lastPathComponent, in: url.deletingLastPathComponent())
     }
 
     /// The folders in a name an extension asked for ("photos/2026/a.jpg"),
