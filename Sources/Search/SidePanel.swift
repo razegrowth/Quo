@@ -651,13 +651,14 @@ struct SidePanelView: View {
         case .page(let id, _, _):
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    if #available(macOS 15.4, *), let icon = Extensions.shared.contexts[id]?.webExtension.icon(for: CGSize(width: 16, height: 16)) {
-                        Image(nsImage: icon).resizable().interpolation(.high).frame(width: 14, height: 14)
+                    if #available(macOS 15.4, *) {
+                        PanelTitle(id: id)
+                    } else {
+                        Text(Browser.extensionName(id))
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(Palette.ink)
+                            .lineLimit(1)
                     }
-                    Text(Browser.extensionName(id))
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
                     Spacer(minLength: 0)
                     Door(icon: "xmark", help: "Close") { browser.closeSidePanel() }
                 }
@@ -683,6 +684,33 @@ struct SidePanelView: View {
                 .environment(\.asTab, true)
         case nil:
             Color.clear
+        }
+    }
+}
+
+/// An extension's name and icon above its panel. The icon is the one its
+/// toolbar button shows now, not the manifest's: an extension that swaps its
+/// icon for light and dark (setIcon) is drawn in the ink that shows, where
+/// the manifest's dark one vanished on a dark panel and left a gap. The name
+/// is the short one when there is one, as the line has little room.
+@available(macOS 15.4, *)
+private struct PanelTitle: View {
+    let id: String
+    @ObservedObject private var extensions = Extensions.shared
+
+    var body: some View {
+        let context = extensions.contexts[id]
+        let icon = extensions.buttons.first(where: { $0.id == id })?.icon
+            ?? context?.webExtension.icon(for: CGSize(width: 16, height: 16))
+        let short = context?.webExtension.displayShortName ?? ""
+        HStack(spacing: 8) {
+            if let icon {
+                Image(nsImage: icon).resizable().interpolation(.high).frame(width: 14, height: 14)
+            }
+            Text(short.isEmpty ? Browser.extensionName(id) : short)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
         }
     }
 }
