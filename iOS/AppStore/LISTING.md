@@ -5,7 +5,7 @@ Everything App Store Connect asks for version 1.0 (build 9), ready to paste. Lim
 ## App information
 
 - **Name** [30]: Quo Browser
-- **Subtitle** [30]: Fast, quiet, no clutter (23)
+- **Subtitle** [30]: The browser without the junk (28)
 - **Category**: Productivity. Secondary: Utilities
 - **Privacy policy URL**: https://quobrowser.com/privacy
 - **Support URL**: https://quobrowser.com
