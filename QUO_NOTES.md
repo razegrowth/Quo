@@ -2,6 +2,18 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.7.0 · 23 November 2026
+
+A Library past your first space, Apple Intelligence on your tabs and links, strong passwords and cards at checkout, and your tabs and history on all your devices.
+
+Swipe right from your first space and the Library comes in with your fingers: Downloads first, then Media, Spaces, Bookmarks and Archived Tabs. The button at the column's foot opens it too.
+
+Hold Shift over a link and a card tells you what the page says, summarised on your Mac by Apple Intelligence, private pages you're signed in to included. Tidy Tabs sorts a space's loose tabs into named groups, and Shorter tab names (Settings › Tabs) turns long titles into a few words.
+
+Sign-up forms offer a strong password, and checkouts offer your cards after Touch ID: add them in Settings › Passwords. Send a page to your iPhone or another Mac from a tab's menu or Share, and your history follows you between devices while sync is on. The page in front is offered through Handoff, and View › Listen to Page reads an article aloud.
+
+Perplexity and ChatGPT are among the search engines, right-clicking the column brings up the space's menu, and download rows show small icons instead of buttons.
+
 ## 0.6.0 · 22 November 2026
 
 A simpler Settings, motion that answers at once, and a calmer ⌘T.

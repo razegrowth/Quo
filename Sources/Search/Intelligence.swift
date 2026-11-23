@@ -245,6 +245,9 @@ final class LinkPreview: ObservableObject {
     @Published private(set) var card: Card?
     static let key = "links.preview"
     static var on = true
+    /// Summarised by Apple's model, or the page's own description.
+    static let summaryKey = "links.summaries"
+    static var summarizes = true
 
     /// The link under the pointer, as the address bubble has it, and the
     /// page it's on.
@@ -340,7 +343,7 @@ final class LinkPreview: ObservableObject {
             if read.failed == nil, let self, self.hovered == url, self.card?.url == url { self.card = made }
             made.reading = false
             if read.failed == nil {
-                if !read.text.isEmpty, let said = await OnDevice.summary(title: made.title, host: site, text: read.text) {
+                if Self.summarizes, !read.text.isEmpty, let said = await OnDevice.summary(title: made.title, host: site, text: read.text) {
                     made.summary = said
                 } else {
                     made.summary = read.description

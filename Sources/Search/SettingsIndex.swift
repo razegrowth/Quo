@@ -366,6 +366,10 @@ enum SettingsIndex {
               title: "Shorter tab names", detail: "A long page title as a few words in its tab, like \"Tab sync issue #198\"",
               more: "Named by Apple Intelligence on this Mac, and nothing leaves it. The window, bookmarks and the tab's tooltip keep the page's own title, and a name you give a tab always wins.",
               keys: [TabTitles.key], words: ["rename", "tidy titles", "tab names", "arc max", "apple intelligence", "ai"]),
+        .init(id: "links.summaries", group: "intelligence", icon: "text.quote",
+              title: "Summarise links", detail: "Holding Shift over a link: what the page says, in two or three sentences",
+              more: "Worked out on this Mac by Apple Intelligence. Off, the card shows the page's own description.",
+              keys: [LinkPreview.summaryKey], words: ["summary", "summarize", "summarise", "link preview", "apple intelligence", "ai"]),
         .init(id: "note.tidy", group: "intelligence", icon: "rectangle.3.group",
               title: "Tidy Tabs", detail: "In the View menu and the space's menu: your loose tabs, sorted into named groups",
               words: ["tidy", "organize", "organise", "sort tabs", "group tabs", "arc max", "apple intelligence", "ai"], kind: .note),
@@ -672,7 +676,7 @@ enum SettingsIndex {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
         case "privacy.telemetry": return Telemetry.configured
-        case "tabs.shortTitles", "note.tidy": return OnDevice.available
+        case "tabs.shortTitles", "note.tidy", "links.summaries": return OnDevice.available
         default: return true
         }
     }

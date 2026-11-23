@@ -504,6 +504,15 @@ final class Preferences: ObservableObject {
             TabTitles.on = shortTitles
         }
     }
+    /// The card for a link held with Shift summarised by Apple's model; off,
+    /// it shows the page's own description (Intelligence.swift). On unless
+    /// turned off.
+    @Published var summarizesLinks: Bool {
+        didSet {
+            store.set(summarizesLinks, forKey: LinkPreview.summaryKey)
+            LinkPreview.summarizes = summarizesLinks
+        }
+    }
     /// Hold Shift over a link to see what it says (Intelligence.swift). On
     /// unless turned off: it only ever fetches when asked.
     @Published var previewsLinks: Bool {
@@ -1165,6 +1174,9 @@ final class Preferences: ObservableObject {
         let shortens = store.bool(forKey: TabTitles.key)
         shortTitles = shortens
         TabTitles.on = shortens
+        let summaries = store.object(forKey: LinkPreview.summaryKey) as? Bool ?? true
+        summarizesLinks = summaries
+        LinkPreview.summarizes = summaries
         let previews = store.object(forKey: LinkPreview.key) as? Bool ?? true
         previewsLinks = previews
         LinkPreview.on = previews

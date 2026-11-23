@@ -133,6 +133,15 @@ struct WelcomePanel: View {
             }
         }
         .environment(\.colorScheme, .dark)
+        // A first run on a Mac with Apple Intelligence starts with it on:
+        // shorter tab names and link summaries (Intelligence.swift). The
+        // switch on the blocking step turns both off; skipped, they stay on.
+        .onAppear {
+            if OnDevice.available, !prefs.welcomed {
+                prefs.shortTitles = true
+                prefs.summarizesLinks = true
+            }
+        }
         .animation(reduced ? .easeOut(duration: 0.2) : .spring(response: 0.55, dampingFraction: 0.86), value: step)
         .transition(.opacity)
     }
@@ -691,6 +700,18 @@ struct WelcomePanel: View {
                 .animation(Motion.settle, value: isDefault)
             }
             .rise(2)
+            // Apple Intelligence, on a Mac that has it: on to start with.
+            if OnDevice.available {
+                Glass {
+                    HStack(spacing: 16) {
+                        Badge(symbol: "apple.intelligence")
+                        Toggled("Apple Intelligence", "Shorter tab names and link summaries, worked out on this Mac",
+                                on: Binding(get: { prefs.shortTitles || prefs.summarizesLinks },
+                                            set: { on in prefs.shortTitles = on; prefs.summarizesLinks = on }))
+                    }
+                }
+                .rise(3)
+            }
         }
     }
 

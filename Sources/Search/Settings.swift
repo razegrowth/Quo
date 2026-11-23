@@ -680,6 +680,7 @@ struct SettingsPanel: View {
     private func tabsControl(_ id: String) -> some View {
         switch id {
         case "tabs.shortTitles": Switch(on: $prefs.shortTitles)
+        case "links.summaries": Switch(on: $prefs.summarizesLinks)
         case "tabs.newPlace":
             Picker("New tab position", selection: $prefs.newTabPlace) {
                 Text("After current").tag(NewTabPlace.next)
