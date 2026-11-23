@@ -180,6 +180,9 @@ struct GroupHeading: View {
                     draft = group.name
                     DispatchQueue.main.async { focused = true }
                 }
+                .onChange(of: group.name) { old, new in
+                    if draft == old { draft = new }
+                }
         }
     }
 
@@ -246,6 +249,11 @@ struct GroupHeading: View {
                 draft = group.name
                 DispatchQueue.main.async { focused = true }
             }
+        }
+        // Named by Apple Intelligence while the name is up to be typed:
+        // the new name, unless you've started typing your own.
+        .onChange(of: group.name) { old, new in
+            if editing, draft == old { draft = new }
         }
         .onAppear {
             if editing {

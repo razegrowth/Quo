@@ -528,6 +528,14 @@ final class Preferences: ObservableObject {
             LinkPreview.summarizes = summarizesLinks
         }
     }
+    /// A group you make named from its tabs by Apple's model (GroupNames,
+    /// Intelligence.swift). On unless turned off.
+    @Published var namesGroups: Bool {
+        didSet {
+            store.set(namesGroups, forKey: GroupNames.key)
+            GroupNames.on = namesGroups
+        }
+    }
     /// Hold Shift over a link to see what it says (Intelligence.swift). On
     /// unless turned off: it only ever fetches when asked.
     @Published var previewsLinks: Bool {
@@ -1196,6 +1204,9 @@ final class Preferences: ObservableObject {
         let summaries = store.object(forKey: LinkPreview.summaryKey) as? Bool ?? true
         summarizesLinks = summaries
         LinkPreview.summarizes = summaries
+        let names = store.object(forKey: GroupNames.key) as? Bool ?? true
+        namesGroups = names
+        GroupNames.on = names
         let previews = store.object(forKey: LinkPreview.key) as? Bool ?? true
         previewsLinks = previews
         LinkPreview.on = previews

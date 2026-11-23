@@ -370,6 +370,10 @@ enum SettingsIndex {
               title: "Summarise links", detail: "Holding Shift over a link: what the page says, in two or three sentences",
               more: "Worked out on this Mac by Apple Intelligence. Off, the card shows the page's own description.",
               keys: [LinkPreview.summaryKey], words: ["summary", "summarize", "summarise", "link preview", "apple intelligence", "ai"]),
+        .init(id: "groups.autoName", group: "intelligence", icon: "folder.badge.gearshape",
+              title: "Name new groups", detail: "A group you make is named from its tabs, like \"Tokyo trip\" instead of \"Group 3\"",
+              more: "Named by Apple Intelligence on this Mac, and named again as tabs come and go, until you give it a name of your own.",
+              keys: [GroupNames.key], words: ["group name", "tab groups", "rename", "arc max", "apple intelligence", "ai"]),
         .init(id: "note.tidy", group: "intelligence", icon: "rectangle.3.group",
               title: "Tidy Tabs", detail: "In the View menu and the space's menu: your loose tabs, sorted into named groups",
               words: ["tidy", "organize", "organise", "sort tabs", "group tabs", "arc max", "apple intelligence", "ai"], kind: .note),
@@ -681,7 +685,7 @@ enum SettingsIndex {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
         case "privacy.telemetry": return Telemetry.configured
-        case "tabs.shortTitles", "note.tidy", "links.summaries": return OnDevice.available
+        case "tabs.shortTitles", "note.tidy", "links.summaries", "groups.autoName": return OnDevice.available
         default: return true
         }
     }

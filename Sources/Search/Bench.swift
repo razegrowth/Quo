@@ -3225,6 +3225,12 @@ final class Bench {
             guard Store.testing else { answer(["error": "group only works on a --test run"]); return }
             let named = request["name"] as? String ?? ""
             let group = browser.tabGroups.first { $0.name == named || $0.id.uuidString.lowercased().hasPrefix(named.lowercased()) && !named.isEmpty }
+            // "canned": a stand-in for Apple's model naming groups, the name
+            // it gives every group; "names": the model itself again.
+            if let canned = request["canned"] as? String { GroupNames.canned = { _ in canned } }
+            if request["model"] as? Bool == true { GroupNames.canned = nil }
+            if let on = request["autoName"] as? Bool { browser.prefs.namesGroups = on }
+            if let rename = request["rename"] as? String, let group { browser.renameTabGroup(group.id, to: rename) }
             if let id = request["id"] as? String {
                 guard let tab = browser.tabs.first(where: { Bench.short($0) == id }) else { answer(["error": "no tab “\(id)” — see tabs"]); return }
                 if request["new"] as? Bool == true {

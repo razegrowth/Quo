@@ -681,6 +681,7 @@ struct SettingsPanel: View {
         switch id {
         case "tabs.shortTitles": Switch(on: $prefs.shortTitles)
         case "links.summaries": Switch(on: $prefs.summarizesLinks)
+        case "groups.autoName": Switch(on: $prefs.namesGroups)
         case "tabs.newPlace":
             Picker("New tab position", selection: $prefs.newTabPlace) {
                 Text("After current").tag(NewTabPlace.next)

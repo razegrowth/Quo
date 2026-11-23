@@ -85,7 +85,13 @@ enum OnDevice {
         if #available(macOS 26, *), available {
             let session = LanguageModelSession(instructions: """
                 You name a folder of browser tabs. Answer with the name alone: one to three words, no quotes, no \
-                explanation. Say the place, product, project or subject the tabs share, using a word from their titles.
+                explanation. The name must fit every tab in the folder, not just one: say the place, product, project \
+                or subject they all share, using a word from their titles. When they are the same kind of page about \
+                different things, name the kind, like Recipes, Hotels or Reviews.
+                Examples:
+                - Ramen shops in Tokyo / Hotels in Shinjuku, Tokyo  →  Tokyo
+                - Lemon pasta recipe / Chicken curry recipe  →  Recipes
+                - Fix crash in split view · Pull Request #212 · quo / Tab sync issue #198 · quo  →  Quo
                 """)
             guard let answer = try? await session.respond(to: titles.map { "- " + $0 }.joined(separator: "\n"),
                                                           options: GenerationOptions(sampling: .greedy)) else { return nil }
@@ -137,6 +143,56 @@ struct Sorted {
     var tabs: [String]
 }
 #endif
+
+// MARK: - naming groups
+
+/// A group you make named from its tabs as you make it, "Tokyo trip" where
+/// it would have been "Group 3", and named again as tabs come and go, until
+/// you give it a name of your own (Settings › Tabs › Name new groups).
+enum GroupNames {
+    static let key = "groups.autoName"
+    nonisolated(unsafe) static var on = true
+
+    /// The name a group gets before anyone names it.
+    static func isDefault(_ name: String) -> Bool {
+        name.range(of: #"^Group \d+$"#, options: .regularExpression) != nil
+    }
+
+    /// A test run's stand-in for the model (bench group): titles in, a name out.
+    @MainActor static var canned: (([String]) -> String?)?
+
+    @MainActor
+    static func name(for titles: [String]) async -> String? {
+        if Store.testing, let canned { return canned(titles) }
+        return await OnDevice.folderName(titles)
+    }
+}
+
+extension Browser {
+    /// A moment after a group's tabs change: named from them, if it still
+    /// has the name it was born with or one the model gave it.
+    func nameGroupSoon(_ id: UUID) {
+        guard GroupNames.on, OnDevice.available || (Store.testing && GroupNames.canned != nil),
+              let group = tabGroups.first(where: { $0.id == id }), group.agent == nil,
+              GroupNames.isDefault(group.name) || autoNamedGroups.contains(id)
+        else { return }
+        groupNaming[id]?.cancel()
+        groupNaming[id] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard let self, !Task.isCancelled else { return }
+            let titles = self.tabs.filter { $0.groupID == id && !$0.isBlank }.map { $0.title.isEmpty ? $0.label : $0.title }
+            guard !titles.isEmpty, let name = await GroupNames.name(for: titles) else { return }
+            // Named by you meanwhile, or gone: yours stands.
+            guard !Task.isCancelled, let index = self.tabGroups.firstIndex(where: { $0.id == id }),
+                  GroupNames.isDefault(self.tabGroups[index].name) || self.autoNamedGroups.contains(id),
+                  self.tabGroups[index].name != name
+            else { return }
+            self.tabGroups[index].name = name
+            self.autoNamedGroups.insert(id)
+            self.writeSession(now: true)
+        }
+    }
+}
 
 // MARK: - shorter tab names
 

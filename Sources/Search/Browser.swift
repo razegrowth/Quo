@@ -60,6 +60,10 @@ final class Browser: NSObject, ObservableObject {
     /// Named tab sections in the current space, in display order.
     @Published var tabGroups: [TabGroup] = []
     @Published var editingGroupID: UUID?
+    /// Groups whose name Apple's model gave, renamed again as their tabs
+    /// change until you name one yourself (GroupNames, Intelligence.swift).
+    var autoNamedGroups: Set<UUID> = []
+    var groupNaming: [UUID: Task<Void, Never>] = [:]
     /// The tab on screen before the last change, and when it changed: a tab
     /// in the column opens as the button goes down (#625), so a tab carried
     /// from there onto the page finds its own page under the hand, and
@@ -5573,6 +5577,7 @@ final class Browser: NSObject, ObservableObject {
         // A tab that can't be in a group (a pin, a private one) leaves none behind.
         removeEmptyGroup(id)
         writeSession(now: true)
+        nameGroupSoon(id)
         return id
     }
 
@@ -5588,6 +5593,9 @@ final class Browser: NSObject, ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         tabGroups[index].name = trimmed
+        // Named by you: the model leaves it alone from now on.
+        autoNamedGroups.remove(id)
+        groupNaming[id]?.cancel()
         writeSession(now: true)
     }
 
@@ -5757,6 +5765,8 @@ final class Browser: NSObject, ObservableObject {
             tabGroups[index].collapsed = false
         }
         writeSession(now: true)
+        if let id { nameGroupSoon(id) }
+        if let previousGroup { nameGroupSoon(previousGroup) }
     }
 
     /// Insert relative to a visible member, after removing the carried item.
@@ -5794,6 +5804,8 @@ final class Browser: NSObject, ObservableObject {
         tabs = row
         for id in previous where id != target.group { removeEmptyGroup(id) }
         writeSession(now: true)
+        nameGroupSoon(target.group)
+        for id in previous where id != target.group { nameGroupSoon(id) }
     }
 
     /// Carried out of its group and let go among the tabs in none (#1009):
