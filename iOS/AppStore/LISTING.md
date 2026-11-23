@@ -49,7 +49,11 @@ browser,web,private,ad blocker,tracker blocker,privacy,fast,minimal,tabs,spaces,
 
 The first public version of Quo for iPhone.
 
-## Screenshots (6.9" iPhone, 1320 x 2868)
+## Screenshots
+
+6.9" iPhone (1320 x 2868) in `screenshots/`, and the same at 6.3" (1206 x 2622, the size App Store Connect asks for first) in `screenshots-6.3/`.
+
+### Order
 
 In `iOS/AppStore/screenshots/`, in this order. Made by `design/make.py` from the app's own screens in `raw/` (run `python3 design/make.py` to remake them).
 
@@ -83,13 +87,13 @@ Already answered in the app (`ITSAppUsesNonExemptEncryption` is false), so App S
 - **Contact**: Ed's name, email and phone (fill in)
 - **Notes**:
 
-> Quo is a web browser built on WebKit. There's no account or sign-in, so everything can be tried straight away.
+> Quo is a web browser. There's no account or sign-in, so everything can be tried straight away.
 >
 > Some features are optional and depend on the device or the user's setup:
 >
 > - Ask this page, link summaries, shorter tab names and download names use Apple Intelligence on the device. They only appear where Apple Intelligence is available and turned on.
 > - Sync with Quo on the Mac goes through the user's own iCloud. Without a Mac running Quo, the app works fully on its own; the spaces screen just says how to turn it on.
-> - Ad, tracker and cookie-banner blocking uses WebKit content blocking with public filter lists (EasyList, Fanboy).
+> - Ad, tracker and cookie-banner blocking uses content blocking rules made from public filter lists (EasyList, Fanboy).
 >
 > Nothing the user browses is sent to us. Privacy policy: https://quobrowser.com/privacy
 
