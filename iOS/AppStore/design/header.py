@@ -1,6 +1,7 @@
 """Quo for iPhone's App Store header, the wide banner over the product page.
 
-Two sizes Apple takes: 5244 x 2950 (16:9) and 3840 x 1646 (21:9). Everything
+The header in the two sizes Apple takes, 5244 x 2950 (16:9) and 3840 x 1646
+(21:9), and the search results card, 3840 x 2560 (3:2), from the same page. Everything
 that matters sits in the middle, since Apple crops it differently by device
 and orientation: two short lines in the middle third, three phones rising from the
 bottom edge. No Q tile: the app icon sits right under the header anyway. Drawn at half size and rendered at 2x by headless Chrome.
@@ -17,7 +18,7 @@ BUILD = HERE / "build"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 Q = (HERE.parent.parent.parent / "Icon/Quo.icon/Assets/quo-q-vector.svg").read_text().replace('fill="white"', 'fill="#171717"')
 
-SIZES = {"header-5244x2950": (2622, 1475), "header-3840x1646": (1920, 823)}
+SIZES = {"header-5244x2950": (2622, 1475), "header-3840x1646": (1920, 823), "search-3840x2560": (1920, 1280)}
 
 PAGE = """<!doctype html><meta charset="utf-8">
 <style>
