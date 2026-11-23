@@ -20,6 +20,10 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
     /// pages up when it changes.
     static let contactsOn = "window.__officeContacts = true;"
     static func contacts(_ on: Bool) -> String { "window.__officeContacts = \(on);" }
+    /// The same for your cards (Cards.swift): Fill in cards on, and a card kept.
+    @MainActor static var cards = false
+    static let cardsOn = "window.__officeCards = true;"
+    static func cards(_ on: Bool) -> String { "window.__officeCards = \(on);" }
 
     weak var tab: Tab?
 
@@ -53,6 +57,9 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
                 // A box of a name and password, or one the page marks for
                 // passkeys alone ("webauthn"), which takes no password.
                 tab?.fieldFrameHost = message.frameInfo.isMainFrame ? nil : message.frameInfo.securityOrigin.host
+                // A box for a new password: how long a password it takes
+                // (0 for any), for a strong one offered under it.
+                tab?.freshPassword = (body["fresh"] as? Bool ?? false) ? (body["most"] as? Int ?? 0) : nil
                 if let rect = body["rect"] as? [String: Double],
                    let x = rect["x"], let y = rect["y"], let w = rect["w"], let h = rect["h"] {
                     // `wide`: a box that is clearly a sign-in's, offered the
@@ -65,7 +72,8 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
                     tab?.fieldFocused(CGRect(x: x, y: y, width: w, height: h), passwords: body["passwords"] as? Bool ?? true,
                                       name: body["name"] as? Bool ?? false, wide: body["wide"] as? Bool ?? true,
                                       code: body["code"] as? Bool ?? false,
-                                      fill: (body["contact"] as? String).map { .contact($0, box: body["box"] as? Int ?? 0) })
+                                      fill: (body["card"] as? String).map { .card($0, box: body["box"] as? Int ?? 0) }
+                                        ?? (body["contact"] as? String).map { .contact($0, box: body["box"] as? Int ?? 0) })
                 } else {
                     tab?.fieldFocused(nil)
                 }
@@ -712,6 +720,136 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         return filled;
       }
 
+      // A box for a new account's password, or a new one for an account: the
+      // page says new-password, or its form asks for it twice (a new one and
+      // the same again, perhaps after the old one), or calls itself a sign-up.
+      // Never a box the page marks as the password you have now.
+      function visiblePasswords(scope) {
+        return Array.prototype.filter.call(scope.querySelectorAll('input[type="password"]'), function (b) {
+          var r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !b.disabled && !b.readOnly;
+        });
+      }
+      function newPasswordBox(el) {
+        if (!passwordBox(el)) return false;
+        var ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+        if (/current-password/.test(ac)) return false;
+        if (/new-password/.test(ac)) return true;
+        var scope = formOf(el) || document;
+        var boxes = visiblePasswords(scope);
+        var w = words(el);
+        if (/current|old|existing|actuel|aktuell/.test(w)) return false;
+        if (boxes.length === 3) return boxes[0] !== el;
+        if (boxes.length === 2) return true;
+        var said = (w + ' ' + ((scope.getAttribute && scope.getAttribute('action')) || '') + ' ' + (scope.id || '') + ' ' +
+                    (typeof scope.className === 'string' ? scope.className : '') + ' ' + location.pathname).toLowerCase();
+        return /sign.?up|register|registr|create|new.?pass|choose.?a|join|inscri|enroll/.test(said) &&
+               !/sign.?in|log.?in|login/.test(said);
+      }
+      // A strong password, into the new-password boxes of this box's form:
+      // the new one and the same again; never the box for the one you have.
+      function fillStrong(password, tint) {
+        var el = document.activeElement;
+        if (!newPasswordBox(el)) return 0;
+        var boxes = visiblePasswords(formOf(el) || document);
+        if (boxes.length === 3) boxes = boxes.slice(1);
+        var took = [];
+        boxes.forEach(function (box) {
+          if (/current-password/.test((box.getAttribute('autocomplete') || '').toLowerCase())) return;
+          keepSecret(box);
+          put(box, password);
+          took.push(box);
+        });
+        try { el.focus(); } catch (e) {}
+        if (tint) took.forEach(function (box, i) { flash(box, tint, i * 30); });
+        return took.length;
+      }
+
+      // A card's boxes at checkout: what the page marks (cc-number, cc-name,
+      // cc-exp…), or what a box's name and label say, beside a box for the
+      // number. The security code's box is found, never filled.
+      var cardToken = /^cc-(name|given-name|family-name|number|exp|exp-month|exp-year|csc|type)$/;
+      var cardGuesses = [
+        ['cc-csc', /cvc|cvv|csc|security.?code|card.?code|verification.?(code|value)|code.?de.?s[e\\u00e9]curit[e\\u00e9]|pr[u\\u00fc]fnummer/],
+        ['cc-number', /card.?num|cc.?num|credit.?card|debit.?card|cardnumber|card.?no|kartennummer|num[e\\u00e9]ro.?de.?(la.?)?carte|n[u\\u00fa]mero.?de.?tarjeta/],
+        ['cc-exp-month', /exp\\w*.?(month|mm|mois|monat|mes)|(month|mm).?exp|card.?month/],
+        ['cc-exp-year', /exp\\w*.?(year|yy|ann[e\\u00e9]e|jahr|a[n\\u00f1]o)|(year|yy).?exp|card.?year/],
+        ['cc-exp', /expir|exp.?date|valid.?(thru|until)|mm.?.?yy|ablaufdatum|date.?d.?expiration|vencimiento/],
+        ['cc-name', /name.?on.?card|card.?holder|cardholder|holder.?name|cc.?name|nom.?du.?titulaire|karteninhaber|titular/]
+      ];
+      function cardSlot(el) {
+        if (!el || el.disabled || el.readOnly) return false;
+        var tag = (el.tagName || '').toLowerCase();
+        if (tag === 'input') {
+          if (['text', 'tel', 'number', ''].indexOf((el.getAttribute('type') || '').toLowerCase()) < 0) return false;
+        } else if (tag !== 'select') return false;
+        var r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+      }
+      function cardKind(el) {
+        if (!cardSlot(el)) return null;
+        var t = tokens(el).filter(function (w) { return !/^(section-.*|shipping|billing)$/.test(w); });
+        var last = t[t.length - 1];
+        if (last && cardToken.test(last)) return { kind: last, sure: true };
+        if (last && last !== 'on' && last !== 'off') return null;
+        var w = words(el);
+        for (var i = 0; i < cardGuesses.length; i++) {
+          if (cardGuesses[i][1].test(w)) return { kind: cardGuesses[i][0], sure: false };
+        }
+        return null;
+      }
+      function cardBoxes(scope) {
+        var all = scope.querySelectorAll('input, select'), out = [];
+        for (var i = 0; i < all.length && out.length < 20; i++) {
+          var k = cardKind(all[i]);
+          if (k) out.push({ box: all[i], kind: k.kind });
+        }
+        return out;
+      }
+      // Whether a card is offered under a box, and as what: a box the page
+      // marks, or one read by its words in a form with a box for the number.
+      function cardBox(el) {
+        var k = cardKind(el);
+        if (!k || k.kind === 'cc-csc') return null;
+        if (k.sure) return k.kind;
+        var withNumber = cardBoxes(contactScope(el)).some(function (b) { return b.kind === 'cc-number'; });
+        return withNumber ? k.kind : null;
+      }
+      // A card into the boxes of this box's form. The expiry as the box
+      // wants it: a month and a year apart, or together as MM/YY (MMYY in a
+      // box of four). Then the caret to the security code's box, for you.
+      function fillCard(card, box, tint) {
+        var el = document.activeElement;
+        if (box != null && (!el || boxId(el) !== box)) return 0;
+        if (!cardBox(el)) return 0;
+        var took = [], code = null;
+        cardBoxes(contactScope(el)).forEach(function (b) {
+          var target = b.box, kind = b.kind, tag = (target.tagName || '').toLowerCase();
+          if (kind === 'cc-csc') { if (!code) code = target; return; }
+          if (target !== el && (tag === 'select' ? !unchosen(target) : (target.value || '').trim())) return;
+          if (tag === 'select') {
+            var month = card['cc-exp-month'], year = card['cc-exp-year'];
+            var wanted = kind === 'cc-exp-month' ? [month, String(parseInt(month, 10))]
+              : kind === 'cc-exp-year' ? [year, year.slice(2)] : [card[kind]];
+            if (choose(target, wanted)) took.push(target);
+            return;
+          }
+          var value = card[kind];
+          if (kind === 'cc-exp') {
+            var mm = card['cc-exp-month'], yy = card['cc-exp-year'].slice(2), max = target.maxLength;
+            var hint = ((target.getAttribute('placeholder') || '') + ' ' + words(target)).toLowerCase();
+            value = max === 4 ? mm + yy : /yyyy/.test(hint) ? mm + '/' + card['cc-exp-year'] : mm + '/' + yy;
+          } else if (kind === 'cc-exp-year' && target.maxLength === 2) {
+            value = card['cc-exp-year'].slice(2);
+          }
+          if (!value) return;
+          put(target, value);
+          took.push(target);
+        });
+        if (code && !(code.value || '').trim()) { try { code.focus(); } catch (e) {} } else { try { el.focus(); } catch (e) {} }
+        if (tint) took.forEach(function (t, i) { flash(t, tint, i * 30); });
+        return took.length;
+      }
+
       // What was typed by hand and not yet sent, box by box. A page whose
       // boxes still hold it is not put to sleep: waking it couldn't bring
       // that back. A box emptied by sending — a chat's composer — no longer
@@ -744,6 +882,8 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
 
       window.__officeForms = {
         unsaved: unsaved,
+        strong: fillStrong,
+        card: fillCard,
         fill: function (user, password) {
           var both = pair();
           if (!both) return false;
@@ -922,8 +1062,10 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         if (scrolled !== true || judged.el !== el) {
           var seen = judge(el);
           var coded = !seen && codeBox(el);
+          var card = !seen && !coded && window.__officeCards === true ? cardBox(el) : null;
           judged = { el: el, verdict: seen, code: coded, sure: coded && saysCode(el),
-                     contact: !seen && !coded && window.__officeContacts === true ? contactBox(el) : null };
+                     contact: !seen && !coded && !card && window.__officeContacts === true ? contactBox(el) : null,
+                     card: card, fresh: newPasswordBox(el) };
           if (coded) codeAt = el;
         }
         var verdict = judged.verdict;
@@ -931,18 +1073,22 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         // A box for your name, email, phone or address: your card's
         // details hang from it.
         var contact = judged.contact;
+        // A box for a card's number, name or expiry: your cards hang from it.
+        var card = judged.card;
+        // A box for a new password: a strong one is offered under it.
+        var fresh = judged.fresh;
         var rect = null;
         // A first step's name box: the accounts hang from it as from a
         // name box beside a password, and a pick puts in the name alone.
         var passwords = !!verdict;
         var name = !!(verdict && verdict.name);
         var wide = code ? judged.sure : !verdict || verdict.wide;
-        if (passwords || code || contact || forPasskeys(el)) {
+        if (passwords || code || contact || card || fresh || forPasskeys(el)) {
           var r = el.getBoundingClientRect();
           if (r.width > 0 && r.height > 0) rect = { x: r.left, y: r.top, w: r.width, h: r.height };
         }
         var typing = editable(el);
-        var now = typing + (rect ? ' ' + passwords + ' ' + name + ' ' + wide + ' ' + code + ' ' + contact + ' ' + rect.x + ' ' + rect.y + ' ' + rect.w + ' ' + rect.h : '');
+        var now = typing + (rect ? ' ' + passwords + ' ' + name + ' ' + wide + ' ' + code + ' ' + contact + ' ' + card + ' ' + fresh + ' ' + rect.x + ' ' + rect.y + ' ' + rect.w + ' ' + rect.h : '');
         if (scrolled === true && now === said) return;
         said = now;
         if (rect && hungFrom && hungFrom !== el && contactScope(hungFrom) !== contactScope(el)) {
@@ -958,7 +1104,10 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           wide: wide,
           code: code,
           contact: contact,
-          box: contact ? boxId(el) : null
+          card: card,
+          fresh: fresh,
+          most: fresh && el.maxLength > 0 ? el.maxLength : null,
+          box: contact || card ? boxId(el) : null
         });
       }
 

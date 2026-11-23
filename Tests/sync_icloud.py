@@ -57,7 +57,14 @@ TABS = "tabs-" + PERSONAL
 
 
 def records(account="me"):
-    """The Macs' records: not the iPhone standing in."""
+    """The Macs' records: not the iPhone standing in, nor their history's,
+    which a Mac writes only once it has some (SyncHistory.swift)."""
+    return sorted(p.name for p in (cloud / account).glob("*.record")
+                  if ".PHONE" not in p.name and not p.name.startswith("history-"))
+
+
+def every_record(account="me"):
+    """Every record of the Macs, their history's too."""
     return sorted(p.name for p in (cloud / account).glob("*.record") if ".PHONE" not in p.name)
 
 
@@ -130,7 +137,8 @@ try:
     st = B.cmd({"do": "suggest"})
     at = next((i for i, o in enumerate(st["offers"]) if o[1] == "elsewhere"), None)
     taken = B.cmd({"do": "suggest", "action": "take", "index": at}) if at is not None else {}
-    t.ok("…and taking it opens the page here", "Handoff" in taken.get("address", "") + taken.get("pending", ""), taken)
+    # Wikipedia sends /wiki/Handoff on to /wiki/Handover.
+    t.ok("…and taking it opens the page here", "wikipedia.org/wiki/Hand" in taken.get("address", "") + taken.get("pending", ""), taken)
     (cloud / "me" / f"{TABS}.PHONE.record").unlink()
 
     A.cmd({"do": "space", "action": "new", "name": "From A"})
@@ -164,6 +172,8 @@ try:
     A.launch(env=env())
     sync(B, "off")
     t.ok("turned off, B's records leave iCloud", wait(lambda: len(records()) == 3), records())
+    b = sync(B)["device"]
+    t.ok("…its history's too", wait(lambda: not any(b in r for r in every_record())), every_record())
     t.ok("…and B says off", sync(B)["way"] == "off", sync(B))
     t.ok("A stops naming B", wait(lambda: sync(A)["others"] == [] or sync(A, "now") and False, 10) or sync(A)["others"] == [], sync(A))
 finally:

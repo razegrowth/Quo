@@ -4,8 +4,8 @@ import AppKit
 /// own to answer it — the space under the tabs, the gaps between groups,
 /// the band at the top, the foot round its buttons — as Arc's sidebar
 /// answers one: a new tab, a new folder, what is on the clipboard, and the
-/// column's own settings. Right-clicks on a tab, a pin, a group or a
-/// folder keep their own menus.
+/// space's own menu (SpaceMenu), and the column's own settings last.
+/// Right-clicks on a tab, a pin, a group or a folder keep their own menus.
 @MainActor
 enum ColumnMenu {
     /// Where Paste and Go reads from: the Mac's clipboard, or on a test run
@@ -35,6 +35,19 @@ enum ColumnMenu {
             menu.addItem(.separator())
             add("Paste and Go") { [weak browser] in browser?.open(url, foreground: true) }
         }
+        // The space's own menu, as its button at the foot has it: the spaces
+        // to go to, a new one, and this one's name, icon, colour, Tidy Tabs
+        // and downloads.
+        if browser.prefs.usesSpaces, !browser.websitePopup {
+            menu.addItem(.separator())
+            SpaceLookPopover.anchor = NSEvent.mouseLocation
+            let space = SpaceMenu.menu(for: browser)
+            for item in space.items {
+                space.removeItem(item)
+                menu.addItem(item)
+            }
+        }
+        // And last, the column's own settings.
         menu.addItem(.separator())
         add("Hide Sidebar") { [weak browser] in browser?.toggleFold() }
         add("Sidebar Settings…") { [weak browser] in

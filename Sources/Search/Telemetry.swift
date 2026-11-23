@@ -153,14 +153,18 @@ enum Telemetry {
             : URL(string: "https://nom.telemetrydeck.com/v2/namespace/\(namespace)/")!
     }
 
-    /// No cookies, no cache, nothing kept: a session of its own.
-    private static let urlSession: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.httpCookieStorage = nil
-        config.urlCache = nil
-        config.timeoutIntervalForRequest = 20
-        return URLSession(configuration: config)
-    }()
+    /// No cookies, no cache, nothing kept: a session of its own, through
+    /// the proxy when one is set, as everything Search fetches (Proxy.swift).
+    nonisolated private static var urlSession: URLSession {
+        ProxyNetwork.kept("telemetry") {
+            let config = URLSessionConfiguration.ephemeral
+            config.httpCookieStorage = nil
+            config.urlCache = nil
+            config.timeoutIntervalForRequest = 20
+            ProxyNetwork.stamp(config)
+            return URLSession(configuration: config)
+        }
+    }
 
     nonisolated private static func send(_ body: [[String: Any]], done: @escaping @Sendable (Bool) -> Void) {
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return done(false) }

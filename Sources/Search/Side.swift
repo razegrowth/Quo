@@ -112,7 +112,17 @@ struct SideBar: View {
         browser.fullScreen || browser.lightsInAddressBar ? 0 : max(0, min(Metrics.sideLights, width - 20 - Metrics.helmDoors))
     }
 
+    /// Always in the Library's stage, with or without a Library: the column
+    /// is the same view either way, and isn't built again when the column
+    /// goes to icons only or to the right.
     var body: some View {
+        LibraryStage(browser: browser, reveal: browser.libraryReveal, width: width, onFrame: onFrame, onDrag: onDrag) {
+            column
+        }
+    }
+
+    /// The column itself: the spaces' rows, the band over them, the foot.
+    private var column: some View {
         ZStack(alignment: .top) {
             // Not under the card for a new space: it isn't made of views that
             // would take the click first.
@@ -1302,10 +1312,15 @@ struct SideFoot: View {
                 if !browser.addressBarUp {
                     ExtensionSlot(browser: browser, edge: .trailing, room: room, side: side)
                 }
-                // Up from the foot, the arrow under it straight down to the
-                // button: opened out to the side, the arrow fell at the
-                // popover's corner and bent.
-                BookmarkDoor(browser: browser, arrowEdge: .top, floats: true)
+                // The Library, where the bookmarks are too (Library.swift);
+                // without one, the bookmarks themselves. Up from the foot,
+                // the arrow under it straight down to the button: opened out
+                // to the side, the arrow fell at the popover's corner and bent.
+                if Library.available(browser) {
+                    Door(icon: "books.vertical", on: browser.libraryShown, help: "Library") { browser.toggleLibrary() }
+                } else {
+                    BookmarkDoor(browser: browser, arrowEdge: .top, floats: true)
+                }
                 // Only while a download is running, and a moment after; the
                 // cards over the foot show how it is going.
                 FetchDoor(browser: browser, fetches: fetches, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing,
@@ -1657,7 +1672,7 @@ private struct SideRow: View, Equatable {
                     PopupSign(browser: browser, tab: tab, colour: colour)
                     // The page is translated (Translate.swift).
                     TranslateSign(tab: tab, colour: colour)
-                    TitleAtRest(label: tab.label, rest: rest, shown: atRest, hovering: hovering,
+                    TitleAtRest(label: tab.rowLabel, rest: rest, shown: atRest, hovering: hovering,
                                 size: prefs.sideTitle, colour: colour, roomy: true)
                 }
                 Spacer(minLength: 0)

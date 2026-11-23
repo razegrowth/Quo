@@ -1,7 +1,7 @@
 import Foundation
 
 enum Engine: String, CaseIterable, Identifiable {
-    case google, duckduckgo, bing, ecosia, startpage, kagi, brave, qwant, custom
+    case google, duckduckgo, bing, ecosia, startpage, kagi, brave, qwant, perplexity, chatgpt, custom
 
     static let standard = Engine.google
 
@@ -17,6 +17,8 @@ enum Engine: String, CaseIterable, Identifiable {
         case .kagi: return "Kagi"
         case .brave: return "Brave Search"
         case .qwant: return "Qwant"
+        case .perplexity: return "Perplexity"
+        case .chatgpt: return "ChatGPT"
         case .custom: return "Custom"
         }
     }
@@ -31,6 +33,10 @@ enum Engine: String, CaseIterable, Identifiable {
         case .kagi: return "https://kagi.com/search?q=%s"
         case .brave: return "https://search.brave.com/search?q=%s"
         case .qwant: return "https://www.qwant.com/?q=%s"
+        // Answers rather than links. ChatGPT's hint asks for its web search,
+        // so the words are looked up rather than only talked about.
+        case .perplexity: return "https://www.perplexity.ai/search?q=%s"
+        case .chatgpt: return "https://chatgpt.com/?q=%s&hints=search"
         case .custom:
             let written = Engine.written(custom)
             return Engine.accepts(written) ? written : Engine.standard.template(custom: "")

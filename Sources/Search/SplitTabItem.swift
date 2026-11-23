@@ -190,7 +190,7 @@ private struct SplitTabHalf: View {
     @State private var selectedOnPress = false
 
     private var hovering: Bool { hovered == tab.id }
-    private var title: String { tab.label.isEmpty ? "New Tab" : tab.label }
+    private var title: String { tab.rowLabel.isEmpty ? "New Tab" : tab.rowLabel }
     private var playing: Bool { !tab.loading && (tab.noisy || tab.muted) }
     private var editing: Bool { interactive && browser.editingTab == tab.id && (browser.renamingTab || !browser.addressBarUp) }
     /// Where the page is, said on the half you're on (Settings › Tabs › Show

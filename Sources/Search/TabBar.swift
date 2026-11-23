@@ -910,7 +910,7 @@ private struct TabPill: View, Equatable {
                 PopupSign(browser: browser, tab: tab, colour: colour)
                 // The page is translated (Translate.swift).
                 TranslateSign(tab: tab, colour: colour)
-                TitleAtRest(label: tab.label, rest: rest, shown: atRest, hovering: hovering,
+                TitleAtRest(label: tab.rowLabel, rest: rest, shown: atRest, hovering: hovering,
                             size: 12.5, colour: colour, roomy: false)
             }
 

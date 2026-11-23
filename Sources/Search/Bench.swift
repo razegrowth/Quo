@@ -1851,6 +1851,163 @@ final class Bench {
             }
             answer(["bar": bar, "folders": folders, "menu": menu, "list": rows(browser.bookmarks.roots, 0)])
 
+        case "fill":
+            // Strong passwords, cards, Handoff and Listen to Page (Cards.swift,
+            // Handoff.swift, Listen.swift): the rows under the box the caret
+            // is in, one picked by number; a test card kept, or all let go;
+            // Touch ID's answer for the run; what Handoff offers; reading
+            // aloud started, stopped or looked at. Test runs only: a test run
+            // keeps cards in memory and reads aloud at no volume.
+            guard Store.testing else { answer(["error": "fill only works on a --test run"]); return }
+            func rows() -> [[String: Any]] {
+                (browser.suggesting?.choices ?? []).map { choice -> [String: Any] in
+                    switch choice {
+                    case .strong(let password): return ["strong": password]
+                    case .card(let card): return ["card": card.title, "detail": card.detail]
+                    case .login(let login): return ["login": login.user]
+                    case .contact(let contact): return ["contact": contact.title]
+                    default: return ["other": String(describing: choice).prefix(40).description]
+                    }
+                }
+            }
+            switch request["action"] as? String ?? "rows" {
+            case "addcard":
+                let added = Cards.shared.add(name: request["name"] as? String ?? "", number: request["number"] as? String ?? "",
+                                             month: request["month"] as? Int ?? 0, year: request["year"] as? Int ?? 0)
+                answer(["added": "\(added)", "cards": Cards.shared.kept.map(\.title)])
+            case "clearcards":
+                Cards.shared.removeAll()
+                answer(["cards": Cards.shared.kept.count])
+            case "allow":
+                Cards.testAllows = request["on"] as? Bool ?? true
+                answer(["allow": Cards.testAllows])
+            case "pick":
+                guard let list = browser.suggesting, let at = request["index"] as? Int, list.choices.indices.contains(at) else {
+                    answer(["error": "no such row", "rows": rows()]); return
+                }
+                browser.readyToPick()
+                switch list.choices[at] {
+                case .strong(let password): browser.chooseStrong(password)
+                case .card(let card): browser.choose(card)
+                case .login(let login): browser.choose(login)
+                case .contact(let contact): browser.choose(contact)
+                default: break
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { answer(["picked": at, "said": browser.announcement ?? ""]) }
+            case "handoff":
+                answer(["offered": Handoff.offered?.absoluteString ?? NSNull()])
+            case "listen":
+                let listener = Listener.shared
+                switch request["act"] as? String ?? "state" {
+                case "start": browser.toggleListen()
+                case "stop": listener.stop()
+                case "pause": listener.pauseOrGo()
+                default: break
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + (request["act"] as? String == "start" ? 0.8 : 0.1)) {
+                    answer(["state": "\(listener.state)", "parts": listener.parts, "part": listener.part, "title": listener.title,
+                            "said": browser.announcement ?? ""])
+                }
+            default:
+                answer(["rows": rows(), "shown": browser.suggesting != nil])
+            }
+        case "library":
+            // The Library past the first space (Library.swift): its state, put
+            // in or away, a section picked, or a swipe of the given steps, one
+            // every `every` seconds, then let go and left to land.
+            func libraryState() -> [String: Any] {
+                ["available": Library.available(browser), "shown": browser.libraryShown,
+                 "section": browser.librarySection.rawValue, "reveal": Double(browser.libraryReveal.value),
+                 "total": Double(Library.total(browser)), "space": browser.spaces.firstIndex { $0.id == browser.spaceID } ?? -1]
+            }
+            func landed(_ seconds: Double, then reply: @escaping () -> Void) {
+                let still = abs(browser.libraryReveal.value - (browser.libraryShown ? Library.total(browser) : 0)) < 0.6
+                if still || seconds <= 0 { reply(); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { landed(seconds - 0.05, then: reply) }
+            }
+            switch request["action"] as? String ?? "state" {
+            case "open":
+                browser.openLibrary(LibrarySection(rawValue: request["section"] as? String ?? "") ?? .downloads)
+                landed(3) { answer(libraryState()) }
+            case "close":
+                browser.closeLibrary()
+                landed(3) { answer(libraryState()) }
+            case "section":
+                if let section = LibrarySection(rawValue: request["section"] as? String ?? "") { browser.librarySection = section }
+                answer(libraryState())
+            case "swipe":
+                let steps = (request["steps"] as? [Double] ?? []).map { CGFloat($0) }
+                let every = request["every"] as? Double ?? 0.016
+                var peak: Double = 0
+                let swipe = SpaceSwipe.shared
+                swipe.start(for: browser)
+                swipe.began()
+                func step(_ i: Int) {
+                    if i < steps.count {
+                        swipe.moved(along: steps[i])
+                        peak = max(peak, Double(browser.libraryReveal.value))
+                        DispatchQueue.main.asyncAfter(deadline: .now() + every) { step(i + 1) }
+                    } else {
+                        let speed = Double(browser.libraryReveal.release)
+                        swipe.ended()
+                        landed(3) { answer(libraryState().merging(["peak": peak, "speed": speed]) { $1 }) }
+                    }
+                }
+                step(0)
+            default:
+                answer(libraryState())
+            }
+        case "intelligence":
+            // Apple's model, through what the menus and settings call
+            // (Intelligence.swift): whether it's here, the shorter tab names,
+            // Tidy Tabs (asked of the model, or a sort handed in), and a
+            // link's card.
+            func tabs() -> [[String: Any]] {
+                browser.tabs.map { tab in
+                    ["id": tab.id.uuidString, "title": tab.title, "row": tab.rowLabel, "short": tab.short ?? NSNull(),
+                     "group": browser.group(of: tab).flatMap { id in browser.tabGroups.first { $0.id == id }?.name } ?? NSNull()]
+                }
+            }
+            func groups() -> [[String: Any]] {
+                browser.tabGroups.map { group in ["name": group.name, "titles": browser.tabs(in: group.id).map(\.title)] }
+            }
+            func after(_ seconds: Double, until done: @escaping () -> Bool, then reply: @escaping () -> Void) {
+                if done() || seconds <= 0 { reply(); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { after(seconds - 0.25, until: done, then: reply) }
+            }
+            switch request["action"] as? String ?? "" {
+            case "available":
+                answer(["available": OnDevice.available, "offersTidy": browser.offersTidyTabs, "canTidy": browser.canTidyTabs])
+            case "titles":
+                if let on = request["on"] as? Bool { browser.prefs.shortTitles = on }
+                let wait = request["wait"] as? Double ?? 0
+                after(wait, until: { browser.tabs.allSatisfy { TabTitles.short($0.title) || $0.short != nil || $0.name != nil } }) {
+                    answer(["tabs": tabs()])
+                }
+            case "tidy":
+                browser.tidyTabs()
+                after(request["wait"] as? Double ?? 30, until: { !browser.tidying }) {
+                    answer(["groups": groups(), "said": browser.announcement ?? "", "tabs": tabs()])
+                }
+            case "apply":
+                let sort = (request["groups"] as? [[String: Any]] ?? []).map { ($0["name"] as? String ?? "", $0["members"] as? [Int] ?? []) }
+                let (moved, made) = browser.apply(sort, to: browser.tidyableTabs)
+                answer(["moved": moved, "made": made, "groups": groups()])
+            case "preview":
+                guard let text = request["url"] as? String, let url = URL(string: text) else { answer(["error": "intelligence preview URL"]); return }
+                let at = (request["x"] as? Double).flatMap { x in (request["y"] as? Double).map { CGPoint(x: x, y: $0) } }
+                browser.linkPreview.showNow(url, at: at, over: browser.active?.built)
+                after(request["wait"] as? Double ?? 30, until: { browser.linkPreview.card?.reading == false }) {
+                    guard let card = browser.linkPreview.card else { answer(["card": NSNull()]); return }
+                    answer(["card": ["title": card.title, "site": card.site, "summary": card.summary ?? NSNull(),
+                                     "failed": card.failed ?? NSNull(), "reading": card.reading]])
+                }
+            case "dismiss":
+                browser.linkPreview.dismiss()
+                answer(["card": browser.linkPreview.card == nil ? NSNull() : "shown"])
+            default:
+                answer(["error": "intelligence available|titles|tidy|apply|preview|dismiss"])
+            }
         case "welcome-arc":
             // What the Welcome's Start Browsing does once Arc's spaces and
             // pins were asked for: brought straight in, Bring Things Over
@@ -4927,7 +5084,7 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
 
                 "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
             ]])

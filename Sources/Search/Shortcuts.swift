@@ -238,9 +238,13 @@ struct Command: Identifiable {
         // beside ⌘[ and ⌘], which go back and forward).
         Command("view.foldGroups", "Fold All Groups", .view, KeyCombo("[", option: true)) { $0.foldAllGroups(true) },
         Command("view.unfoldGroups", "Unfold All Groups", .view, KeyCombo("]", option: true)) { $0.foldAllGroups(false) },
+        // Loose tabs into named groups by Apple's model (Intelligence.swift).
+        Command("view.tidyTabs", "Tidy Tabs", .view, nil) { $0.tidyTabs() },
         Command("view.reload", "Reload Page", .view, KeyCombo("r")) { $0.reload() },
         Command("view.reloadOrigin", "Reload Page From Origin", .view, KeyCombo("r", shift: true)) { $0.reload(fromOrigin: true) },
         Command("view.reader", "Reading Mode", .view, KeyCombo("r", option: true)) { $0.toggleReader() },
+        // The article read aloud (Listen.swift).
+        Command("view.listen", "Listen to Page", .view, nil) { $0.toggleListen() },
         Command("view.float", "Float Video", .view, KeyCombo("p", shift: true)) { $0.toggleFloat() },
         Command("view.sitePanel", "Show Side Panel", .view, nil) { $0.toggleSitePanel() },
         Command("view.dusk", "Darken This Site", .view, KeyCombo("d", shift: true)) { $0.toggleDusk() },

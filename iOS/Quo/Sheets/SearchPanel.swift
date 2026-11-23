@@ -338,7 +338,9 @@ enum EngineWords {
         case .kagi: return "https://kagi.com/api/autosuggest?q=%s"
         case .brave: return "https://search.brave.com/api/suggest?q=%s"
         case .qwant: return "https://api.qwant.com/api/suggest/?q=%s&client=opensearch"
-        case .custom: return nil
+        // Neither has suggestions for anyone to ask; the words aren't sent
+        // to another engine instead.
+        case .perplexity, .chatgpt, .custom: return nil
         }
     }
 

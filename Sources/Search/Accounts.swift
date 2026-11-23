@@ -70,7 +70,7 @@ struct AccountList: View {
             }
             if !offerOnly {
             HStack(spacing: 6) {
-                Image(systemName: contactsOnly ? "person.crop.rectangle" : "key")
+                Image(systemName: contactsOnly ? "person.crop.rectangle" : !asked.cards.isEmpty && asked.logins.isEmpty ? "lock" : "key")
                     .font(.system(size: 9, weight: .medium))
                 Text(footer)
                     .font(.system(size: 10.5))
@@ -140,6 +140,16 @@ struct AccountList: View {
                 detail: "Pair once with a code from your Mac", lit: lit) { browser.connectApplePasswords() }
         case .offer:
             OfferRow(lit: lit, use: browser.useApplePasswords, never: browser.neverOfferApplePasswords)
+        case .strong(let password):
+            Row(mark: .symbol("key.fill"), name: "Use Strong Password", detail: password, lit: lit) {
+                browser.chooseStrong(password)
+            }
+            .help("Fills the new password, and the box that asks for it again. Quo offers to save it when you send the form.")
+        case .card(let card):
+            Row(mark: .symbol("creditcard"), name: card.title, detail: card.detail + (card.expired ? " · Expired" : ""), lit: lit) {
+                browser.choose(card)
+            }
+            .help("Fills the card after Touch ID. You type the security code.")
         case .contact(let contact):
             // A click fills the form; a shift-click, the box alone.
             Row(mark: .symbol("person.crop.circle"), name: contact.title, detail: contact.detail, lit: lit) {
@@ -163,6 +173,9 @@ struct AccountList: View {
 
     private var footer: String {
         if contactsOnly { return "From your card in Contacts" }
+        let none = asked.logins.isEmpty && asked.apple.isEmpty && asked.codes.isEmpty && asked.passkeys.isEmpty && !asked.appleConnect
+        if !asked.cards.isEmpty && none { return "Your cards · filled after Touch ID" }
+        if asked.strong != nil && none { return "Offered to save when you send the form" }
         if asked.logins.isEmpty && asked.apple.isEmpty && asked.codes.isEmpty && !asked.appleConnect { return "Passkeys on this Mac" }
         if asked.logins.isEmpty { return "From Apple Passwords" }
         return asked.apple.isEmpty ? "From your keychain" : "From your keychain and Apple Passwords"
@@ -296,11 +309,15 @@ extension Browser.Suggesting {
         /// "Use your Apple passwords?"
         case offer
         case contact(MeCard.Offer)
+        /// "Use Strong Password", for a box that takes a new one.
+        case strong(String)
+        case card(KeptCard)
     }
 
     /// The rows top to bottom, as drawn and as ↓ walks them.
     var choices: [Choice] {
-        passkeys.map(Choice.passkey) + ownLogins.map(Choice.login) + ownApple.map(Choice.apple)
+        (strong.map { [Choice.strong($0)] } ?? []) + cards.map(Choice.card)
+            + passkeys.map(Choice.passkey) + ownLogins.map(Choice.login) + ownApple.map(Choice.apple)
             + siteLogins.map(Choice.login) + siteApple.map(Choice.apple) + codes.map(Choice.code)
             + (appleConnect ? [.connect] : []) + (appleOffer != nil ? [.offer] : []) + contacts.map(Choice.contact)
     }
@@ -309,7 +326,7 @@ extension Browser.Suggesting {
     /// site's accounts: only when this host has some of its own above them.
     var othersFrom: Int? {
         guard !(ownLogins.isEmpty && ownApple.isEmpty), !(siteLogins.isEmpty && siteApple.isEmpty) else { return nil }
-        return passkeys.count + ownLogins.count + ownApple.count
+        return (strong == nil ? 0 : 1) + cards.count + passkeys.count + ownLogins.count + ownApple.count
     }
 
     private var ownLogins: [Kept] { logins.filter { Vault.belongs($0.host, to: host, wide: false) } }

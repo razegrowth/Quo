@@ -447,6 +447,8 @@ final class History: ObservableObject {
 
     func forget() {
         if loading != nil { duringLoad.append { $0.forget() } }
+        // Your other devices forget it too (SyncHistory.swift).
+        noteForgot(nil)
         visits = [:]
         pageText = [:]
         weights = [:]
@@ -501,6 +503,7 @@ final class History: ObservableObject {
         if loading != nil { duringLoad.append { $0.forget(key) } }
         // Its page's icon is a trace of the visit too.
         if let url = visits[key].flatMap({ URL(string: $0.url) }) { Favicons.shared.forget(url) }
+        if let address = visits[key]?.url { noteForgot(address) }
         visits[key] = nil
         forgetText(for: key)
         save()
@@ -933,5 +936,88 @@ final class History: ObservableObject {
     /// The same, prepared once for the looser search.
     private static let knownText = known.map { host, title in
         (host: host, title: title, findable: title.lowercased() + " " + host)
+    }
+}
+
+// MARK: - between your devices (SyncHistory.swift)
+
+extension History {
+    /// Still reading its file: what syncs waits for it.
+    var stillLoading: Bool { loading != nil }
+
+    /// What this device has been to, as it hands it over.
+    func handed() -> [SyncedVisit] {
+        guard loading == nil else { return [] }
+        return visits.values.map { SyncedVisit(u: $0.url, t: $0.title, c: $0.count, l: $0.last.timeIntervalSince1970) }
+    }
+
+    /// Another device's pages, taken in as a browser's history brought over
+    /// is: the larger count, the later visit. Only what would change
+    /// anything: the same pages handed again every half minute redraw nothing.
+    @discardableResult
+    func take(handed list: [SyncedVisit]) -> Int {
+        guard loading == nil else { return 0 }
+        var taken = 0
+        for visit in list {
+            guard let url = URL(string: visit.u), History.isWeb(url), let kept = History.kept(url) else { continue }
+            let key = History.identity(for: kept)
+            if let seen = visits[key], seen.count >= visit.c, seen.last.timeIntervalSince1970 >= visit.l - 1,
+               !(seen.title.isEmpty && !visit.t.isEmpty) { continue }
+            take(url, title: visit.t, count: visit.c, last: Date(timeIntervalSince1970: visit.l))
+            taken += 1
+        }
+        if taken > 0 { settle() }
+        return taken
+    }
+
+    /// Another device's forgets, made here: every page last visited no later
+    /// than its Clear History, and each page it forgot, if not visited here
+    /// since. Not written down as this device's own forget.
+    @discardableResult
+    func forget(handed forgets: HistoryForgets) -> Int {
+        guard loading == nil, !forgets.isEmpty else { return 0 }
+        var gone = Set<String>()
+        if let all = forgets.all {
+            for (key, visit) in visits where visit.last.timeIntervalSince1970 <= all { gone.insert(key) }
+        }
+        for (address, at) in forgets.pages {
+            guard let url = URL(string: address), let kept = History.kept(url) else { continue }
+            let key = History.identity(for: kept)
+            if let visit = visits[key], visit.last.timeIntervalSince1970 <= at { gone.insert(key) }
+        }
+        guard !gone.isEmpty else { return 0 }
+        visits = visits.filter { !gone.contains($0.key) }
+        for key in gone { forgetText(for: key) }
+        save()
+        return gone.count
+    }
+
+    /// What this device forgot, for the others: kept beside the history.
+    var forgets: HistoryForgets {
+        get {
+            if let had = History.forgetsMade[fileName] { return had }
+            let read = (try? Data(contentsOf: forgetsFile)).flatMap { try? JSONDecoder().decode(HistoryForgets.self, from: $0) }
+            History.forgetsMade[fileName] = read ?? HistoryForgets()
+            return read ?? HistoryForgets()
+        }
+        set {
+            let tidy = newValue.tidied(now: Date().timeIntervalSince1970)
+            History.forgetsMade[fileName] = tidy
+            if let data = try? JSONEncoder().encode(tidy) { try? data.write(to: forgetsFile, options: .atomic) }
+            History.forgot.send()
+        }
+    }
+
+    private var forgetsFile: URL { Store.file(fileName.replacingOccurrences(of: ".json", with: "") + "-forgets.json") }
+    private static var forgetsMade: [String: HistoryForgets] = [:]
+    /// Something was forgotten here: sync's next pass soon.
+    static let forgot = PassthroughSubject<Void, Never>()
+
+    /// You cleared it all, or forgot a page: said to your other devices.
+    fileprivate func noteForgot(_ address: String?) {
+        var made = forgets
+        let now = Date().timeIntervalSince1970
+        if let address { made.pages[address] = now } else { made = HistoryForgets(all: now, pages: [:]) }
+        forgets = made
     }
 }

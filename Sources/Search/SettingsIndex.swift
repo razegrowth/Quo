@@ -76,6 +76,7 @@ enum SettingsIndex {
         .init(id: "memory", page: .tabs, title: "Memory", icon: "moon.zzz"),
         .init(id: "tabbar", page: .tabs, title: "In the tab bar", icon: "number"),
         .init(id: "tabwindows", page: .tabs, title: "Windows", icon: "macwindow.on.rectangle"),
+        .init(id: "intelligence", page: .tabs, title: "Apple Intelligence", icon: "apple.intelligence"),
 
         .init(id: "search", page: .browsing, title: "Searching", icon: "magnifyingglass"),
         .init(id: "links", page: .browsing, title: "Links", icon: "link"),
@@ -172,8 +173,12 @@ enum SettingsIndex {
               words: ["import", "chrome", "safari", "arc", "migrate"]),
         .init(id: "sync", group: "browser", icon: "arrow.triangle.2.circlepath",
               title: "Sync with your other Macs", detail: "Spaces, pins, bookmarks and settings, through iCloud or a folder you choose",
-              more: "iCloud: your Macs signed in to the same Apple ID keep each other up to date within moments, in your own iCloud, with no account of ours. A folder: choose one your Macs share, in iCloud Drive or Dropbox for example, and turn this on with the same folder in \(Store.name) on each Mac. Each profile syncs on its own. Never your history, passwords, cookies, sign-ins or open tabs.",
+              more: "iCloud: your Macs signed in to the same Apple ID keep each other up to date within moments, in your own iCloud, with no account of ours. A folder: choose one your Macs share, in iCloud Drive or Dropbox for example, and turn this on with the same folder in \(Store.name) on each Mac. Each profile syncs on its own. Never your passwords, cookies or sign-ins.",
               keys: ["sync.folder"], words: ["sync", "icloud", "dropbox", "other mac", "devices", "mac"]),
+        .init(id: "sync.history", group: "browser", icon: "clock.arrow.circlepath",
+              title: "Sync history", detail: "Where you've been, on your other Macs and Quo for iPhone, while sync is on",
+              more: "The last 60 days, in your own iCloud or folder, sent only once another device of yours has shown up. Clear History, or forgetting a page, clears it on your other devices too. Private tabs are never kept, and a space with its own sign-ins keeps its history on this Mac.",
+              keys: ["sync.history"], words: ["history sync", "sync history", "devices", "icloud", "iphone"], parent: "sync"),
         .init(id: "quit.confirm", group: "browser", icon: "power",
               title: "Confirm before quitting", detail: "Ask before ⌘Q or Quit \(Store.name) closes the browser",
               keys: ["quit.confirm"], words: ["quit", "cmd q"]),
@@ -353,6 +358,17 @@ enum SettingsIndex {
         .init(id: "links.little.tabs", group: "links", icon: "arrow.right.square",
               title: "Go to a tab that has the page", detail: "A link to a page already open in a tab goes to that tab, not a small window",
               keys: ["links.little.tabs"], words: ["switch to tab", "already open", "duplicate"], parent: "links.little"),
+        .init(id: "links.preview", group: "links", icon: "text.magnifyingglass",
+              title: "Hold Shift over a link to see what it says", detail: "The page's title and a short summary, before you open it",
+              more: "The page is fetched once, without your cookies or sign-ins, so the site sees a visit from nobody in particular. With Apple Intelligence it's summarised on this Mac; without it, you see the page's own description. Never on a plain hover.",
+              keys: [LinkPreview.key], words: ["preview", "hover", "summary", "summarize", "peek", "5-second", "arc max", "apple intelligence"]),
+        .init(id: "tabs.shortTitles", group: "intelligence", icon: "textformat.size.smaller",
+              title: "Shorter tab names", detail: "A long page title as a few words in its tab, like \"Tab sync issue #198\"",
+              more: "Named by Apple Intelligence on this Mac, and nothing leaves it. The window, bookmarks and the tab's tooltip keep the page's own title, and a name you give a tab always wins.",
+              keys: [TabTitles.key], words: ["rename", "tidy titles", "tab names", "arc max", "apple intelligence", "ai"]),
+        .init(id: "note.tidy", group: "intelligence", icon: "rectangle.3.group",
+              title: "Tidy Tabs", detail: "In the View menu and the space's menu: your loose tabs, sorted into named groups",
+              words: ["tidy", "organize", "organise", "sort tabs", "group tabs", "arc max", "apple intelligence", "ai"], kind: .note),
         .init(id: "reader.twins", group: "reading", icon: "doc.text",
               title: "Read the site's own Markdown", detail: "When a page has a Markdown copy, reading mode shows that",
               more: "⇧⌘R shows a page's article alone, in clean type. Most docs sites publish a Markdown copy; nothing in it can run, its text is escaped.",
@@ -493,6 +509,13 @@ enum SettingsIndex {
               title: "Fill in your contact details", detail: "Your card in Contacts under name, email, phone and address boxes",
               more: "A click fills the rest of the form's empty boxes too. Only your own card is read, and macOS asks first.",
               keys: ["contacts.fill"], words: ["autofill", "address", "email", "phone", "name", "contacts", "me card"]),
+        .init(id: "cards.fill", group: "forms", icon: "creditcard",
+              title: "Fill in cards", detail: "Your cards under a checkout's card boxes, after Touch ID",
+              more: "The number is kept in your Mac's keychain and filled only after Touch ID. The security code is never kept: the caret goes to its box for you to type it. Card boxes inside a payment provider's own frame aren't filled.",
+              keys: ["cards.fill"], words: ["credit card", "debit card", "autofill", "checkout", "payment", "card number", "visa", "mastercard"]),
+        .init(id: "cards.list", group: "forms", icon: "creditcard",
+              title: "Your cards", detail: "Kept on this Mac only",
+              words: ["add card", "credit card", "remove card", "cards"], kind: .wide, parent: "cards.fill"),
 
         // Privacy
         .init(id: "shield", group: "blocking", icon: "shield.lefthalf.filled",
@@ -649,6 +672,7 @@ enum SettingsIndex {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
         case "privacy.telemetry": return Telemetry.configured
+        case "tabs.shortTitles", "note.tidy": return OnDevice.available
         default: return true
         }
     }
