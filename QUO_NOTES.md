@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.4 · 23 November 2026
+
+You can see when an agent is driving now.
+
+While an agent is using Quo, a thin ring of light goes round the page, with what's using it and Stop in a small pill at the top. It turns faster while the agent works and slows down when it's idle.
+
+And every click shows its own pointer, with the agent's name next to it, gliding to the spot first so you can see what it's about to press.
+
 ## 0.8.3 · 23 November 2026
 
 Notices you can't miss, Restart for updates, and Settings you can use from the keyboard.
