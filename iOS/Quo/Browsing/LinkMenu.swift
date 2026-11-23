@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 import WebKit
 
@@ -78,11 +79,18 @@ enum LinkMenu {
 }
 
 /// The page behind a long-pressed link, loading live in the preview, with
-/// the tab's own sign-ins. Tapping it opens the page in the tab.
+/// the tab's own sign-ins. Tapping it opens the page in the tab. Where
+/// Apple Intelligence is, two or three sentences of what it says sit under
+/// it (PageSummary: read without your cookies, as the Mac's does).
 final class LinkPreview: UIViewController {
     let web: WKWebView
+    private let url: URL
+    private let store: WKWebsiteDataStore
+    private var summary: PageSummary?
 
     init(url: URL, store: WKWebsiteDataStore, desktop: Bool) {
+        self.url = url
+        self.store = store
         let config = WKWebViewConfiguration()
         config.websiteDataStore = store
         config.allowsInlineMediaPlayback = true
@@ -99,8 +107,41 @@ final class LinkPreview: UIViewController {
     override func loadView() {
         web.backgroundColor = .systemBackground
         web.isOpaque = false
-        view = web
         let bounds = UIScreen.main.bounds
-        preferredContentSize = CGSize(width: bounds.width, height: bounds.height * 0.48)
+        guard AppSettings.shared.linkSummaries, OnDevice.available else {
+            view = web
+            preferredContentSize = CGSize(width: bounds.width, height: bounds.height * 0.48)
+            return
+        }
+        let page = PageSummary(url: url)
+        summary = page
+        page.read(url, store: store)
+        let holder = UIView()
+        holder.backgroundColor = .systemBackground
+        let card = UIHostingController(rootView: SummaryCard(page: page, showsTitle: false).padding(10))
+        card.view.backgroundColor = .clear
+        card.sizingOptions = .intrinsicContentSize
+        addChild(card)
+        for part in [web, card.view!] {
+            part.translatesAutoresizingMaskIntoConstraints = false
+            holder.addSubview(part)
+        }
+        NSLayoutConstraint.activate([
+            web.topAnchor.constraint(equalTo: holder.topAnchor),
+            web.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            web.bottomAnchor.constraint(equalTo: card.view.topAnchor),
+            card.view.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
+            card.view.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            card.view.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
+        ])
+        card.didMove(toParent: self)
+        view = holder
+        preferredContentSize = CGSize(width: bounds.width, height: bounds.height * 0.52)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        summary?.cancel()
     }
 }

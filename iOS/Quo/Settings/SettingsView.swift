@@ -62,6 +62,10 @@ struct SettingsView: View {
                                 Task { if !(await IncognitoLock.shared.unlock()) { settings.lockIncognito = true } }
                             }
                     }
+                    if OnDevice.available {
+                        Toggle(isOn: $settings.shortTitles) { label("apple.intelligence", "Shorter tab names") }.tint(Q.on)
+                        Toggle(isOn: $settings.linkSummaries) { label("text.bubble", "Summaries in link previews") }.tint(Q.on)
+                    }
                     Picker(selection: $settings.archiveAfter) {
                         ForEach(ArchiveAfter.allCases) { Text($0.title).tag($0) }
                     } label: { label("archivebox", "Archive inactive tabs") }

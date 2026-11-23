@@ -72,6 +72,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             MacSync.shared.onArrived = { Browser.shared.arrived($0) }
             MacSync.shared.start()
             Tabs.shared.archiveInactive()
+            Trace.mark("apple intelligence \(OnDevice.why)")
+            if Trace.on { Task { await OnDevice.probe() } }
+            // Restored tabs' shorter names, once launch has settled.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { TabTitles.refresh() }
         }
         return true
     }

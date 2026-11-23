@@ -467,7 +467,7 @@ private struct DeckHeader: View {
                 Image(systemName: "eyeglasses").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
             }
             if !(tab.incognito && lock.hiding) { SiteMark(host: tab.host, size: 18) }
-            Text(tab.incognito && lock.hiding ? "Incognito" : tab.shownTitle)
+            Text(tab.incognito && lock.hiding ? "Incognito" : tab.deckTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.92))
                 .lineLimit(1)

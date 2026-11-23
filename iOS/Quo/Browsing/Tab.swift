@@ -61,6 +61,10 @@ final class Tab: ObservableObject, Identifiable {
 
     var host: String? { url?.host() }
     var shownTitle: String { title.isEmpty ? Address.shown(url) : title }
+    /// A shorter name from Apple's model, for the tab switcher (TabTitles).
+    @Published var short: String?
+    /// What the tab switcher calls it: the shorter name when there is one.
+    var deckTitle: String { short ?? shownTitle }
 
     // MARK: - the page
 
@@ -107,6 +111,7 @@ final class Tab: ObservableObject, Identifiable {
             web.observe(\.title) { [weak self] web, _ in MainActor.assumeIsolated {
                 guard let self, let title = web.title, !title.isEmpty else { return }
                 self.title = title
+                TabTitles.changed(self)
                 if let url = web.url, !self.incognito {
                     History.shared.retitle(url, title)
                     Tabs.shared.saveSoon()
