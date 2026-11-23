@@ -190,6 +190,11 @@ private struct PaneLayers: View {
             // Over the page the link is on, focused or not.
             if browser.prefs.showsLinks {
                 LinkBubble(status: browser.linkStatus, page: paired ? tab.built : nil)
+                LinkPreviewCard(preview: browser.linkPreview, status: browser.linkStatus, page: paired ? tab.built : nil)
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ListenBar(listener: Listener.shared, tabID: tab.id)
+                }
             }
         }
         // The accounts under a sign-in box are the stage's (PaneStage.showAccounts):

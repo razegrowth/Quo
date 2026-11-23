@@ -43,7 +43,8 @@ final class EngineSuggestTests: XCTestCase {
 
     func testEveryEngineButCustomHasAnHTTPSAddress() throws {
         for engine in Engine.allCases {
-            guard engine != .custom else {
+            // Custom, and the answer engines, which have none to ask.
+            guard ![.custom, .perplexity, .chatgpt].contains(engine) else {
                 XCTAssertNil(EngineSuggest.endpoint(for: engine))
                 XCTAssertNil(EngineSuggest.url(for: "coffee", engine: engine))
                 continue

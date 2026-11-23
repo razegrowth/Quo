@@ -34,7 +34,9 @@ import SystemConfiguration
 // space has sign-ins of its own — never the sign-ins themselves, its cookies,
 // tabs or downloads folder), pins (each space's and the ones every space shows,
 // their letter, name, page and order), bookmarks, and the settings listed in
-// SyncSettings. What never does: history, passwords, cookies and site data,
+// SyncSettings. History, with Sync history on, as each device's own record
+// beside each profile's (SyncHistory.swift). What never does: passwords,
+// cookies and site data,
 // tab groups (they hold open tabs), private windows, extensions, the
 // downloads folder, window sizes.
 //
@@ -260,7 +262,7 @@ final class Sync: ObservableObject {
     /// the browser stays as it is.
     func turnOff() {
         if let root {
-            for scope in scopes + tabScopes {
+            for scope in scopes + tabScopes + historyScopes {
                 try? FileManager.default.removeItem(at: root.appendingPathComponent(scope).appendingPathComponent(device + ".json"))
             }
         }
@@ -282,6 +284,7 @@ final class Sync: ObservableObject {
     }
 
     private func begin() {
+        if Store.testing { SyncHistory.every = 1 }
         let poke: (Notification) -> Void = { [weak self] _ in self?.schedule() }
         for name in [Spaces.changed, Pins.changed, Bookmarks.saved, NSApplication.didBecomeActiveNotification] {
             NotificationCenter.default.publisher(for: name).sink(receiveValue: poke).store(in: &bag)
@@ -292,6 +295,8 @@ final class Sync: ObservableObject {
             self?.schedule(after: 0.5)
         }.store(in: &bag)
         Shared.prefs.objectWillChange.sink { [weak self] in self?.schedule() }.store(in: &bag)
+        // Something forgotten from the history: your other devices told soon.
+        History.forgot.sink { [weak self] in self?.schedule(after: 1) }.store(in: &bag)
         // Signed out of iCloud, or into another Apple ID: looked at again.
         if cloud {
             NotificationCenter.default.publisher(for: .CKAccountChanged)
@@ -350,6 +355,50 @@ final class Sync: ObservableObject {
     private var tabScopes: [String] { Profiles.shared.list.map { SyncTabs.scope(Sync.scope($0.id)) } }
 
     nonisolated static func scope(_ profile: UUID) -> String { "profile-" + profile.uuidString }
+    /// Each profile's history's scope (SyncHistory.swift): never merged
+    /// item by item, each device's record its own.
+    private var historyScopes: [String] { Profiles.shared.list.map { SyncHistory.scope(Sync.scope($0.id)) } }
+
+    /// Whether this Mac's history goes to the others: Sync history on, and
+    /// another device seen, a Mac or Quo for iPhone. Alone, nothing is sent.
+    private var historyShared: Bool {
+        Shared.prefs.syncsHistory && (!others.isEmpty || elsewhere.values.contains { !$0.isEmpty })
+    }
+
+    /// The others' history made here: first everything any of them forgot,
+    /// then their pages, none that any of them, or this Mac, forgot since.
+    static func takeHistory(_ theirs: [DeviceHistory], into history: History) {
+        for other in theirs { history.forget(handed: other.forgets) }
+        var forgot = history.forgets
+        for other in theirs {
+            if let all = other.forgets.all { forgot.all = max(forgot.all ?? 0, all) }
+            forgot.pages.merge(other.forgets.pages) { max($0, $1) }
+        }
+        for other in theirs { history.take(handed: SyncHistory.taken(other.visits, mine: forgot)) }
+    }
+
+    /// Each profile's history through the folder: the others' read and
+    /// taken in, this Mac's written when due.
+    private func runHistory(in root: URL) {
+        guard Shared.prefs.syncsHistory else { return }
+        let now = Date().timeIntervalSince1970
+        for profile in Profiles.shared.list {
+            let scope = SyncHistory.scope(Sync.scope(profile.id))
+            let folder = root.appendingPathComponent(scope, isDirectory: true)
+            guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else { continue }
+            let own = folder.appendingPathComponent(device + ".json")
+            let history = Profiles.history(profile.id)
+            guard !history.stillLoading else { continue }
+            Sync.takeHistory(SyncHistory.others(theirFiles(in: folder, scope: scope, own: own), scope: scope, device: device), into: history)
+            guard historyShared else { continue }
+            let mine = history.handed(), forgets = history.forgets
+            let written = (try? Data(contentsOf: own)).flatMap { SyncMerge.decode($0, scope: scope) }
+            guard !mine.isEmpty || !forgets.isEmpty,
+                  SyncHistory.due(written, visits: mine, forgets: forgets, name: Sync.macName, now: now) else { continue }
+            let file = SyncHistory.file(device: device, name: Sync.macName, scope: scope, visits: mine, forgets: forgets, now: now)
+            if let data = SyncMerge.encode(file) { try? data.write(to: own, options: .atomic) }
+        }
+    }
 
     /// What this Mac last agreed with the folder, per scope: in Search's own
     /// folder, never in the shared one.
@@ -382,6 +431,7 @@ final class Sync: ObservableObject {
                                apply: { Sync.apply($0, to: profile) }))
         }
         if problem == nil { runTabs(in: root) }
+        if problem == nil { runHistory(in: root) }
         others = seen.sorted()
         if problem == nil { lastSynced = Date() }
     }
@@ -575,6 +625,26 @@ final class Sync: ObservableObject {
             if elsewhere != found { elsewhere = found }
             if targets != reachable { targets = reachable }
             others = seen.sorted()
+            // Each profile's history: the others' taken in, this Mac's saved
+            // when due (SyncHistory.swift).
+            if Shared.prefs.syncsHistory {
+                for profile in Profiles.shared.list {
+                    let scope = SyncHistory.scope(Sync.scope(profile.id))
+                    let history = Profiles.history(profile.id)
+                    guard !history.stillLoading else { continue }
+                    Sync.takeHistory(SyncHistory.others(store.files(in: scope), scope: scope, device: device), into: history)
+                    guard problem == nil, historyShared else { continue }
+                    let mine = history.handed(), forgets = history.forgets
+                    guard !mine.isEmpty || !forgets.isEmpty,
+                          SyncHistory.due(store.file(scope: scope, device: device), visits: mine, forgets: forgets,
+                                          name: Sync.macName, now: now) else { continue }
+                    let file = SyncHistory.file(device: device, name: Sync.macName, scope: scope, visits: mine, forgets: forgets, now: now)
+                    do { try await store.save(file) } catch {
+                        problem = SyncCloud.describe(error)
+                        if let wait = SyncCloud.retryAfter(error) { retry(after: wait) }
+                    }
+                }
+            }
             if problem == nil { lastSynced = Date() }
         }
     }

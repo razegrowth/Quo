@@ -585,6 +585,7 @@ struct SettingsPanel: View {
             // Coming from another browser, now or any time later: the same
             // page as File › Bring Things Over… and the Welcome's.
             Pill("Bring Things Over…") { browser.lead(to: InternalPage(.importing)) }
+        case "sync.history": Switch(on: $prefs.syncsHistory)
         case "sync":
             // Off, iCloud (in a build that can reach it), or a folder, which
             // is asked for first; cancelled, it stays as it was.
@@ -678,6 +679,7 @@ struct SettingsPanel: View {
     @ViewBuilder
     private func tabsControl(_ id: String) -> some View {
         switch id {
+        case "tabs.shortTitles": Switch(on: $prefs.shortTitles)
         case "tabs.newPlace":
             Picker("New tab position", selection: $prefs.newTabPlace) {
                 Text("After current").tag(NewTabPlace.next)
@@ -727,6 +729,7 @@ struct SettingsPanel: View {
     @ViewBuilder
     private func browsingControl(_ id: String) -> some View {
         switch id {
+        case "links.preview": Switch(on: $prefs.previewsLinks)
         case "search.engine":
             Picker("", selection: $prefs.engine) {
                 ForEach(Engine.allCases) { engine in
@@ -833,6 +836,8 @@ struct SettingsPanel: View {
         case "passwords.fill": Switch(on: $prefs.fillsPasswords)
         case "passkeys": Switch(on: $prefs.passkeys)
         case "passwords.apple": Switch(on: $prefs.applePasswords)
+        case "cards.fill": Switch(on: $prefs.fillsCards)
+        case "cards.list": CardsList(cards: Cards.shared)
         // Turned on, macOS is asked whether Search may read Contacts; a no,
         // or no card of yours, leaves it off and says why.
         case "contacts.fill":

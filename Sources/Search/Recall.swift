@@ -251,7 +251,7 @@ struct HistoryPanel: View {
                 }
                 Spacer(minLength: 8)
                 if hovering {
-                    Quick("Remove", tint: .red.opacity(0.75), act: forget)
+                    Door(icon: "xmark", help: "Remove from History", side: 24, act: forget)
                 } else {
                     Text(When.clock(trace.last))
                         .font(.system(size: roomy ? 12.5 : 11.5))
@@ -279,12 +279,15 @@ struct DownloadsPanel: View {
     /// its own title line and cross instead of the plate's.
     let compact: Bool
     let close: (() -> Void)?
+    /// With its own title line; the Library gives it one of its own.
+    let titled: Bool
 
-    init(browser: Browser, loot: Loot, compact: Bool = false, close: (() -> Void)? = nil) {
+    init(browser: Browser, loot: Loot, compact: Bool = false, titled: Bool = true, close: (() -> Void)? = nil) {
         self.browser = browser
         self.loot = loot
         self.fetches = browser.fetches
         self.compact = compact
+        self.titled = titled
         self.close = close
     }
 
@@ -294,19 +297,21 @@ struct DownloadsPanel: View {
 
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("Downloads")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                Spacer(minLength: 0)
-                Door(icon: "folder", help: "Open the Downloads Folder") {
-                    NSWorkspace.shared.open(browser.downloadsFolder)
+            if titled {
+                HStack(spacing: 8) {
+                    Text("Downloads")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                    Spacer(minLength: 0)
+                    Door(icon: "folder", help: "Open the Downloads Folder") {
+                        NSWorkspace.shared.open(browser.downloadsFolder)
+                    }
+                    if let close { Door(icon: "xmark", help: "Close", act: close) }
                 }
-                if let close { Door(icon: "xmark", help: "Close", act: close) }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                Rectangle().fill(Palette.hairline).frame(height: 1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            Rectangle().fill(Palette.hairline).frame(height: 1)
             list
                 .padding(12)
             if !loot.kept.isEmpty {
@@ -475,39 +480,37 @@ struct DownloadsPanel: View {
             switch entry.state {
             case .downloading:
                 HStack(spacing: 4) {
-                    if entry.canPause { Quick("Pause", act: pause) }
-                    Quick("Cancel", act: cancel)
+                    if entry.canPause { Door(icon: "pause.fill", help: "Pause", side: 24, act: pause) }
+                    Door(icon: "xmark", help: "Cancel", side: 24, act: cancel)
                 }
             case .pausing:
                 HStack(spacing: 4) {
                     Quick(entry.stopping, act: {})
                         .disabled(true)
-                    Quick("Cancel", act: cancel)
+                    Door(icon: "xmark", help: "Cancel", side: 24, act: cancel)
                 }
             case .paused:
                 HStack(spacing: 4) {
                     if entry.canResume {
-                        Quick("Resume", act: resume)
+                        Door(icon: "play.fill", help: "Resume", side: 24, act: resume)
                     } else if entry.canRetry {
-                        Quick("Retry", act: retry)
-                            .help("Start the download again from the beginning")
+                        Door(icon: "arrow.clockwise", help: "Retry: start the download again from the beginning", side: 24, act: retry)
                     }
-                    Quick("Remove", act: cancel)
+                    Door(icon: "xmark", help: "Remove", side: 24, act: cancel)
                 }
             case .resuming:
                 HStack(spacing: 4) {
                     Quick("Resuming…", act: {})
                         .disabled(true)
-                    Quick("Cancel", act: cancel)
+                    Door(icon: "xmark", help: "Cancel", side: 24, act: cancel)
                 }
             case .failed:
                 HStack(spacing: 4) {
-                    if entry.canResume { Quick("Resume", act: resume) }
+                    if entry.canResume { Door(icon: "play.fill", help: "Resume", side: 24, act: resume) }
                     if entry.canRetry {
-                        Quick("Retry", act: retry)
-                            .help("Start the download again from the beginning")
+                        Door(icon: "arrow.clockwise", help: "Retry: start the download again from the beginning", side: 24, act: retry)
                     }
-                    Quick("Remove", act: cancel)
+                    Door(icon: "xmark", help: "Remove", side: 24, act: cancel)
                 }
             }
         }
@@ -541,8 +544,12 @@ struct DownloadsPanel: View {
                 }
                 Spacer(minLength: 8)
                 if hovering {
-                    if keep.stillThere { Quick("Show in Finder", act: reveal) }
-                    Quick("Remove", tint: .red.opacity(0.75), act: forget)
+                    // Small, with their names on hover: the row's own name
+                    // keeps its room.
+                    HStack(spacing: 2) {
+                        if keep.stillThere { Door(icon: "magnifyingglass", help: "Show in Finder", side: 24, act: reveal) }
+                        Door(icon: "xmark", help: "Remove from the List", side: 24, act: forget)
+                    }
                 }
             }
             .padding(.horizontal, 14)

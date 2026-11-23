@@ -20,14 +20,20 @@ import split_view as sv  # noqa: E402
 
 sv.use("column-menu")
 t = sv.T()
-COLUMN = ["New Tab", "Hide Sidebar", "Sidebar Settings…"]
+def is_column(items):
+    """The column's menu: New Tab first, the space's own menu (its spaces,
+    New Space…, Rename, Icon, Colour…, Downloads), and the column's settings
+    last."""
+    return (items[:1] == ["New Tab"] and items[-2:] == ["Hide Sidebar", "Sidebar Settings…"]
+            and all(i in items for i in ["New Space…", "Icon", "Colour…", "Downloads"])
+            and any(i.startswith("Rename") for i in items))
 
 
 def menu(x, y, **f): return sv.cmd({"do": "columnmenu", "x": x, "y": y, **f})
 
 
 try:
-    sv.setup(sidebar=True); sv.launch()
+    sv.setup(sidebar=True, spaces=True); sv.launch()
     a = sv.page("one"); b = sv.page("two"); c = sv.page("three"); d = sv.page("four")
     sv.cmd({"do": "group", "id": a, "new": True, "name": "First"})
     sv.cmd({"do": "group", "id": b, "new": True, "name": "Second"})
@@ -40,18 +46,19 @@ try:
     bare, rows, column = [], 0, 0
     for y in range(8, bottom - 4, 2):
         m = menu(x, y)
-        if m["items"] == COLUMN: column += 1
+        if is_column(m["items"]): column += 1
         elif m["items"]: rows += 1
         else: bare.append((y, m["hit"]))
     t.ok("every point down the column has a menu", not bare, bare)
     t.ok("…the rows their own, the rest the column's", rows > 10 and column > 50, (rows, column))
 
     top = menu(x, 20)
-    t.ok("the band at the top: the column's menu", top["items"] == COLUMN, top)
+    t.ok("the band at the top: the column's menu", is_column(top["items"]), top)
     under = menu(x, bottom - 120)
-    t.ok("the empty space under the tabs: the column's menu", under["items"] == COLUMN, under)
-    foot = menu(200, bottom - 14)
-    t.ok("the foot, beside its buttons: the column's menu", foot["items"] == COLUMN, foot)
+    t.ok("the empty space under the tabs: the column's menu", is_column(under["items"]), under)
+    # Between the Library button and the space's icon (with spaces, + is at the far end).
+    foot = menu(70, bottom - 14)
+    t.ok("the foot, beside its buttons: the column's menu", is_column(foot["items"]), foot)
 
     # A row keeps its own menu.
     rowmenus = [menu(x, y)["items"] for y in range(40, 200, 4)]

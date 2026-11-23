@@ -168,6 +168,11 @@ struct SearchApp: App {
                 Button("Unfold All Groups") { browser.foldAllGroups(false) }
                     .shortcut("view.unfoldGroups")
                     .disabled(!browser.canUnfoldAllGroups)
+                if browser.offersTidyTabs {
+                    Button("Tidy Tabs") { browser.tidyTabs() }
+                        .shortcut("view.tidyTabs")
+                        .disabled(!browser.canTidyTabs)
+                }
                 Divider()
                 Button("Reload Page") { browser.reload() }
                     .shortcut("view.reload")
@@ -175,6 +180,8 @@ struct SearchApp: App {
                     .shortcut("view.reloadOrigin")
                 Button("Reading Mode") { browser.toggleReader() }
                     .shortcut("view.reader")
+                Button("Listen to Page") { browser.toggleListen() }
+                    .shortcut("view.listen")
                 Button("Float Video") { browser.toggleFloat() }
                     .shortcut("view.float")
                 // Websites in the side panel, only once they are on
@@ -637,8 +644,13 @@ struct ContentView: View {
                 // An empty tab is the space's home (SpaceHome.swift).
                 .overlay { if tab.isBlank { SpaceHomeGround(browser: browser) } }
                 .overlay {
-                    if browser.prefs.showsLinks { LinkBubble(status: browser.linkStatus) }
+                    if browser.prefs.showsLinks {
+                        LinkBubble(status: browser.linkStatus)
+                        LinkPreviewCard(preview: browser.linkPreview, status: browser.linkStatus)
+                    }
                 }
+                // The page being read aloud: pause, go on, stop (Listen.swift).
+                .overlay(alignment: .bottom) { ListenBar(listener: Listener.shared, tabID: tab.id) }
                 .overlay(alignment: .topTrailing) {
                     if browser.finding {
                         FindBar(browser: browser)

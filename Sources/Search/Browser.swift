@@ -78,6 +78,8 @@ final class Browser: NSObject, ObservableObject {
             guard oldValue != activeID else { return }
             cameFrom = (oldValue, ProcessInfo.processInfo.systemUptime)
             followPeek()
+            // Offered to your other devices (Handoff.swift).
+            Handoff.noted(self)
             // Going to another tab ends a page's run of links (see
             // placeForLink) — but with links opened in front beside their
             // page, not going between the page and the tabs it opened: each
@@ -99,6 +101,7 @@ final class Browser: NSObject, ObservableObject {
             invalidateFindPage(retryOnActiveTab: true)
             guard let old = oldValue else { return }
             linkStatus.dismiss()
+            linkPreview.dismiss()
             let left = tabs.first { $0.id == old }
             left?.touch()
             if prefs.splitView, let pair = splits.first(where: { $0.contains(old) }),
@@ -204,6 +207,8 @@ final class Browser: NSObject, ObservableObject {
     /// one of them changes.
     let prefs = Shared.prefs
     let linkStatus = LinkStatus()
+    /// Hold Shift over a link: what it says (Intelligence.swift).
+    let linkPreview = LinkPreview()
     /// Settings, in its own tab (see InternalPages.swift). True while the
     /// window has one; set, it is shown or closed.
     var tuning: Bool {
@@ -953,6 +958,12 @@ final class Browser: NSObject, ObservableObject {
         /// offered on, which a pick has to find still up, origin and all.
         var box: Int?
         var page: URL?
+        /// Under a box for a new password: a strong one, made once for the
+        /// list, the same while it's up (StrongPassword).
+        var strong: String?
+        /// Under a box for a card's number, name or expiry: your cards,
+        /// without their numbers (Cards.swift).
+        var cards: [KeptCard] = []
         /// The row ↓ and ↑ have come to (`choices`, counted from 0), which
         /// Return takes as a click on it. None until an arrow is pressed:
         /// Return is the page's until then.
@@ -1094,21 +1105,36 @@ final class Browser: NSObject, ObservableObject {
             guard case .contact(let kind, _) = fill, prefs.fillsContacts, MeCard.allowed else { return [] }
             return MeCard.shared.offers(for: kind)
         }()
-        guard !known.isEmpty || !passkeys.isEmpty || connect || offer != nil || !contacts.isEmpty else {
+        // A box for a card: your cards, if turned on, the expired last.
+        let cards: [KeptCard] = {
+            guard case .card = fill, prefs.fillsCards, !tab.shy || true else { return [] }
+            return Cards.shared.kept.sorted { !$0.expired && $1.expired }
+        }()
+        let cardBox: Int? = if case .card(_, let box) = fill { box } else { nil }
+        // A box for a new password: a strong one, the same as long as the
+        // list stays up under this tab's box.
+        let strong: String? = {
+            guard let most = tab.freshPassword, prefs.fillsPasswords else { return nil }
+            if let up = suggesting, up.tab == tab.id, let made = up.strong { return made }
+            return StrongPassword.make(fitting: most == 0 ? nil : most)
+        }()
+        guard !known.isEmpty || !passkeys.isEmpty || connect || offer != nil || !contacts.isEmpty || !cards.isEmpty || strong != nil else {
             suggesting = nil
             return
         }
         // What is under the pointer changed: the half second starts again.
         if let up = suggesting, up.tab == tab.id, up.logins == known, up.passkeys == passkeys, up.nameOnly == name,
            up.appleConnect == connect, up.apple.isEmpty, up.wide == wide, up.appleOffer == offer,
-           up.contacts == contacts, up.box == box,
-           up.page == (contacts.isEmpty ? nil : tab.pageAddress) {
+           up.contacts == contacts, up.box == (box ?? cardBox), up.cards == cards, up.strong == strong,
+           up.page == (contacts.isEmpty && cards.isEmpty && strong == nil ? nil : tab.pageAddress) {
             suggesting?.spot = spot
             return
         }
         suggesting = Suggesting(tab: tab.id, spot: spot, logins: known, passkeys: passkeys, host: host, clear: inTheClear,
                                 nameOnly: name, appleHost: appleHost, appleConnect: connect, appleOffer: offer, wide: wide,
-                                contacts: contacts, box: box, page: contacts.isEmpty ? nil : tab.pageAddress)
+                                contacts: contacts, box: box ?? cardBox,
+                                page: contacts.isEmpty && cards.isEmpty && strong == nil ? nil : tab.pageAddress,
+                                strong: strong, cards: cards)
         if let offer { applePasswordsOffer.shown(on: offer) }
     }
 
@@ -1189,6 +1215,46 @@ final class Browser: NSObject, ObservableObject {
             } else {
                 suggesting = Suggesting(tab: tab.id, spot: field.spot, logins: [], host: host, clear: false,
                                         nameOnly: name, apple: apple, appleHost: appleHost)
+            }
+        }
+    }
+
+    /// For a test run: the list taken as up long enough to pick from.
+    func readyToPick() { suggesting?.shown = .distantPast }
+
+    /// Use Strong Password: into the new password's boxes, if the page is
+    /// still the one it was offered on. Kept when the form is sent, as any
+    /// password typed into it is (the save question).
+    func chooseStrong(_ password: String) {
+        lowering?.cancel()
+        guard let list = suggesting, let tab = tabs.first(where: { $0.id == list.tab }) else { return }
+        guard Date().timeIntervalSince(list.shown) > 0.5 else { return }
+        suggesting = nil
+        pickedInto = tab.id
+        tab.fillStrong(password, onlyOn: list.page, flash: !Motion.reduced) { [weak self] worked in
+            self?.announce(worked ? "Strong password filled in" : "Couldn't find the password's boxes anymore")
+        }
+    }
+
+    /// One of your cards: after Touch ID, its number, name and expiry into
+    /// the checkout's boxes, if the page is still the one it was offered on.
+    func choose(_ card: KeptCard) {
+        lowering?.cancel()
+        guard let list = suggesting, let tab = tabs.first(where: { $0.id == list.tab }) else { return }
+        guard Date().timeIntervalSince(list.shown) > 0.5 else { return }
+        suggesting = nil
+        guard let page = list.page, let origin = Tab.origin(of: page), Tab.origin(of: tab.pageAddress) == origin else { return }
+        pickedInto = tab.id
+        let site = page.host() ?? "this site"
+        Task { @MainActor [weak self, weak tab] in
+            guard let number = await Cards.shared.number(of: card, reason: "fill in your \(card.title) on \(site)") else {
+                // Said no to: nothing was picked, and the list may come back.
+                if self?.pickedInto == tab?.id { self?.pickedInto = nil }
+                return
+            }
+            guard let self, let tab else { return }
+            tab.fillCard(Cards.fields(card, number: number), box: list.box, onlyOn: page, flash: !Motion.reduced) { [weak self] worked in
+                if !worked { self?.announce("Couldn't find the form's boxes anymore") }
             }
         }
     }
@@ -1467,6 +1533,8 @@ final class Browser: NSObject, ObservableObject {
         case .connect: connectApplePasswords()
         case .offer: useApplePasswords()
         case .contact(let contact): choose(contact, alone: alone)
+        case .strong(let password): chooseStrong(password)
+        case .card(let card): choose(card)
         }
         return true
     }
@@ -2731,6 +2799,11 @@ final class Browser: NSObject, ObservableObject {
     /// bar with it. The window hears only which way it goes, which is what
     /// decides whether a neighbour's rows are drawn.
     let spaceSwipeOffset = SwipeOffset()
+    /// The Library, past the first space (Library.swift): how far it has
+    /// come in, whether it is in, and the section showing.
+    let libraryReveal = LibraryReveal()
+    @Published var libraryShown = false
+    @Published var librarySection: LibrarySection = .downloads
     @Published private(set) var spaceSwipeSide = 0
     var spaceSwipe: CGFloat {
         get { spaceSwipeOffset.value }
@@ -3249,6 +3322,21 @@ final class Browser: NSObject, ObservableObject {
             .store(in: &bag)
         // Your card read ahead, so the first box you click has it.
         if prefs.fillsContacts { Task { await MeCard.shared.reload() } }
+        // The form script looks at a checkout's boxes only with a card kept
+        // and Fill in cards on (Cards.swift): every tab told as either changes.
+        prefs.$fillsCards.combineLatest(Cards.shared.$kept.map(\.isEmpty))
+            .map { fill, none in fill && !none }
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] on in
+                guard let self else { return }
+                FormRelay.cards = on
+                for tab in tabs + parkedTabs {
+                    tab.arm(hiding: curtain.css(on: curtain.host(of: tab.address)))
+                    tab.built?.evaluateInSearch(FormRelay.cards(on))
+                }
+            }
+            .store(in: &bag)
 
         // Every tab's next page, and the page each is showing now (see AutoScroll.swift).
         prefs.$autoScroll
@@ -5521,6 +5609,107 @@ final class Browser: NSObject, ObservableObject {
         writeSession(now: true)
     }
 
+    /// Tidy Tabs, in the View menu and the space's menu: the space's loose
+    /// tabs (not pinned, not in a group, not private) sorted by Apple's model
+    /// into named groups, as Arc Max's Tidy Tabs did. A group that already
+    /// has the name a sort gives is added to rather than made twice; a tab
+    /// that fits nowhere stays where it was. Only with groups on, and on a
+    /// Mac with Apple Intelligence (Intelligence.swift).
+    @Published private(set) var tidying = false
+
+    var tidyableTabs: [Tab] {
+        tabs.filter { $0.pin == nil && group(of: $0) == nil && !$0.shy && !$0.bench && !$0.agent && !$0.isBlank }
+    }
+
+    var offersTidyTabs: Bool { prefs.usesTabGroups && OnDevice.available }
+    var canTidyTabs: Bool { offersTidyTabs && !tidying && tidyableTabs.count >= 4 }
+
+    func tidyTabs() {
+        guard canTidyTabs else { return }
+        let loose = Array(tidyableTabs.prefix(80))
+        let titles = loose.map { String($0.label.prefix(100)) }
+        tidying = true
+        announce("Tidying \(loose.count) tabs…")
+        Task { @MainActor [weak self] in
+            let sorted = await OnDevice.groups(titles)
+            guard let self else { return }
+            guard let sorted else { self.tidying = false; self.announce("Couldn't tidy these tabs"); return }
+            // Each title given back, to the loose tab it names (exactly, or
+            // by its start), each tab once; a group whose name isn't about
+            // its tabs is named again from their titles alone.
+            var used = Set<Int>()
+            var resolved: [(name: String, members: [Int])] = []
+            for group in sorted {
+                var members: [Int] = []
+                for title in group.titles {
+                    let start = String(title.prefix(24))
+                    let index = titles.indices.first { !used.contains($0) && titles[$0] == title }
+                        ?? titles.indices.first { !used.contains($0) && start.count >= 8 && titles[$0].hasPrefix(start) }
+                    if let index { members.append(index + 1); used.insert(index) }
+                }
+                guard members.count >= 2 else { continue }
+                var name = group.name
+                if !Browser.fits(name, members.map { titles[$0 - 1] }) {
+                    name = await OnDevice.folderName(members.map { titles[$0 - 1] }) ?? ""
+                }
+                resolved.append((name, members))
+            }
+            self.tidying = false
+            let (moved, made) = self.apply(resolved, to: loose)
+            self.announce(moved == 0 ? "Nothing here to group"
+                          : "\(moved) tabs in \(made == 1 ? "1 group" : "\(made) groups")")
+        }
+    }
+
+    /// A sort put into groups: each group of two or more tabs still loose,
+    /// every tab in one group at most. How many tabs moved, and how many
+    /// groups that took.
+    @discardableResult
+    func apply(_ sorted: [(name: String, members: [Int])], to loose: [Tab]) -> (moved: Int, groups: Int) {
+        var taken = Set<Int>()
+        var moved = 0
+        var groups = Set<UUID>()
+        for group in sorted {
+            let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let members = group.members
+                .filter { (1...max(1, loose.count)).contains($0) && !taken.contains($0) }
+                .map { loose[$0 - 1] }
+                .filter { tab in tabs.contains { $0 === tab } && self.group(of: tab) == nil && tab.pin == nil }
+            // A name that says nothing isn't a group worth making.
+            let vague: Set<String> = ["topic", "topics", "group", "groups", "misc", "miscellaneous", "other", "others", "general", "tabs", "stuff", "various",
+                                       "project", "projects", "trip", "work", "research", "reading", "links", "pages"]
+            guard !name.isEmpty, !vague.contains(name.lowercased()), members.count >= 2 else { continue }
+            group.members.forEach { taken.insert($0) }
+            let id: UUID
+            if let same = tabGroups.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+                id = same.id
+            } else {
+                id = addTabGroup(containing: members[0])
+                renameTabGroup(id, to: String(name.prefix(40)))
+                editingGroupID = nil
+            }
+            for tab in members where tab.groupID != id { move(tab, toGroup: id) }
+            moved += members.count
+            groups.insert(id)
+        }
+        if moved > 0 { writeSession(now: true) }
+        return (moved, groups.count)
+    }
+
+    /// Whether a group's name is about its tabs: one of its words (three
+    /// letters or more, or the first few of a longer one) is in two of their
+    /// titles. A small model names a group "Travel" or "Project" now and then;
+    /// such a group is named again from its tabs alone.
+    nonisolated static func fits(_ name: String, _ titles: [String]) -> Bool {
+        let titles = titles.map { $0.lowercased() }
+        let words = name.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init).filter { $0.count >= 3 }
+        // Said by at least two of its tabs, not borrowed from one of them.
+        return words.contains { word in
+            let stem = String(word.prefix(max(3, min(word.count, 5))))
+            return titles.filter { $0.contains(stem) }.count >= min(2, titles.count)
+        }
+    }
+
     /// Whether Fold All Groups or Unfold All Groups has anything to do.
     var canFoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { !$0.collapsed } }
     var canUnfoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { $0.collapsed } }
@@ -6896,6 +7085,7 @@ final class Browser: NSObject, ObservableObject {
         tab.onLink = { [weak self] tab, address in
             guard let self, prefs.showsLinks, visibleTabIDs.contains(tab.id) else { return }
             linkStatus.show(address, over: tab.built)
+            linkPreview.hover(address, over: tab.built)
         }
         tab.onPick = { [weak self] tab, selector, label, note in
             guard let self, let host = curtain.host(of: tab.address) else { return }
@@ -8943,10 +9133,14 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         tab.didCommit()
         // A page that went somewhere else starts a new run of links.
         if linkRun?.opener == tab.id { linkRun = nil }
+        // Being read aloud: not any more, somewhere else (Listen.swift).
+        Listener.shared.left(tab)
         tab.extensionReturn.finished(navigation)
         if tab.id == activeID {
             invalidateFindPage(retryOnActiveTab: false)
             linkStatus.dismiss()
+            linkPreview.dismiss()
+            Handoff.noted(self)
         }
         tab.failure = nil
         tab.typing = false

@@ -211,6 +211,7 @@ final class SpaceSwipe {
     func began() {
         axis = .undecided
         gathered = .zero
+        towardLibrary = nil
         // Just after a space came: the same hand's next stroke is let go by.
         ignoring = Date() <= resting
         tracking = !ignoring
@@ -229,8 +230,56 @@ final class SpaceSwipe {
             axis = abs(gathered.width) > abs(gathered.height) * 1.5 ? .across : .along
         }
         guard axis == .across else { return false }
+        if library(browser) { return true }
         browser.spaceSwipe = resisted(gathered.width, in: browser)
         return true
+    }
+
+    // MARK: - the Library, past the first space (Library.swift)
+
+    /// Whether this gesture is the Library's: settled once, as it sets off.
+    /// From the first space, to the right; with the Library in, either way.
+    private var towardLibrary: Bool?
+
+    /// The Library following the fingers, 1:1, while the gesture is its own.
+    private func library(_ browser: Browser) -> Bool {
+        guard Library.available(browser), !browser.folded else { return false }
+        if towardLibrary == nil {
+            let here = browser.spaces.firstIndex { $0.id == browser.spaceID } ?? 0
+            towardLibrary = browser.libraryShown
+                || (gathered.width > 0 && here == 0 && !browser.makingSpace && browser.profileBeyond(-1) == nil)
+        }
+        guard towardLibrary == true else { return false }
+        let total = Library.total(browser)
+        let wanted = (browser.libraryShown ? total : 0) + gathered.width
+        browser.libraryReveal.follow(wanted > total ? total + Self.give(wanted - total) : max(0, wanted))
+        return true
+    }
+
+    /// Past all the way in, a little give that stiffens: about 16 points for
+    /// a long push, as Arc's.
+    private static func give(_ past: CGFloat) -> CGFloat {
+        Library.give * (1 - 1 / (past / 90 + 1))
+    }
+
+    /// The fingers let go: in or out, from how far they went or how fast.
+    private func libraryEnded(_ browser: Browser, cancelled: Bool) {
+        let total = Library.total(browser)
+        let speed = browser.libraryReveal.release
+        let enough = SpaceSwipe.enough(for: browser)
+        if browser.libraryShown {
+            let out = !cancelled && (-gathered.width >= enough || speed < -500)
+            if out { browser.libraryShown = false }
+            browser.libraryReveal.settle(to: out ? 0 : total, speed: speed)
+        } else {
+            let into = !cancelled && (gathered.width >= enough || speed > 500) && gathered.width > 0
+            if into {
+                browser.librarySection = .downloads
+                browser.libraryShown = true
+            }
+            browser.libraryReveal.settle(to: into ? total : 0, speed: speed)
+        }
+        resting = Date().addingTimeInterval(SpaceSwipe.rest)
     }
 
     /// Along the spaces' axis, whichever it is — for the bench.
@@ -243,6 +292,10 @@ final class SpaceSwipe {
     func ended(cancelled: Bool = false) {
         defer { tracking = false }
         guard let browser, axis == .across else { return }
+        if towardLibrary == true {
+            libraryEnded(browser, cancelled: cancelled)
+            return
+        }
         let travel = gathered.width
         let here = browser.makingSpace ? browser.spaces.count : (browser.spaces.firstIndex { $0.id == browser.spaceID } ?? 0)
         // Fingers to the left, or up, bring what is next.

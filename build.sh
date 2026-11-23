@@ -258,6 +258,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <!-- Owning http and https is what sends a link clicked in Mail here.
        Appearing in Desktop & Dock → Default web browser also needs the
        XHTML document type below. -->
+  <!-- Handoff: the page in front offered to the person's other devices,
+       and theirs taken here (Handoff.swift). -->
+  <key>NSUserActivityTypes</key>
+  <array><string>NSUserActivityTypeBrowsingWeb</string></array>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

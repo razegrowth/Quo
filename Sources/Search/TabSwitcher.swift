@@ -599,7 +599,7 @@ struct TabSwitcherOverlay: View {
 
     private func card(_ tab: Tab, width: CGFloat, previewHeight: CGFloat, height: CGFloat) -> some View {
         let partner: Tab? = switcher.partners[tab.id].flatMap(self.tab)
-        let caption: String = partner.map { tab.label + " · " + $0.label } ?? tab.label
+        let caption: String = partner.map { tab.rowLabel + " · " + $0.rowLabel } ?? tab.rowLabel
         let side: CGFloat = partner == nil ? width - 16 : (width - 18) / 2
         return Button { pick(tab.id) } label: {
             VStack(spacing: 7) {
@@ -653,7 +653,7 @@ struct TabSwitcherOverlay: View {
                 .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.hairline))
 
                 HStack(spacing: 4) {
-                    Text(tab.label)
+                    Text(tab.rowLabel)
                         .font(.system(size: 10.5))
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)

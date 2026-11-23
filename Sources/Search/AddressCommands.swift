@@ -141,11 +141,11 @@ enum AddressCommand: Equatable {
     private static let needsPage: Set<String> = [
         "file.share", "file.savePage", "file.exportPDF", "file.print", "edit.copyCleanLink", "view.reader",
         "view.summarize", "view.ask", "tabs.duplicate", "tabs.copyAddress", "tabs.copyMarkdown", "bookmarks.add",
-        "view.style",
+        "view.style", "view.listen",
     ]
     /// More words for a few, the ones other browsers use.
     private static let alsoCalled: [String: String] = [
-        "view.reader": "reader view", "tabs.mute": "mute", "view.float": "picture in picture pip",
+        "view.listen": "read aloud speak text to speech tts", "view.reader": "reader view", "tabs.mute": "mute", "view.float": "picture in picture pip",
         "view.inspector": "devtools developer tools", "bookmarks.add": "bookmark", "view.hide": "zapper",
         "view.style": "boost css",
     ]
@@ -168,6 +168,7 @@ enum AddressCommand: Equatable {
         if id == "tabs.pinRow", !prefs.showsPinRows { return false }
         if id == "view.foldGroups", !browser.canFoldAllGroups { return false }
         if id == "view.unfoldGroups", !browser.canUnfoldAllGroups { return false }
+        if id == "view.tidyTabs", !browser.canTidyTabs { return false }
         if needsPage.contains(id), browser.active?.isWeb != true { return false }
         return true
     }

@@ -339,7 +339,12 @@ final class Tab: ObservableObject, Identifiable {
     /// The stylesheet a page not yet built is to be armed with.
     private var veils = ""
 
-    @Published private(set) var title = ""
+    @Published private(set) var title = "" {
+        didSet { if title != oldValue { TabTitles.changed(self) } }
+    }
+    /// A shorter name for the row, from Apple's model, while Settings ›
+    /// Tabs › Shorter tab names is on (Intelligence.swift).
+    @Published var short: String?
     @Published private(set) var address: URL?
     /// The address of the page that is actually on screen. `address` moves
     /// to where the tab is going as soon as a load starts, while the page
@@ -643,7 +648,13 @@ final class Tab: ObservableObject, Identifiable {
         /// autocomplete names it ("email", "postal-code"…), and the page's
         /// number for the box, which a pick has to find the caret still in.
         case contact(String, box: Int)
+        /// A box for a card's number, name or expiry (Cards.swift): its
+        /// kind as autocomplete names it, and the page's number for the box.
+        case card(String, box: Int)
     }
+    /// The box the caret is in takes a new password, and how long one (0:
+    /// any length): a strong one is offered under it. Nil for any other box.
+    var freshPassword: Int?
     /// The site the sign-in was sent from — not the one it landed on —
     /// then the name and the password, and whether that page came over
     /// plain http.
@@ -801,7 +812,10 @@ final class Tab: ObservableObject, Identifiable {
     /// them starts its time from then (letGo), not from whenever it was
     /// last left.
     @Published var name: String? {
-        didSet { if name == nil, oldValue != nil { letGo = Date() } }
+        didSet {
+            if name == nil, oldValue != nil { letGo = Date() }
+            if name != oldValue { TabTitles.changed(self) }
+        }
     }
 
     /// When you last looked at it. The summon lists pages by this, because
@@ -918,6 +932,15 @@ final class Tab: ObservableObject, Identifiable {
     /// The title if the page has offered one, the address until it does. A tab
     /// that says nothing at all for the first second of every load is a tab you
     /// can't find your way back to.
+    /// What the tab's row says: your name for it, else the shorter name
+    /// when that's on, else `label`. Everywhere else (the window, a
+    /// bookmark, a copied link, the tooltip) keeps the page's own title.
+    var rowLabel: String {
+        if let name, !name.isEmpty { return name }
+        if TabTitles.on, let short, !short.isEmpty { return short }
+        return label
+    }
+
     var label: String {
         if let name, !name.isEmpty { return name }
         if let page { return page.title }
@@ -1176,6 +1199,10 @@ final class Tab: ObservableObject, Identifiable {
         // your contact details on.
         if FormRelay.contacts {
             add(FormRelay.contactsOn, .atDocumentStart, mainFrameOnly: true, in: Web.world)
+        }
+        // And at boxes for a card only with a card kept and Fill in cards on.
+        if FormRelay.cards {
+            add(FormRelay.cardsOn, .atDocumentStart, mainFrameOnly: true, in: Web.world)
         }
         add(IconRelay.script, .atDocumentEnd, mainFrameOnly: true, in: Web.world)
         if AutoScroll.on {
@@ -1444,6 +1471,32 @@ final class Tab: ObservableObject, Identifiable {
             if (origin && location.origin !== origin) return false;
             return !!(window.__officeForms && window.__officeForms.contact(card, alone, box, tint) > 0);
             """, arguments: ["origin": origin, "card": fields, "alone": alone, "box": box.map { $0 as Any } ?? NSNull(), "tint": tint]) {
+            done?(($0 as? Bool) ?? false)
+        }
+    }
+
+    /// A strong password into the new-password boxes of the form the caret
+    /// is in, if the page is still `page`.
+    func fillStrong(_ password: String, onlyOn page: URL?, flash: Bool, done: ((Bool) -> Void)? = nil) {
+        let origin = page.flatMap(Self.origin(of:)) ?? ""
+        let tint: Any = flash ? MeCard.tint : NSNull()
+        web.callInSearch("""
+            if (origin && location.origin !== origin) return false;
+            return !!(window.__officeForms && window.__officeForms.strong(password, tint) > 0);
+            """, arguments: ["origin": origin, "password": password, "tint": tint]) {
+            done?(($0 as? Bool) ?? false)
+        }
+    }
+
+    /// A card into the boxes of the form the caret is in, if the page is
+    /// still `page` and the caret still in the box it was offered under.
+    func fillCard(_ fields: [String: String], box: Int?, onlyOn page: URL?, flash: Bool, done: ((Bool) -> Void)? = nil) {
+        guard let origin = page.flatMap(Self.origin(of:)) else { done?(false); return }
+        let tint: Any = flash ? MeCard.tint : NSNull()
+        web.callInSearch("""
+            if (location.origin !== origin) return false;
+            return !!(window.__officeForms && window.__officeForms.card(card, box, tint) > 0);
+            """, arguments: ["origin": origin, "card": fields, "box": box.map { $0 as Any } ?? NSNull(), "tint": tint]) {
             done?(($0 as? Bool) ?? false)
         }
     }
@@ -2027,6 +2080,7 @@ final class Tab: ObservableObject, Identifiable {
     /// Called when the tab is thrown away. Without it the view keeps running
     /// whatever the page left behind — timers, video, sockets.
     func close() {
+        Listener.shared.left(self, closing: true)
         onZoom = nil
         onLink = nil
         onPick = nil

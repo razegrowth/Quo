@@ -140,6 +140,7 @@ enum Browsers {
         browser.shut = false
         Front.shared.set(browser)
         Spaces.current = browser.spaceID
+        Handoff.noted(browser)
         if #available(macOS 15.4, *) { Extensions.shared.focused(browser) }
     }
 

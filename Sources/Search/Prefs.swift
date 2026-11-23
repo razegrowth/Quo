@@ -496,6 +496,22 @@ final class Preferences: ObservableObject {
             ClickIDs.on = removesClickIDs
         }
     }
+    /// The tab's row in a few words of Apple's model's choosing, when the
+    /// page's own title is long (Intelligence.swift). Off unless turned on.
+    @Published var shortTitles: Bool {
+        didSet {
+            store.set(shortTitles, forKey: TabTitles.key)
+            TabTitles.on = shortTitles
+        }
+    }
+    /// Hold Shift over a link to see what it says (Intelligence.swift). On
+    /// unless turned off: it only ever fetches when asked.
+    @Published var previewsLinks: Bool {
+        didSet {
+            store.set(previewsLinks, forKey: LinkPreview.key)
+            LinkPreview.on = previewsLinks
+        }
+    }
     /// How many people use this fork, counted once a day (Telemetry.swift).
     /// On unless turned off; Search itself has nothing to count with.
     @Published var sharesUsage: Bool {
@@ -540,6 +556,16 @@ final class Preferences: ObservableObject {
     }
     /// Your card in Contacts under the boxes for your name, email, phone and
     /// address (MeCard). Off unless turned on, which is when macOS asks.
+    /// Your history handed between your devices while sync is on
+    /// (SyncHistory.swift). On unless turned off.
+    @Published var syncsHistory: Bool {
+        didSet { store.set(syncsHistory, forKey: "sync.history") }
+    }
+    /// Your cards offered under a checkout's boxes (Cards.swift). On unless
+    /// turned off; nothing is offered until a card is kept.
+    @Published var fillsCards: Bool {
+        didSet { store.set(fillsCards, forKey: "cards.fill") }
+    }
     @Published var fillsContacts: Bool {
         didSet {
             store.set(fillsContacts, forKey: "contacts.fill")
@@ -1136,6 +1162,12 @@ final class Preferences: ObservableObject {
         removesClickIDs = removes
         ClickIDs.on = removes
         sharesUsage = store.object(forKey: Telemetry.key) as? Bool ?? true
+        let shortens = store.bool(forKey: TabTitles.key)
+        shortTitles = shortens
+        TabTitles.on = shortens
+        let previews = store.object(forKey: LinkPreview.key) as? Bool ?? true
+        previewsLinks = previews
+        LinkPreview.on = previews
         // Offered by default only in a build that can actually do them —
         // one with Apple's browser entitlement and its profile embedded. A
         // choice made under the other kind of build is not a choice about
@@ -1177,6 +1209,10 @@ final class Preferences: ObservableObject {
         let contacts = store.bool(forKey: "contacts.fill")
         fillsContacts = contacts
         FormRelay.contacts = contacts
+        syncsHistory = store.object(forKey: "sync.history") as? Bool ?? true
+        let cards = store.object(forKey: "cards.fill") as? Bool ?? true
+        fillsCards = cards
+        FormRelay.cards = cards && !Cards.shared.kept.isEmpty
         // Anyone who already has a session was here before the welcome
         // existed; they are not asked to sit through it.
         welcomed = store.bool(forKey: "welcomed") || store.object(forKey: "glyph") != nil

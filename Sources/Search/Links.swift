@@ -186,6 +186,17 @@ final class Links: NSObject, NSApplicationDelegate {
         Links.take(url)
     }
 
+    /// Handoff from another device: a web page, to open here (Handoff.swift).
+    func application(_ application: NSApplication, willContinueUserActivityWithType userActivityType: String) -> Bool {
+        userActivityType == NSUserActivityTypeBrowsingWeb
+    }
+
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard !Store.testing else { return false }
+        return MainActor.assumeIsolated { Handoff.take(userActivity) }
+    }
+
     /// A silent push from iCloud: another Mac changed what syncs.
     func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
         MainActor.assumeIsolated { Sync.shared.heard() }

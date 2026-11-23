@@ -1009,6 +1009,14 @@ enum SpaceMenu {
             if at > 0 { menu.addItem(item("Move Left") { browser.moveSpace(here.id, to: at - 1) }) }
             if at < browser.spaces.count - 1 { menu.addItem(item("Move Right") { browser.moveSpace(here.id, to: at + 1) }) }
         }
+        // Its loose tabs into named groups, by Apple's model (Intelligence.swift).
+        if browser.offersTidyTabs {
+            menu.addItem(.separator())
+            let tidy = item("Tidy Tabs") { browser.tidyTabs() }
+            tidy.isEnabled = browser.canTidyTabs
+            menu.autoenablesItems = false
+            menu.addItem(tidy)
+        }
         // Every group of this space, folded or opened at once, as in Arc.
         if browser.prefs.usesTabGroups, !browser.tabGroups.isEmpty {
             menu.addItem(.separator())
