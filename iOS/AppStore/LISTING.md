@@ -8,7 +8,7 @@ Everything App Store Connect asks for version 1.0 (build 9), ready to paste. Lim
 - **Subtitle** [30]: The browser without the junk (28)
 - **Category**: Productivity. Secondary: Utilities
 - **Privacy policy URL**: https://quobrowser.com/privacy
-- **Support URL**: https://quobrowser.com
+- **Support URL**: https://quobrowser.com/support
 - **Marketing URL**: https://quobrowser.com
 - **Copyright**: 2026 Raze
 - **Price**: Free, all countries and regions
