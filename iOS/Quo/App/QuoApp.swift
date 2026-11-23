@@ -74,6 +74,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             Tabs.shared.archiveInactive()
             Trace.mark("apple intelligence \(OnDevice.why)")
             if Trace.on { Task { await OnDevice.probe() } }
+            // A test run's check of Routing: where each typed phrase would go.
+            if let phrases = ProcessInfo.processInfo.environment["QUO_ROUTE_TEST"] {
+                for phrase in phrases.split(separator: "|").map(String.init) {
+                    Trace.mark("route \(phrase) -> \(AppSettings.shared.destination(for: phrase)?.absoluteString ?? "nil") question=\(Routing.isQuestion(phrase))")
+                }
+            }
             // Restored tabs' shorter names, once launch has settled.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { TabTitles.refresh() }
         }

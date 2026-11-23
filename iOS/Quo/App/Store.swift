@@ -77,6 +77,9 @@ final class AppSettings: ObservableObject {
     @Published var appLinks: AppLinks { didSet { defaults.set(appLinks.rawValue, forKey: "links.app") } }
     /// The engine chosen here; nil follows the Mac's, when synced.
     @Published var engineChoice: Engine? { didSet { defaults.set(engineChoice?.rawValue, forKey: "search.engine") } }
+    /// Where questions go (Routing): Perplexity or ChatGPT, or nil for the
+    /// search engine.
+    @Published var answers: Engine? { didSet { defaults.set(answers?.rawValue, forKey: "search.answers") } }
     @Published var engineSuggests: Bool { didSet { defaults.set(engineSuggests, forKey: "search.suggest") } }
     /// The language pages are translated into.
     @Published var translateTo: String { didSet { defaults.set(translateTo, forKey: "translate.to") } }
@@ -117,6 +120,7 @@ final class AppSettings: ObservableObject {
         archiveAfter = ArchiveAfter(rawValue: defaults.string(forKey: "tabs.archive") ?? "") ?? .week
         appLinks = AppLinks(rawValue: defaults.string(forKey: "links.app") ?? "") ?? .app
         engineChoice = defaults.string(forKey: "search.engine").flatMap(Engine.init(rawValue:))
+        answers = defaults.string(forKey: "search.answers").flatMap(Engine.init(rawValue:))
         engineSuggests = defaults.bool(forKey: "search.suggest")
         translateTo = defaults.string(forKey: "translate.to") ?? (Locale.current.language.languageCode?.identifier ?? "en")
         onboarded = defaults.bool(forKey: "onboarded")
@@ -135,7 +139,16 @@ final class AppSettings: ObservableObject {
         let text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if let url = Address.url(text) { return url }
-        return Engine.url(for: text, template: engine.template(custom: customTemplate))
+        // A site's name, or a question for the answer engine (Routing).
+        if let site = MainActor.assumeIsolated({ Routing.site(for: text) }) { return site }
+        if Routing.isQuestion(text), let answers = MainActor.assumeIsolated({ Routing.answerEngine }),
+           let url = Routing.url(answers, asking: text) { return url }
+        return searchURL(text)
+    }
+
+    /// The search engine's results for the words, whatever Routing says.
+    func searchURL(_ text: String) -> URL? {
+        Engine.url(for: text, template: engine.template(custom: customTemplate))
     }
 }
 

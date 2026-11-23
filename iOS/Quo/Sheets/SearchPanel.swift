@@ -225,9 +225,22 @@ struct SearchPanel: View {
         }
         if let url = Address.url(typed) {
             rows.insert(Suggestion(id: "go", kind: .page(url), title: typed, note: "Open", host: url.host()), at: 0)
+        } else if let site = Routing.site(for: typed) {
+            // A site's name: the site, first (Routing).
+            rows.insert(Suggestion(id: "site", kind: .page(site), title: Address.shown(site), note: "Go to site", host: site.host()), at: 0)
+        } else if Routing.isQuestion(typed) {
+            // A question: the answer engine first, chosen or offered.
+            let engine = Routing.answerEngine ?? Routing.offered
+            if let url = Routing.url(engine, asking: typed) {
+                rows.insert(Suggestion(id: "ask", kind: .page(url), title: typed, note: "Ask \(engine.title)",
+                                       host: url.host()), at: 0)
+            }
         }
-        rows.append(Suggestion(id: "search", kind: .search(typed), title: typed,
-                               note: "Search \(settings.engine.name(custom: settings.customTemplate))", host: nil))
+        // The engine's own results, whatever a site or question would do.
+        if let results = settings.searchURL(typed), settings.engine != Routing.answerEngine || !Routing.isQuestion(typed) {
+            rows.append(Suggestion(id: "search", kind: .page(results), title: typed,
+                                   note: "Search \(settings.engine.name(custom: settings.customTemplate))", host: nil))
+        }
         for words in engineWords.prefix(5) where words.lowercased() != lower {
             rows.append(Suggestion(id: "s" + words, kind: .search(words), title: words, note: nil, host: nil))
         }

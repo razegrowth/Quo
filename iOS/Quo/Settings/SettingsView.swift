@@ -359,6 +359,15 @@ struct EngineView: View {
                 }
             }
             Section {
+                Picker("Questions go to", selection: $settings.answers) {
+                    Text("Search engine").tag(Engine?.none)
+                    Text("Perplexity").tag(Engine?.some(.perplexity))
+                    Text("ChatGPT").tag(Engine?.some(.chatgpt))
+                }
+            } footer: {
+                Text("Something you ask, like \u{201C}how long do I boil an egg?\u{201D}, goes there for an answer. Anything else is a search. A site\u{2019}s name on its own, like github, goes to the site.")
+            }
+            Section {
                 Toggle("Suggestions as you type", isOn: $settings.engineSuggests).tint(Q.on)
             } footer: {
                 Text("What you type goes to the search engine to suggest searches. Never in Incognito.")
