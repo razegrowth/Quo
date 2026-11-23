@@ -2322,6 +2322,45 @@ final class Bench {
             }
             answer(reply)
 
+        case "agentring":
+            // The ring an agent at work draws round the stage (AgentRing),
+            // its pill and its pointer, over a page of words, to a PNG at
+            // `path`. Test runs only.
+            guard Store.testing, let path = request["path"] as? String else { answer(["error": "agentring PATH, on a --test run"]); return }
+            let page = ZStack {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Sign in").font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.ink)
+                    ForEach(0..<14) { _ in
+                        Text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore.")
+                            .font(.system(size: 14)).foregroundStyle(Palette.ink.opacity(0.7))
+                    }
+                    Text("Send").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 8).background(Color.blue, in: Capsule())
+                }
+                .padding(.top, 60).padding(.horizontal, 40)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Palette.ground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                AgentRingPicture(client: "Claude Code", corner: 10, at: CGPoint(x: 82, y: 498))
+            }
+            .frame(width: 960, height: 600)
+            .padding(8)
+            .background(Palette.frame)
+            let host = NSHostingView(rootView: page)
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.appearance = NSApp.effectiveAppearance
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                if let picture = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: picture)
+                    try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                }
+                window.contentView = nil
+                answer(["saved": path])
+            }
+
         case "notices":
             // What rises from the window's foot (Notices.swift), every kind
             // drawn off screen over a busy grey page to a PNG at `path`; and

@@ -34,6 +34,8 @@ struct PaneStageView: NSViewRepresentable {
     var corner: CGFloat = 0
     /// The page filling the screen, if one is (see SplitStage.immersed).
     var immersed: Tab.ID? = nil
+    /// The window, for the ring an agent at work draws round the stage.
+    var agent: Browser? = nil
 
     func makeNSView(context: Context) -> PaneStage { PaneStage() }
 
@@ -49,6 +51,7 @@ struct PaneStageView: NSViewRepresentable {
         stage.showFind(find)
         stage.showAccounts(accounts)
         stage.showPairing(pairing)
+        stage.showAgent(agent, corner: corner)
     }
 }
 
@@ -114,6 +117,36 @@ final class PaneStage: NSView {
         }
         needsLayout = true
     }
+
+    private var agentRing: AgentRingHost?
+
+    /// The ring an agent allowed in this window draws round every page on
+    /// the stage, and its pill with Stop (AgentRing.swift): here, above
+    /// WebKit, for the reason the find bar is. Always there once asked
+    /// for; it draws nothing while no agent is in.
+    func showAgent(_ browser: Browser?, corner: CGFloat) {
+        guard let browser else {
+            agentRing?.removeFromSuperview()
+            agentRing = nil
+            return
+        }
+        if agentRing == nil {
+            let host = AgentRingHost(rootView: AgentRing(browser: browser))
+            host.sizingOptions = []
+            agentRing = host
+            addSubview(host, positioned: .above, relativeTo: nil)
+        }
+        guard let host = agentRing, host.rootView.corner != corner || !host.wired else { return }
+        host.wired = true
+        host.rootView = AgentRing(browser: browser, corner: corner,
+                                  onPillFrame: { [weak host] in host?.pill = $0 },
+                                  pages: { [weak self] in self?.pageFrames ?? [:] })
+        needsLayout = true
+    }
+
+    /// Where each page on the stage is, by tab, from the stage's top-left:
+    /// for the agent's pointer (AgentRing), which lands where it clicked.
+    fileprivate(set) var pageFrames: [Tab.ID: CGRect] = [:]
 
     private var accountList: AccountHost?
     private var accountsFor: Tab.ID?
@@ -447,6 +480,12 @@ final class PaneStage: NSView {
         // gives it back once there is room.
         feed()
         if resized { backPages() }
+        if let ring = agentRing {
+            // Over every page on the stage, gutters and all, and above
+            // whatever else the stage holds over them.
+            ring.frame = area
+            addSubview(ring, positioned: .above, relativeTo: nil)
+        }
         if let bar = findBar {
             let page = focused.flatMap { id in tabs.firstIndex { $0.id == id } }
                 .flatMap { frames.indices.contains($0) ? frames[$0] : nil }
@@ -478,6 +517,7 @@ final class PaneStage: NSView {
         }
         var now: [Tab.ID: CGRect] = [:]
         for (index, tab) in tabs.enumerated() where shown(index) { now[tab.id] = frames[index] }
+        pageFrames = now
         // While a divider is held, kept for dividerMoved, which tells
         // SwiftUI only when it draws one of the pages.
         guard live == nil else { held = now; return }
@@ -1162,6 +1202,24 @@ struct FromTopLeft<Content: View>: View {
 /// weren't there — the sign-in box itself above all.
 /// The code card's host: as large as the page, but only the card takes a
 /// click; the rest of the page is the page's.
+/// The ring's host is the whole stage; only its pill takes a click.
+private final class AgentRingHost: NSHostingView<AgentRing> {
+    /// The pill, from the host's top-left (AgentRing.onPillFrame).
+    var pill = CGRect.zero
+    var wired = false
+
+    override var acceptsFirstResponder: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard pill != .zero else { return nil }
+        let inside = convert(point, from: superview)
+        // SwiftUI's frames are from the top-left; this view may not be.
+        let spot = isFlipped ? inside : CGPoint(x: inside.x, y: bounds.height - inside.y)
+        return Capsule().path(in: pill).contains(spot) ? super.hitTest(point) : nil
+    }
+}
+
 private final class PairingHost: NSHostingView<FromTopLeft<ApplePairingCard>> {
     /// The sign-in box, from the page's top-left (Browser.ApplePairing.spot).
     var spot = CGRect.zero

@@ -17,8 +17,8 @@ import WebKit
 // shows "<name> wants to use Search" with Allow and Don't Allow; nothing
 // else it sends is looked at until you answer, and only a mouse click in
 // that window answers. Allowed, it lasts as long as that connection does,
-// or until Stop (in the column's foot or the strip, on the row of the tab
-// it works in, and File › Stop Agent — never over the page, AgentBanner),
+// or until Stop (on the pill hanging from the ring round the stage,
+// AgentRing, on the row of the tab it works in, and File › Stop Agent),
 // or its window closes, or it asks nothing for five minutes. The next connection asks again, unless
 // you ticked "Always allow" for it: then it is let in without asking while
 // the program that started it still passes the code signature remembered,
@@ -479,7 +479,37 @@ final class AgentControl: ObservableObject {
     static let key = "__searchAgent"
 
     /// The one connection there is, asking or allowed.
-    @Published private(set) var session: AgentSession?
+    @Published private(set) var session: AgentSession? {
+        didSet {
+            guard session !== oldValue else { return }
+            pointer = nil
+            // Its Stop goes with it, even while the ring fades out.
+            if session == nil { stopButton = nil }
+        }
+    }
+    /// Where the agent last clicked, for the pointer the ring draws there
+    /// (AgentRing): the tab, the point from the page's top-left, and a new
+    /// id for each click so the same spot twice still ripples twice.
+    @Published private(set) var pointer: AgentPointer?
+
+    struct AgentPointer: Equatable {
+        let tab: Tab.ID
+        let at: CGPoint
+        let id = UUID()
+    }
+
+    /// How long the pointer takes to get where it clicks, on a page you
+    /// can see; the click waits for it, so you see where it went first.
+    static let pointerTravel: TimeInterval = 0.3
+
+    /// The pointer sent to a point on a page; true when that page is on
+    /// screen in a window, where it's drawn and the click should wait.
+    private func point(_ tab: Tab, at: [Double]) -> Bool {
+        guard at.count == 2 else { return false }
+        pointer = AgentPointer(tab: tab.id, at: CGPoint(x: at[0], y: at[1]))
+        guard let window = tab.web.window, window !== PageRoom.shared.window, window.isVisible else { return false }
+        return !Motion.reduced
+    }
     /// Full control is switched on (Settings › AI & Agents): what an
     /// agent allowed now gets (AgentConsent.full).
     static var fullOn: Bool { Shared.prefs.agents && Shared.prefs.agentsFull }
@@ -1048,6 +1078,8 @@ final class AgentControl: ObservableObject {
                 "alwaysDrawn": alwaysBox?.window != nil, "busy": session.busy,
                 "pillDrawn": stopButton?.window != nil, "overPage": stopOverPage,
                 "workingOn": session.workingOn.map { Bench.short($0) } ?? "", "marked": marked,
+                "pointer": pointer.flatMap { point in Browsers.all.flatMap(\.tabs).first { $0.id == point.tab } .map {
+                    ["tab": Bench.short($0), "x": Double(point.at.x), "y": Double(point.at.y)] as [String: Any] } } ?? [:],
                 "launcher": session.launcher.map { ["path": $0.path, "identifier": $0.identifier, "team": $0.team,
                                                      "adhoc": $0.adhoc, "signed": $0.signed] } ?? [:]]
     }
@@ -1382,16 +1414,25 @@ final class AgentControl: ObservableObject {
             case .failure(let refusal): answer(refusal.said)
             case .success(let seen):
                 guard self.live(session) else { return answer(AgentRefusal(code: "stopped", message: "Stopped in \(Store.name)").said) }
-                guard let at = seen["at"] as? [Double], PageHands.click(tab.web, at: at) else {
+                guard let at = seen["at"] as? [Double], at.count == 2 else {
                     answer(AgentRefusal(code: "not_clicked", message: "The page had nowhere to click").said)
                     return
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.settle(tab, session, timeout: request["timeout"] as? Double ?? 10) { out in
-                        var out = out
-                        out["page"] = page
-                        out["navigated"] = tab.address != before
-                        answer(out)
+                // On a page you can see, the pointer goes there first.
+                let wait = self.point(tab, at: at) ? Self.pointerTravel : 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                    guard self.live(session) else { return answer(AgentRefusal(code: "stopped", message: "Stopped in \(Store.name)").said) }
+                    guard PageHands.click(tab.web, at: at) else {
+                        answer(AgentRefusal(code: "not_clicked", message: "The page had nowhere to click").said)
+                        return
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self.settle(tab, session, timeout: request["timeout"] as? Double ?? 10) { out in
+                            var out = out
+                            out["page"] = page
+                            out["navigated"] = tab.address != before
+                            answer(out)
+                        }
                     }
                 }
             }

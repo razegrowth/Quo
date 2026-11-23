@@ -52,9 +52,6 @@ struct AddressBar: View {
                 } else {
                     Spacer(minLength: 0)
                 }
-                // A coding agent allowed in this window: its pill and Stop, at
-                // the far end as across the top (AgentBanner).
-                AgentStatus(browser: browser, style: .door)
                 ExtensionSlot(browser: browser, edge: .bottom, side: AddressBar.door(browser.prefs))
             }
         }

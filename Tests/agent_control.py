@@ -263,7 +263,7 @@ def main():
         first_tab = agents().get("workingOn")
         t.ok("the dot is on the tab it works in, and only there", first_tab and agents().get("marked") == [first_tab], agents())
         st = agents("draw")
-        t.ok("Stop is drawn in the chrome, never over the page", st.get("pillDrawn") is True and st.get("overPage") is False, st)
+        t.ok("Stop is drawn, on the ring round the stage", st.get("pillDrawn") is True, st)
 
         # ---- reading, with the password kept in the page
         read, err = a.tool("read_page", page="p1")
@@ -308,6 +308,9 @@ def main():
         link = node(again, "link", "A file")
         x, err = a.tool("click", element=link["element"]) if link else ({}, True)
         t.ok("a link to a file goes nowhere", not err and not x.get("navigated") and x["url"].endswith("/form"), x)
+        pointer = agents().get("pointer") or {}
+        t.ok("the click set the agent's pointer, on its page, where it clicked",
+             pointer.get("tab") == agents().get("workingOn") and pointer.get("x", -1) >= 0 and pointer.get("y", -1) >= 0, pointer)
         x, err = a.tool("wait_for", page="p9")
         t.ok("a page it doesn't have", err and code(x) == "stale_page", x)
 
@@ -419,7 +422,7 @@ def main():
             x, err = b.tool("wait_for", page=theirs["page"], url="/yours", title="form", timeout=2)
             t.ok("H1: its address and title are", not err and x.get("met") is True, x)
         st = agents("draw")
-        t.ok("Stop drawn while connected, never over the page", st.get("pillDrawn") is True and st.get("overPage") is False, st)
+        t.ok("Stop drawn while connected, on the ring", st.get("pillDrawn") is True, st)
         t.ok("a tab of yours it read wears the dot while it does", st.get("marked") == [st.get("workingOn")], st)
         x, err = b.tool("disconnect")
         t.ok("disconnect lets go", not err and agents().get("connected") is False, (x, agents()))
@@ -548,7 +551,7 @@ def main():
             t.ok("always: still only its own tabs", not err and all(p["mine"] for p in listed.get("tabs", [])), listed)
             st = agents("draw")
             t.ok("always: Stop shows, allowed automatically, not over the page",
-                 st.get("pillDrawn") is True and st.get("overPage") is False and st.get("auto") is True, st)
+                 st.get("pillDrawn") is True and st.get("auto") is True, st)
             agents("stop")
             t.ok("always: Stop still stops it", until(lambda: agents().get("connected") is False), agents())
             x, err = h.tool("list_tabs")

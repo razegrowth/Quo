@@ -190,22 +190,12 @@ struct SideBar: View {
             // Clear of the foot, which sits over the sidebar's bottom edge,
             // and of what plays in another tab, over the foot.
             .padding(.bottom, footHeight + (browser.player == nil ? 0 : rowHeight + SideBar.playerGap)
-                     + (agentHere && !icons ? SideBar.agentRow + SideBar.playerGap : 0)
                      + (!icons && MeetingRow.shows(browser) ? MeetingRow.height + SideBar.playerGap : 0)
                      + (icons ? 0 : DownloadShelf.height(browser, fetches)))
             .animation(Motion.settle, value: icons ? 0 : DownloadShelf.height(browser, fetches))
 
             VStack(spacing: 0) {
                 Spacer()
-                // A coding agent allowed in this window: its pill and Stop,
-                // in the column rather than over the page (AgentBanner).
-                if agentHere, !icons {
-                    AgentStatus(browser: browser, style: .row)
-                        .frame(height: SideBar.agentRow)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, SideBar.playerGap)
-                        .transition(.opacity)
-                }
                 // A meeting about to start, with Join (Glance.swift).
                 if !icons {
                     MeetingRow(browser: browser)
@@ -1245,9 +1235,7 @@ struct SideBar: View {
     /// Between what plays in another tab and the foot's doors.
     private static let playerGap: CGFloat = 4
     /// The agent's quiet line at the column's foot.
-    private static let agentRow: CGFloat = 30
     /// An agent's pill is showing in this window (AgentControl).
-    private var agentHere: Bool { agents.shownIn == ObjectIdentifier(browser) }
 
     @ViewBuilder
     private var newTab: some View {
@@ -1289,8 +1277,6 @@ struct SideFoot: View {
     var body: some View {
         if vertical {
             VStack(spacing: 2) {
-                // An agent connected in this window: a click on it is Stop.
-                AgentStatus(browser: browser, style: .icon)
                 FetchDoor(browser: browser, fetches: fetches, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing)
                 if !browser.addressBarUp {
                     ExtensionSlot(browser: browser, edge: prefs.sidePosition == .right ? .leading : .trailing, room: 0)

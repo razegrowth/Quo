@@ -2,13 +2,12 @@ import SwiftUI
 
 // What the window shows of a coding agent (AgentControl). When one
 // connects, the question, rising from the foot of the window with the
-// page's own questions, in the window it asked in only. Never anything over
-// the page after that: while it is allowed, the tab it is working in wears
-// a dot on its icon's corner (AgentMark), moving with it from tab to tab and
-// gone once it is idle; Stop is on that row under the pointer, on a quiet
-// line at the foot of the column — or at the far end of the strip when the
-// tabs are across the top — and in File › Stop Agent, all for as long as it
-// is connected, and gone with it.
+// page's own questions, in the window it asked in only. While it is
+// allowed, a ring of light round the stage, with what is using Quo and Stop
+// hanging from its top edge, and a pointer of its own where it clicks
+// (AgentRing.swift); the tab it is working in wears a dot on its icon's
+// corner (AgentMark), and Stop is on that row under the pointer and in
+// File › Stop Agent, all for as long as it is connected, and gone with it.
 //
 // Neither the question nor its buttons take the keys: Return never allows,
 // and nothing an agent sends reaches these buttons, which only a click of
@@ -41,85 +40,6 @@ private struct AgentSessionBar: View {
         if session.browser === browser, session.consent.state == .asking {
             AgentQuestion(session: session)
         }
-    }
-}
-
-/// Connected, in the chrome: a quiet line at the foot of the column (`.row`),
-/// a mark there when the column is icons only (`.icon`), or at the far end
-/// of the strip (`.door`). Each with Stop.
-struct AgentStatus: View {
-    enum Style { case row, icon, door }
-    @ObservedObject var browser: Browser
-    let style: Style
-    @ObservedObject private var agents = AgentControl.shared
-
-    var body: some View {
-        if let session = agents.session, session.browser === browser {
-            AgentStatusFace(session: session, style: style)
-        }
-    }
-}
-
-private struct AgentStatusFace: View {
-    @ObservedObject var session: AgentSession
-    let style: AgentStatus.Style
-
-    var body: some View {
-        if session.consent.state == .allowed {
-            switch style {
-            case .icon:
-                Button { AgentControl.shared.stopSession() } label: {
-                    Image(systemName: "stop.circle")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Palette.muted)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                        .background(ClickSpot { AgentControl.shared.stopButton = $0 })
-                }
-                .buttonStyle(PressStyle())
-                .help("\(AgentWords.short(session)). Click to stop it.")
-            case .row, .door:
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(session.justAdmitted ? AgentWords.admitted(session)
-                             : style == .door ? AgentWords.short(session) : AgentWords.line(session))
-                            .font(.system(size: 11, weight: session.justAdmitted ? .medium : .regular))
-                            .foregroundStyle(session.justAdmitted ? Palette.ink : Palette.muted)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Text("·").font(.system(size: 11)).foregroundStyle(Palette.muted)
-                        AgentStop()
-                        if style == .row { Spacer(minLength: 0) }
-                    }
-                    // Let in without asking: always said, under it.
-                    if session.auto, style == .row {
-                        Text("Allowed automatically")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Palette.muted.opacity(0.8))
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, style == .row ? 10 : 4)
-                .help(AgentWords.short(session) + ". Stop disconnects it; its tabs stay.")
-                .fixedSize(horizontal: style == .door, vertical: true)
-            }
-        }
-    }
-}
-
-private struct AgentStop: View {
-    @State private var hovering = false
-    var body: some View {
-        Button { AgentControl.shared.stopSession() } label: {
-            Text("Stop")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(hovering ? Palette.ink : Palette.ink.opacity(0.75))
-                .contentShape(Rectangle())
-                .background(ClickSpot { AgentControl.shared.stopButton = $0 })
-        }
-        .buttonStyle(PressStyle())
-        .onHover { hovering = $0 }
-        .help("Disconnect it. Its tabs stay where they are.")
     }
 }
 
@@ -312,7 +232,7 @@ private struct AgentQuestion: View {
 /// An AppKit view the size of the control it sits behind, so a click can be
 /// checked to have landed on that control (AgentRules.isClick). It takes no
 /// clicks itself.
-private struct ClickSpot: NSViewRepresentable {
+struct ClickSpot: NSViewRepresentable {
     let made: (NSView) -> Void
 
     final class Spot: NSView {
