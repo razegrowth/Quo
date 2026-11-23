@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.2 · 23 November 2026
+
+Drag a download straight onto a site.
+
+Files in the Library's Downloads and Media, and on a download's card, now drag out the way they do from Finder: onto a page's upload box, the Desktop, Mail or Slack.
+
+And if you save a download over a file that's already there, it actually downloads now. The old one goes to the Bin instead of the download sitting at zero.
+
 ## 0.8.1 · 23 November 2026
 
 AI and agents get their own page in Settings, and every Apple Intelligence feature has its own switch.
