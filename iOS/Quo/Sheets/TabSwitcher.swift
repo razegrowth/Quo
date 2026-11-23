@@ -29,6 +29,11 @@ struct TabSwitcher: View {
     /// The tabs in the deck, oldest first: their order is fixed while the
     /// switcher is open, so a card doesn't move under your finger.
     @State private var order: [UUID] = []
+    /// A card held: what its page says, over the deck, without opening it.
+    @State private var peeked: Tab?
+    @State private var peek: PageSummary?
+    @State private var holding: DispatchWorkItem?
+    @State private var pressAt: CGPoint?
 
     /// How long things take: about a quarter of a second, no bounce.
     static let move = Animation.spring(response: 0.3, dampingFraction: 0.9)
@@ -54,12 +59,14 @@ struct TabSwitcher: View {
                 }
 
                 foot(g)
-                    .opacity(phase == .open ? 1 : 0)
+                    .opacity(phase == .open && peeked == nil ? 1 : 0)
             }
             .frame(width: g.W, height: g.H)
             .contentShape(Rectangle())
             .gesture(drag(g, cards: cards))
             .simultaneousGesture(SpatialTapGesture().onEnded { tap($0.location, g: g, cards: cards) })
+            .simultaneousGesture(press(g, cards: cards))
+            .overlay { peekView }
         }
         .ignoresSafeArea()
         .environment(\.colorScheme, .dark)
@@ -261,8 +268,99 @@ struct TabSwitcher: View {
             }
     }
 
+    // MARK: - holding a card
+
+    /// A finger held still on a card for half a second: what its page says.
+    /// Moving it first is a drag or a flick, as ever.
+    private func press(_ g: Deck, cards: [Tab]) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard phase == .open, peeked == nil, OnDevice.available else { return }
+                if pressAt == nil {
+                    pressAt = value.startLocation
+                    let work = DispatchWorkItem {
+                        guard axis == nil, let start = pressAt, let tab = cardAt(start, g: g, cards: cards) else { return }
+                        showPeek(tab)
+                    }
+                    holding = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+                } else if hypot(value.translation.width, value.translation.height) > 10 {
+                    holding?.cancel()
+                }
+            }
+            .onEnded { _ in
+                holding?.cancel()
+                pressAt = nil
+            }
+    }
+
+    private func showPeek(_ tab: Tab) {
+        if tab.incognito && IncognitoLock.shared.locked { return }
+        Haptics.tap()
+        let page = PageSummary(url: tab.url ?? URL(string: "about:blank")!, title: tab.shownTitle)
+        if tab.isBuilt {
+            Task {
+                if let text = await tab.readable() {
+                    page.read(text: text.text, title: text.title)
+                } else if let url = tab.url {
+                    page.read(url, store: tabs.store(for: tab))
+                }
+            }
+        } else if let url = tab.url {
+            page.read(url, store: tabs.store(for: tab))
+        }
+        withAnimation(Self.snap) {
+            peek = page
+            peeked = tab
+        }
+    }
+
+    private func closePeek() {
+        peek?.cancel()
+        withAnimation(Self.snap) {
+            peek = nil
+            peeked = nil
+        }
+    }
+
+    @ViewBuilder
+    private var peekView: some View {
+        if let page = peek, let tab = peeked {
+            ZStack(alignment: .bottom) {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: closePeek)
+                VStack(spacing: 10) {
+                    SummaryCard(page: page)
+                        .environment(\.colorScheme, .dark)
+                    HStack(spacing: 10) {
+                        Button {
+                            closePeek()
+                            choose(tab)
+                        } label: {
+                            Text("Open").font(Q.bodyEmphasis).foregroundStyle(.black)
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                                .background(.white, in: Capsule())
+                        }
+                        .buttonStyle(PressStyle())
+                        Button(action: closePeek) {
+                            Text("Done").font(Q.bodyEmphasis).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                                .background(Color(white: 0.22), in: Capsule())
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 28)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            .transition(.opacity)
+        }
+    }
+
     private func tap(_ point: CGPoint, g: Deck, cards: [Tab]) {
-        guard phase == .open, axis == nil, let tab = cardAt(point, g: g, cards: cards) else { return }
+        guard phase == .open, axis == nil, peeked == nil, let tab = cardAt(point, g: g, cards: cards) else { return }
         // A locked incognito tab: Face ID first, then in.
         if tab.incognito && IncognitoLock.shared.locked {
             Task { if await IncognitoLock.shared.unlock() { choose(tab) } }
