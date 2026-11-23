@@ -2,6 +2,16 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.3 · 23 November 2026
+
+Notices you can't miss, Restart for updates, and Settings you can use from the keyboard.
+
+What pops up at the bottom of the window (Save the password?, a site wanting your camera, a saved download) is a proper card now, bigger and with real buttons, and it stays put while your mouse is on it. When an update is ready, its notice has a Restart button.
+
+Settings works with Tab: through the sections, then every switch, choice and menu, with a ring around the one you're on. Space flips it, the arrows pick, and VoiceOver reads each one. Section headings stand out more too.
+
+⌘T, ⌘L and ⌘K open as one panel near the top of the window, over a darker page, with a tiny fade so they don't just pop. And closing a tab you opened from a pin takes you back to the pin, like Arc.
+
 ## 0.8.2 · 23 November 2026
 
 Drag a download straight onto a site.
