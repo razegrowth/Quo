@@ -2785,6 +2785,32 @@ final class Bench {
                 answer(["error": "ai mock URL | key PROVIDER KEY | ask PROVIDER MODEL TEXT | read ID | check TEXT"])
             }
 
+        case "writingtools":
+            // Apple's Writing Tools items as a page's text box menu has them,
+            // each asked of the page whether it would act on it: nothing is
+            // run or shown. Only on a SEARCH_PROBE run.
+            guard Store.testing else { answer(["error": "writingtools only works on a --test run"]); return }
+            guard let tab = find(request, in: browser), let web = tab.built else { answer(missing(request)); return }
+            guard #available(macOS 15.2, *) else { answer(["error": "needs macOS 15.2"]); return }
+            web.window?.makeFirstResponder(web)
+            func flat(_ items: [NSMenuItem]) -> [NSMenuItem] { items.flatMap { [$0] + flat($0.submenu?.items ?? []) } }
+            let items = flat(NSMenuItem.writingToolsItems).filter { !$0.isSeparatorItem && $0.action != nil }
+            answer([
+                "behavior": web.configuration.writingToolsBehavior.rawValue,
+                "items": items.map { item -> [String: Any] in
+                    let action = item.action!
+                    // Asked of the page itself: a hidden test window is never
+                    // key, so the app's own chain would end at the app.
+                    var chain: NSResponder? = web
+                    while let each = chain, !each.responds(to: action) { chain = each.nextResponder }
+                    let target: Any? = chain
+                    let valid = (chain as? NSUserInterfaceValidations)?.validateUserInterfaceItem(item) ?? (chain != nil)
+                    return ["title": item.title, "action": NSStringFromSelector(action),
+                            "target": target.map { String(describing: type(of: $0)) } ?? "", "enabled": valid]
+                },
+                "active": web.isWritingToolsActive,
+            ])
+
         case "meaning":
             // History found by meaning (Meaning.swift), as the History
             // panel finds it: what matches outright, then what is close.
@@ -5136,9 +5162,9 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
 
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
             ]])
         }
     }

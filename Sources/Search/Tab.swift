@@ -137,6 +137,9 @@ enum Web {
         inspector(config.preferences)
         backspaceStays(config.preferences)
         NativePiP.allow(config.preferences)
+        // Apple's Writing Tools in a page's text boxes, rewriting in place
+        // as in Safari and Mail, on a Mac with Apple Intelligence.
+        if #available(macOS 15.0, *) { config.writingToolsBehavior = .complete }
         return config
     }
 
@@ -2587,6 +2590,18 @@ final class PageView: WKWebView {
             item.title = "Search with \(name)"
             item.target = self
             item.action = #selector(searchSelection(_:))
+        }
+        // Apple's Writing Tools for the text box under the click, first in
+        // its menu as in Safari and Mail: WebKit leaves them out of an app's
+        // own menu. Only in something you can type in, and only once.
+        if #available(macOS 15.2, *), OnDevice.available,
+           menu.items.contains(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierPaste" }),
+           !menu.items.contains(where: { $0.action == #selector(NSResponder.showWritingTools(_:)) || $0.title == "Writing Tools" }) {
+            let tools = NSMenuItem.writingToolsItems
+            if !tools.isEmpty {
+                menu.insertItem(.separator(), at: 0)
+                for item in tools.reversed() { menu.insertItem(item, at: 0) }
+            }
         }
         // Inspect Element is WebKit's own, from this menu rather than the
         // View menu. Handed on, and then the coat, if one was asked for.
