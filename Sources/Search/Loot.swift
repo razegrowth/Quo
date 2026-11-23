@@ -59,6 +59,14 @@ final class Loot: ObservableObject {
         save()
     }
 
+    /// Renamed (a download's suggested name taken): listed under its new name.
+    func moved(from old: URL, to new: URL) {
+        guard let index = kept.firstIndex(where: { $0.path == old.path }) else { return }
+        kept[index].path = new.path
+        kept[index].name = new.lastPathComponent
+        save()
+    }
+
     func forget(_ keep: Keep) {
         kept.removeAll { $0.id == keep.id }
         save()

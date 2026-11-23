@@ -312,9 +312,24 @@ private struct ArrivedCard: View {
     @State private var landed = false
     /// Its time on show, held while the pointer is on it.
     @State private var going: DispatchWorkItem?
+    /// How long it has waited for a clearer name.
+    @State private var waited: TimeInterval = 0
 
     /// How long a card stays once its file is in, the pointer away.
     static let stays: TimeInterval = 6
+    /// And once a clearer name is offered on it.
+    static let staysWithName: TimeInterval = 12
+
+    @ObservedObject private var watching: Fetches
+    private var suggested: String? { watching.suggestions[arrival.id] }
+
+    init(browser: Browser, fetches: Fetches, arrival: Fetches.Arrival, height: CGFloat) {
+        self.browser = browser
+        self.fetches = fetches
+        self.arrival = arrival
+        self.height = height
+        self.watching = fetches
+    }
 
     private var roomy: Bool { browser.prefs.roomyTabs }
 
@@ -338,13 +353,31 @@ private struct ArrivedCard: View {
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(hovering ? "Open, or drag it out" : "Downloaded · " + ByteCountFormatter.string(fromByteCount: arrival.bytes, countStyle: .file))
+                if let suggested {
+                    // A clearer name, by Apple Intelligence: offered, never taken
+                    // on its own (DownloadNames).
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles").font(.system(size: roomy ? 9.5 : 8.5, weight: .medium))
+                        Text("Rename to “\(suggested)”")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                     .font(.system(size: roomy ? 11.5 : 10.5))
                     .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
+                    .transition(.opacity)
+                } else {
+                    Text(hovering ? "Open, or drag it out" : "Downloaded · " + ByteCountFormatter.string(fromByteCount: arrival.bytes, countStyle: .file))
+                        .font(.system(size: roomy ? 11.5 : 10.5))
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                }
             }
             Spacer(minLength: 0)
+            if suggested != nil {
+                Round(icon: "checkmark", help: "Rename it") { rename() }
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
             if hovering {
                 HStack(spacing: 2) {
                     Round(icon: "magnifyingglass", help: "Show in Finder") { reveal() }
@@ -361,6 +394,9 @@ private struct ArrivedCard: View {
             on ? going?.cancel() : leave(after: 2.5)
         }
         .animation(Motion.quick, value: hovering)
+        .animation(Motion.quick, value: suggested)
+        // A name offered: a little longer on show, to be read.
+        .onChange(of: suggested) { _, now in if now != nil, !hovering { leave(after: ArrivedCard.staysWithName) } }
         .onTapGesture { open() }
         // Dragged out like a file in Finder: to the Desktop, Mail, Slack.
         .onDrag { NSItemProvider(contentsOf: arrival.file) ?? NSItemProvider() }
@@ -371,6 +407,7 @@ private struct ArrivedCard: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([arrival.file as NSURL])
             }
+            if let suggested { Button("Rename to “\(suggested)”") { rename() } }
             Divider()
             Button("Show All Downloads") { browser.showDownloads(toggles: false) }
             Button("Put Away") { fetches.putAway(arrival.id) }
@@ -387,7 +424,16 @@ private struct ArrivedCard: View {
     private func leave(after seconds: TimeInterval) {
         going?.cancel()
         let work = DispatchWorkItem { [fetches, id = arrival.id] in
-            MainActor.assumeIsolated { withAnimation(Motion.settle) { fetches.putAway(id) } }
+            MainActor.assumeIsolated {
+                // Still reading the file for a clearer name: a little longer,
+                // or the name would come to a card already gone.
+                if fetches.naming.contains(id), waited < 20 {
+                    waited += 2
+                    leave(after: 2)
+                    return
+                }
+                withAnimation(Motion.settle) { fetches.putAway(id) }
+            }
         }
         going = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
@@ -400,6 +446,15 @@ private struct ArrivedCard: View {
 
     private func reveal() {
         NSWorkspace.shared.activateFileViewerSelecting([arrival.file])
+    }
+
+    private func rename() {
+        if fetches.takeSuggestion(arrival.id, loot: browser.loot) != nil {
+            browser.announce("Renamed")
+            leave(after: 2.5)
+        } else {
+            browser.announce("Couldn't rename it")
+        }
     }
 }
 

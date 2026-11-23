@@ -2811,6 +2811,42 @@ final class Bench {
                 "active": web.isWritingToolsActive,
             ])
 
+        case "dlname":
+            // Tidier downloads (DownloadNames): a file's name judged, its text
+            // read and a name suggested; the window's download cards and
+            // their suggestions; one taken. "canned" stands in for the model,
+            // "model" brings it back. Only on a SEARCH_PROBE run.
+            guard Store.testing else { answer(["error": "dlname only works on a --test run"]); return }
+            if let canned = request["canned"] as? String { DownloadNames.canned = { _ in canned } }
+            if request["model"] as? Bool == true { DownloadNames.canned = nil }
+            if let on = request["on"] as? Bool { browser.prefs.namesDownloads = on }
+            func state() -> [String: Any] {
+                ["arrivals": browser.fetches.arrivals.map { ["name": $0.name, "path": $0.file.path,
+                                                             "suggestion": browser.fetches.suggestions[$0.id] ?? NSNull()] as [String: Any] },
+                 "kept": browser.loot.kept.prefix(5).map(\.name)]
+            }
+            switch request["action"] as? String {
+            case "suggest":
+                guard let path = request["path"] as? String else { answer(["error": "dlname suggest PATH"]); return }
+                let file = URL(fileURLWithPath: path)
+                Task { @MainActor in
+                    let text = await DownloadNames.text(of: file) ?? ""
+                    let suggestion = await DownloadNames.suggest(for: file)
+                    answer(["unclear": DownloadNames.unclear(file.lastPathComponent), "text": String(text.prefix(300)),
+                            "suggestion": suggestion ?? NSNull(), "said": DownloadNames.lastSaid ?? ""])
+                }
+            case "take":
+                guard let arrival = browser.fetches.arrivals.last(where: { browser.fetches.suggestions[$0.id] != nil }) else {
+                    answer(["error": "no card with a suggestion"]); return
+                }
+                let new = browser.fetches.takeSuggestion(arrival.id, loot: browser.loot)
+                var out = state()
+                out["renamed"] = new?.path ?? NSNull()
+                answer(out)
+            default:
+                answer(state())
+            }
+
         case "meaning":
             // History found by meaning (Meaning.swift), as the History
             // panel finds it: what matches outright, then what is close.
@@ -5162,9 +5198,9 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "dlname", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
 
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "dlname", "writingtools", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
             ]])
         }
     }

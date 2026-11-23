@@ -277,7 +277,7 @@ final class Fetches: ObservableObject {
     /// until its card has been seen long enough, or is put away.
     struct Arrival: Identifiable, Equatable {
         let id: UUID
-        let file: URL
+        var file: URL
         let bytes: Int64
         let owner: ObjectIdentifier
         var name: String { file.lastPathComponent }
@@ -285,6 +285,36 @@ final class Fetches: ObservableObject {
     @Published private(set) var arrivals: [Arrival] = []
 
     func putAway(_ id: UUID) { arrivals.removeAll { $0.id == id } }
+
+    /// A clearer name for an arrival's file, by its card's id (DownloadNames).
+    @Published private(set) var suggestions: [UUID: String] = [:]
+
+    /// Cards whose clearer name is still being worked out: they wait for it.
+    @Published private(set) var naming: Set<UUID> = []
+
+    func suggestName(for arrival: Arrival) {
+        guard DownloadNames.on, DownloadNames.unclear(arrival.name) else { return }
+        naming.insert(arrival.id)
+        Task { @MainActor [weak self] in
+            let name = await DownloadNames.suggest(for: arrival.file)
+            guard let self else { return }
+            self.naming.remove(arrival.id)
+            guard let name, self.arrivals.contains(where: { $0.id == arrival.id }) else { return }
+            self.suggestions[arrival.id] = name
+        }
+    }
+
+    /// The suggestion taken: the file renamed where it is, its card and the
+    /// Downloads list following it.
+    @discardableResult
+    func takeSuggestion(_ id: UUID, loot: Loot?) -> URL? {
+        guard let name = suggestions.removeValue(forKey: id), let index = arrivals.firstIndex(where: { $0.id == id }) else { return nil }
+        let old = arrivals[index].file
+        guard let new = DownloadNames.rename(old, to: name) else { return nil }
+        arrivals[index].file = new
+        loot?.moved(from: old, to: new)
+        return new
+    }
 
     struct StopOperation {
         let download: WKDownload
@@ -530,8 +560,9 @@ final class Fetches: ObservableObject {
             // A download that never said its size: the file's, on disk.
             let said = max(entry.totalBytes, entry.completedBytes)
             let onDisk = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value ?? 0
-            arrivals.append(Arrival(id: entry.id, file: file, bytes: said > 0 ? said : onDisk,
-                                    owner: ObjectIdentifier(item.owner)))
+            let arrival = Arrival(id: entry.id, file: file, bytes: said > 0 ? said : onDisk, owner: ObjectIdentifier(item.owner))
+            arrivals.append(arrival)
+            suggestName(for: arrival)
         }
         if let entry = item.entry { remove(entry) }
         guard let ended = take(download) else { return nil }

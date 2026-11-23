@@ -374,6 +374,10 @@ enum SettingsIndex {
               title: "Name new groups", detail: "A group you make is named from its tabs, like \"Tokyo trip\" instead of \"Group 3\"",
               more: "Named by Apple Intelligence on this Mac, and named again as tabs come and go, until you give it a name of your own.",
               keys: [GroupNames.key], words: ["group name", "tab groups", "rename", "arc max", "apple intelligence", "ai"]),
+        .init(id: "downloads.names", group: "intelligence", icon: "doc.text.magnifyingglass",
+              title: "Suggest names for downloads", detail: "A file named \"document(3).pdf\" gets a name that says what it is, a click away",
+              more: "Read on this Mac, a PDF's text or a picture's words, and named by Apple Intelligence. The download's card offers the name; nothing is renamed unless you click.",
+              keys: [DownloadNames.key], words: ["rename", "file name", "downloads", "tidy", "apple intelligence", "ai"]),
         .init(id: "note.tidy", group: "intelligence", icon: "rectangle.3.group",
               title: "Tidy Tabs", detail: "In the View menu and the space's menu: your loose tabs, sorted into named groups",
               words: ["tidy", "organize", "organise", "sort tabs", "group tabs", "arc max", "apple intelligence", "ai"], kind: .note),
@@ -685,7 +689,7 @@ enum SettingsIndex {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
         case "privacy.telemetry": return Telemetry.configured
-        case "tabs.shortTitles", "note.tidy", "links.summaries", "groups.autoName": return OnDevice.available
+        case "tabs.shortTitles", "note.tidy", "links.summaries", "groups.autoName", "downloads.names": return OnDevice.available
         default: return true
         }
     }

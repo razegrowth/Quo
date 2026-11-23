@@ -536,6 +536,14 @@ final class Preferences: ObservableObject {
             GroupNames.on = namesGroups
         }
     }
+    /// A clearer name offered for a download whose name says nothing
+    /// (DownloadNames). On unless turned off; never renamed on its own.
+    @Published var namesDownloads: Bool {
+        didSet {
+            store.set(namesDownloads, forKey: DownloadNames.key)
+            DownloadNames.on = namesDownloads
+        }
+    }
     /// Hold Shift over a link to see what it says (Intelligence.swift). On
     /// unless turned off: it only ever fetches when asked.
     @Published var previewsLinks: Bool {
@@ -1204,6 +1212,9 @@ final class Preferences: ObservableObject {
         let summaries = store.object(forKey: LinkPreview.summaryKey) as? Bool ?? true
         summarizesLinks = summaries
         LinkPreview.summarizes = summaries
+        let downloadNames = store.object(forKey: DownloadNames.key) as? Bool ?? true
+        namesDownloads = downloadNames
+        DownloadNames.on = downloadNames
         let names = store.object(forKey: GroupNames.key) as? Bool ?? true
         namesGroups = names
         GroupNames.on = names
