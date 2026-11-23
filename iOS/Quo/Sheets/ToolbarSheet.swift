@@ -9,6 +9,7 @@ struct ToolbarPanel: View {
     @ObservedObject var tab: Tab
     @ObservedObject private var sync = MacSync.shared
     @ObservedObject private var downloads = Downloads.shared
+    @ObservedObject private var listener = Listener.shared
     /// Display options, open or closed as you last left them; closed at first.
     @AppStorage("toolbar.displayOpen") private var displayOpen = false
     @State private var copied = false
@@ -191,68 +192,91 @@ struct ToolbarPanel: View {
     /// as it is; and what's downloading, while something is.
     @ViewBuilder
     private var handOn: some View {
-        let targets = sync.on ? sync.targets : []
-        let send = tab.url != nil && !tab.incognito && !targets.isEmpty
-        let save = tab.url != nil && tab.isDocument
-        let coming = downloads.active
-        let askable = tab.url != nil && OnDevice.available
-        if send || tab.hasVideo || save || !coming.isEmpty || askable {
+        let rows = handOnRows
+        if !rows.isEmpty {
             VStack(spacing: 0) {
-                if askable {
-                    Button {
-                        dismiss()
-                        browser.sheet = .ask
-                    } label: { Row(symbol: "apple.intelligence", title: "Ask this page") }
-                        .buttonStyle(RowButton())
-                        .accessibilityIdentifier("toolbar.ask")
-                    if send || tab.hasVideo || save || !coming.isEmpty { Divider().overlay(Q.hairline).padding(.leading, 52) }
-                }
-                if save, let url = tab.url {
-                    Button {
-                        dismiss()
-                        downloads.start(url, in: tab)
-                    } label: {
-                        Row(symbol: "arrow.down.circle", title: tab.mimeType == "application/pdf" ? "Download PDF" : "Download file")
-                    }
-                    .buttonStyle(RowButton())
-                    .accessibilityIdentifier("toolbar.download")
-                    if send || tab.hasVideo || !coming.isEmpty { Divider().overlay(Q.hairline).padding(.leading, 52) }
-                }
-                if !coming.isEmpty {
-                    Button { browser.showDownloads() } label: {
-                        Row(symbol: "arrow.down.circle.dotted",
-                            title: coming.count == 1 ? "Downloading \(coming[0].name)" : "Downloading \(coming.count) files",
-                            chevron: true)
-                    }
-                    .buttonStyle(RowButton())
-                    .accessibilityIdentifier("toolbar.downloads")
-                    if send || tab.hasVideo { Divider().overlay(Q.hairline).padding(.leading, 52) }
-                }
-                if let url = tab.url, !tab.incognito, !targets.isEmpty {
-                    SendMenu(targets: targets) { target in
-                        sync.send(url, title: tab.shownTitle, to: target)
-                        Haptics.done()
-                        dismiss()
-                        browser.say("Sent to \(target.name)")
-                    } label: { title in
-                        Row(symbol: "laptopcomputer.and.arrow.down", title: title)
-                    }
-                    .accessibilityIdentifier("toolbar.send")
-                }
-                if tab.hasVideo {
-                    if send {
-                        Divider().overlay(Q.hairline).padding(.leading, 52)
-                    }
-                    Button {
-                        dismiss()
-                        tab.pictureInPicture()
-                    } label: { Row(symbol: "pip.enter", title: "Picture in picture") }
-                        .buttonStyle(RowButton())
-                        .accessibilityIdentifier("toolbar.pip")
+                ForEach(Array(rows.enumerated()), id: \.element) { index, row in
+                    if index > 0 { Divider().overlay(Q.hairline).padding(.leading, 52) }
+                    handOnRow(row)
                 }
             }
             .background(Q.tile, in: RoundedRectangle(cornerRadius: Q.radiusLG, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Q.radiusLG, style: .continuous))
+        }
+    }
+
+    private enum HandOn: Hashable { case ask, listen, download, downloads, send, pip }
+
+    /// Ask This Page where Apple Intelligence is; Listen to Page; Download
+    /// for a PDF or other file shown as it is; what's downloading; Send to
+    /// Mac once a Mac is there; Picture in Picture while there's a video.
+    private var handOnRows: [HandOn] {
+        var rows: [HandOn] = []
+        let targets = sync.on ? sync.targets : []
+        if tab.url != nil, OnDevice.available { rows.append(.ask) }
+        if tab.url != nil, !tab.isDocument { rows.append(.listen) }
+        if tab.url != nil, tab.isDocument { rows.append(.download) }
+        if !downloads.active.isEmpty { rows.append(.downloads) }
+        if tab.url != nil, !tab.incognito, !targets.isEmpty { rows.append(.send) }
+        if tab.hasVideo { rows.append(.pip) }
+        return rows
+    }
+
+    @ViewBuilder
+    private func handOnRow(_ row: HandOn) -> some View {
+        switch row {
+        case .ask:
+            Button {
+                dismiss()
+                browser.sheet = .ask
+            } label: { Row(symbol: "apple.intelligence", title: "Ask this page") }
+                .buttonStyle(RowButton())
+                .accessibilityIdentifier("toolbar.ask")
+        case .listen:
+            let reading = listener.reading(tab)
+            Button {
+                dismiss()
+                listener.toggle(tab)
+            } label: { Row(symbol: reading ? "stop.circle" : "headphones", title: reading ? "Stop reading" : "Listen to page") }
+                .buttonStyle(RowButton())
+                .accessibilityIdentifier("toolbar.listen")
+        case .download:
+            Button {
+                dismiss()
+                if let url = tab.url { downloads.start(url, in: tab) }
+            } label: {
+                Row(symbol: "arrow.down.circle", title: tab.mimeType == "application/pdf" ? "Download PDF" : "Download file")
+            }
+            .buttonStyle(RowButton())
+            .accessibilityIdentifier("toolbar.download")
+        case .downloads:
+            let coming = downloads.active
+            Button { browser.showDownloads() } label: {
+                Row(symbol: "arrow.down.circle.dotted",
+                    title: coming.count == 1 ? "Downloading \(coming[0].name)" : "Downloading \(coming.count) files",
+                    chevron: true)
+            }
+            .buttonStyle(RowButton())
+            .accessibilityIdentifier("toolbar.downloads")
+        case .send:
+            if let url = tab.url {
+                SendMenu(targets: sync.targets) { target in
+                    sync.send(url, title: tab.shownTitle, to: target)
+                    Haptics.done()
+                    dismiss()
+                    browser.say("Sent to \(target.name)")
+                } label: { title in
+                    Row(symbol: "laptopcomputer.and.arrow.down", title: title)
+                }
+                .accessibilityIdentifier("toolbar.send")
+            }
+        case .pip:
+            Button {
+                dismiss()
+                tab.pictureInPicture()
+            } label: { Row(symbol: "pip.enter", title: "Picture in picture") }
+                .buttonStyle(RowButton())
+                .accessibilityIdentifier("toolbar.pip")
         }
     }
 
