@@ -98,4 +98,23 @@ final class IntelligenceTests: XCTestCase {
         XCTAssertNotNil(name)
         XCTAssertTrue(name?.contains("Q3") == true, name ?? "")
     }
+
+    func testHistoryIsFoundByWhatItWasAbout() throws {
+        let titles = [
+            "Hotels in Shinjuku, Tokyo - Best Prices for 2026 - Booking.com",
+            "How to repot a monstera plant without killing it",
+            "Mortgage calculator: how much house can I afford?",
+            "Easy Weeknight Chicken Curry Recipe - BBC Good Food",
+        ]
+        func best(_ query: String) throws -> String {
+            let scores = try XCTUnwrap(Meaning.scores(for: query, among: titles), "no word embedding on this Mac")
+            return titles[scores.indices.max { scores[$0] < scores[$1] }!]
+        }
+        XCTAssertTrue(try best("japan trip").contains("Tokyo"))
+        XCTAssertTrue(try best("houseplant care").contains("monstera"))
+        XCTAssertTrue(try best("home loan").contains("Mortgage"))
+        XCTAssertTrue(try best("dinner ideas").contains("Curry"))
+        XCTAssertNil(Meaning.scores(for: "the of", among: titles), "nothing to go on")
+        XCTAssertEqual(Meaning.words("The 15 Best Ramen Shops in Tokyo"), ["15", "ramen", "shops", "tokyo"].filter { $0.rangeOfCharacter(from: .letters) != nil })
+    }
 }

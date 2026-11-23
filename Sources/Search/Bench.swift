@@ -2785,6 +2785,39 @@ final class Bench {
                 answer(["error": "ai mock URL | key PROVIDER KEY | ask PROVIDER MODEL TEXT | read ID | check TEXT"])
             }
 
+        case "meaning":
+            // History found by meaning (Meaning.swift), as the History
+            // panel finds it: what matches outright, then what is close.
+            guard Store.testing else { answer(["error": "meaning only works on a --test run"]); return }
+            let query = request["query"] as? String ?? ""
+            let literal = browser.history.everything(matching: query)
+            let shown = Set(literal.map(\.key))
+            let rest = browser.history.everything().filter { !shown.contains($0.key) }
+            Task { @MainActor in
+                let start = Date()
+                let related = await Meaning.related(to: query, among: rest)
+                let out: [String: Any] = ["literal": literal.map(\.title), "related": related.map(\.title),
+                                          "ms": Date().timeIntervalSince(start) * 1000, "pages": rest.count + literal.count]
+                // "path": the History panel searched for it, drawn there,
+                // off every screen, once its close-in-meaning rows are in.
+                guard let path = request["path"] as? String else { answer(out); return }
+                browser.recallHunt = query
+                let host = NSHostingView(rootView: HistoryPanel(browser: browser).frame(width: 640, height: 640).background(Palette.wash))
+                host.appearance = NSAppearance(named: .aqua)
+                host.frame = NSRect(x: 0, y: 0, width: 640, height: 640)
+                let holder = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                holder.contentView = host
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    host.layoutSubtreeIfNeeded()
+                    if let picture = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                        host.cacheDisplay(in: host.bounds, to: picture)
+                        try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                    }
+                    holder.contentView = nil
+                    answer(out)
+                }
+            }
+
         case "notifications":
             // What a test run would have posted, and every site's answer.
             guard Store.testing else { answer(["error": "notifications only works on a --test run"]); return }
@@ -5097,9 +5130,9 @@ final class Bench {
 
         default:
             answer(["error": "unknown command “\(verb)”", "commands": [
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "agent", "kept", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "welcome", "welcome-arc", "intelligence", "library", "fill", "lookpicker", "glance", "hoverrow", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings", "filterlists", "sync",
 
-                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
+                "tabs", "open", "go", "openmark", "close", "wait", "sleep", "select", "text", "nowplaying", "player", "agent", "eval", "click", "type", "submit", "shot", "snap", "probe", "key", "textcheck", "resize", "hit", "pointer", "film", "float", "window", "pages", "picture", "pdf", "place", "group", "tospace", "field", "bookmark", "marks", "menu", "keyeq", "fill", "pin", "middle", "windows", "alive", "quit", "towindow", "news", "pull", "magnify", "wheel", "space", "split", "strip", "column", "fold", "consent", "update", "site", "little", "ui", "import", "import-preview", "import-file", "import-file-start", "import-file-status", "import-file-cancel", "remove-folder", "passwords", "accounts", "find", "answer", "visible", "meaning", "ai", "notifications", "popups", "suggest", "translate", "profile", "settings",
             ]])
         }
     }

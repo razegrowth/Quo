@@ -50,6 +50,10 @@ struct HistoryPanel: View {
     /// Which history Clear takes: nil for every space's, as Safari's All
     /// Profiles; shown only when a signed-out space keeps one of its own.
     @State private var clearsIn: UUID?
+    /// Pages close in meaning to the search, under those that match it
+    /// outright (Meaning.swift).
+    @State private var related: [History.Trace] = []
+    @State private var relating: Task<Void, Never>?
     private var clearing: Bool { browser.recallMode == .clearing }
 
     var body: some View {
@@ -57,7 +61,7 @@ struct HistoryPanel: View {
             VStack(alignment: .leading, spacing: 14) {
                 Hunt(text: $browser.recallHunt, prompt: "Search everywhere you have been", focus: $hunting)
 
-                if traces.isEmpty {
+                if traces.isEmpty && related.isEmpty {
                     Card { Nothing(browser.recallHunt.isEmpty ? "Nothing yet." : "Nothing matches.") }
                 } else {
                     // Lazy: only the lines in view are made. Two thousand of
@@ -113,7 +117,7 @@ struct HistoryPanel: View {
                 sweeps
             } else {
                 HStack {
-                    Text(traces.count == 1 ? "1 page" : "\(traces.count) pages")
+                    Text(count)
                         .font(.system(size: 12))
                         .foregroundStyle(Palette.muted)
                     Spacer()
@@ -129,6 +133,13 @@ struct HistoryPanel: View {
         .onChange(of: browser.recallHunt) { _, _ in refresh() }
         // Another space may keep a history of its own (Spaces.history).
         .onChange(of: browser.spaceID) { _, _ in refresh() }
+    }
+
+    /// How many pages, and how many more close in meaning.
+    private var count: String {
+        let pages = traces.count == 1 ? "1 page" : "\(traces.count) pages"
+        guard !related.isEmpty else { return pages }
+        return traces.isEmpty ? "\(related.count) close in meaning" : "\(pages) · \(related.count) close in meaning"
     }
 
     /// Three separate things, worded so nobody has to guess which one signs
@@ -180,6 +191,13 @@ struct HistoryPanel: View {
 
     private func refresh() {
         traces = browser.history.everything(matching: browser.recallHunt)
+        related = []
+        build()
+        relate()
+    }
+
+    /// The list: the days of what matched, then what is close in meaning.
+    private func build() {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: traces) { calendar.startOfDay(for: $0.last) }
         var made: [Listed] = []
@@ -190,7 +208,31 @@ struct HistoryPanel: View {
                 made.append(Listed(id: trace.id, kind: .trace(trace, first: index == 0, last: index == rows.count - 1)))
             }
         }
+        if !related.isEmpty {
+            made.append(Listed(id: "meaning", kind: .day("Close in meaning")))
+            for (index, trace) in related.enumerated() {
+                made.append(Listed(id: "meaning " + trace.id, kind: .trace(trace, first: index == 0, last: index == related.count - 1)))
+            }
+        }
         lines = made
+    }
+
+    /// Looked for a moment after the typing stops, away from the window's
+    /// thread; a search that has moved on by then drops its answer.
+    private func relate() {
+        relating?.cancel()
+        let hunt = browser.recallHunt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard hunt.count >= 3 else { return }
+        let shown = Set(traces.map(\.key))
+        let rest = browser.history.everything().filter { !shown.contains($0.key) }
+        relating = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled else { return }
+            let found = await Meaning.related(to: hunt, among: rest)
+            guard !Task.isCancelled, hunt == browser.recallHunt.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            related = found
+            build()
+        }
     }
 
     /// One line of the list: a day's name, or a page under it.
