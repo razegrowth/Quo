@@ -73,11 +73,10 @@ extension Tab {
 
     /// The page's readable words, or nil when it hasn't any (or isn't built).
     func readable() async -> PageText? {
-        guard let web = webViewIfBuilt else { Trace.mark("readable: not built"); return nil }
+        guard let web = webViewIfBuilt else { return nil }
         let found: [String: Any]
         do {
             guard let result = try await web.evaluateJavaScript(PageText.script) as? [String: Any] else {
-                Trace.mark("readable: not a dictionary")
                 return nil
             }
             found = result
@@ -88,7 +87,6 @@ extension Tab {
         let parts = (found["parts"] as? [String] ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { $0.count > 1 }
-        Trace.mark("readable: \(parts.count) parts on \(web.url?.absoluteString ?? "-") loading \(web.isLoading)")
         guard !parts.isEmpty else { return nil }
         return PageText(title: found["title"] as? String ?? shownTitle, lang: found["lang"] as? String, parts: parts)
     }

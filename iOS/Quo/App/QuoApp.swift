@@ -1,5 +1,4 @@
 import SwiftUI
-import NaturalLanguage
 import UIKit
 
 @main
@@ -73,26 +72,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             MacSync.shared.onArrived = { Browser.shared.arrived($0) }
             MacSync.shared.start()
             Tabs.shared.archiveInactive()
-            Trace.mark("apple intelligence \(OnDevice.why)")
-            if Trace.on { Task { await OnDevice.probe() } }
-            // A test run's check of Meaning: each page's closeness to a phrase.
-            if let phrase = ProcessInfo.processInfo.environment["QUO_MEANING_TEST"] {
-                Meaning.shared.build(History.shared.visits)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                    Trace.mark("meaning available \(Meaning.shared.available) visits \(History.shared.visits.count) word \(NLEmbedding.wordEmbedding(for: .english) != nil) contextual \(NLContextualEmbedding(language: .english).map { "\($0.hasAvailableAssets)" } ?? "nil")")
-                    for (title, score) in Meaning.shared.scores(phrase, in: History.shared.visits).prefix(8) {
-                        Trace.mark(String(format: "meaning %.2f %@", score, title))
-                    }
-                    let picked = History.shared.matchesWithMeaning(phrase).map(\.title).joined(separator: " | ")
-                    Trace.mark("meaning picked \(picked)")
-                }
-            }
-            // A test run's check of Routing: where each typed phrase would go.
-            if let phrases = ProcessInfo.processInfo.environment["QUO_ROUTE_TEST"] {
-                for phrase in phrases.split(separator: "|").map(String.init) {
-                    Trace.mark("route \(phrase) -> \(AppSettings.shared.destination(for: phrase)?.absoluteString ?? "nil") question=\(Routing.isQuestion(phrase))")
-                }
-            }
+            TestRuns.start()
             // Restored tabs' shorter names, once launch has settled.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { TabTitles.refresh() }
         }
