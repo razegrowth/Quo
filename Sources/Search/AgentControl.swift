@@ -5,7 +5,7 @@ import WebKit
 // A coding agent on this Mac — Claude Code, Codex — using the window you
 // already have open, when you let it.
 //
-// Off unless switched on in Settings › About › Developer, and the switch
+// Off unless switched on in Settings › AI & Agents, and the switch
 // leaves a mark in the keychain as the bench's does (SwitchMark): a setting
 // some other program wrote is put back to off at launch. On, Search listens
 // on a Unix socket, Agent/agent.sock in its own folder: the folder 0700 and
@@ -90,7 +90,7 @@ struct AgentConsent: Equatable {
         return true
     }
 
-    /// Full control (Settings › About › Developer), as it stood when you
+    /// Full control (Settings › AI & Agents), as it stood when you
     /// answered: every tab is its to use, and the verbs of AgentFull are open.
     private(set) var full = false
 
@@ -480,7 +480,7 @@ final class AgentControl: ObservableObject {
 
     /// The one connection there is, asking or allowed.
     @Published private(set) var session: AgentSession?
-    /// Full control is switched on (Settings › About › Developer): what an
+    /// Full control is switched on (Settings › AI & Agents): what an
     /// agent allowed now gets (AgentConsent.full).
     static var fullOn: Bool { Shared.prefs.agents && Shared.prefs.agentsFull }
     private(set) var running = false
@@ -1176,7 +1176,7 @@ final class AgentControl: ObservableObject {
                 }
                 guard session.consent.full else {
                     throw AgentRefusal(code: "full_control_off", message: "Full control is off in \(Store.name)",
-                                       hint: "Only the person can turn on Settings › About › Developer › Give agents full control; then connect again.")
+                                       hint: "Only the person can turn on Settings › AI & Agents › Give agents full control; then connect again.")
                 }
                 try runFull(verb, request, session, browser, answer)
             }

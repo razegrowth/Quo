@@ -222,7 +222,7 @@ struct HistoryPanel: View {
     private func relate() {
         relating?.cancel()
         let hunt = browser.recallHunt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard hunt.count >= 3 else { return }
+        guard hunt.count >= 3, Meaning.on else { return }
         let shown = Set(traces.map(\.key))
         let rest = browser.history.everything().filter { !shown.contains($0.key) }
         relating = Task { @MainActor in

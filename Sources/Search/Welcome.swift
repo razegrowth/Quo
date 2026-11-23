@@ -1377,11 +1377,19 @@ private struct Toggled: View {
             .contentShape(Rectangle())
             .opacity(empty ? 0.45 : 1)
         }
-        .buttonStyle(PressStyle())
+        // A row with a switch isn't a button to the eye: a click anywhere on
+        // it flips the switch, and only the switch moves.
+        .buttonStyle(StillPress())
         .disabled(empty)
         .animation(Motion.settle, value: empty)
         .animation(Motion.settle, value: detail)
     }
+}
+
+/// A press that changes nothing about what's pressed: for a row whose own
+/// switch shows the answer.
+private struct StillPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// One of the reasons on the sync step.

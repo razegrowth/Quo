@@ -293,7 +293,7 @@ private struct AgentQuestion: View {
         guard let launcher = session.launcher else { return "" }
         return "Next time, if it is started by \(launcher.name), signed by \(launcher.who), and calls itself “\(session.client)”, "
             + "it is let in without asking, for 30 days at most and 7 after it was last used, seeing only its own tabs. "
-            + "Stop shows as ever, and stopping it asks again next time. Forget it in Settings › About › Developer."
+            + "Stop shows as ever, and stopping it asks again next time. Forget it in Settings › AI & Agents."
     }
 
     /// The name is the program's own word for itself; this is macOS's.

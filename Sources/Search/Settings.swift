@@ -45,7 +45,7 @@ struct SettingsPanel: View {
     @MainActor static var arcBefore: Preferences.ArcSetup?
 
     enum Page: String, CaseIterable, Identifiable {
-        case general, appearance, tabs, browsing, spaces, passwords, privacy, ai, extensions, keyboard, about
+        case general, appearance, tabs, browsing, spaces, passwords, privacy, agents, ai, extensions, keyboard, about
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -56,6 +56,7 @@ struct SettingsPanel: View {
             case .spaces: return "Spaces & Pins"
             case .passwords: return "Passwords"
             case .privacy: return "Privacy"
+            case .agents: return "AI & Agents"
             case .ai: return "AI"
             case .extensions: return "Extensions"
             case .keyboard: return "Keyboard & Mouse"
@@ -71,6 +72,7 @@ struct SettingsPanel: View {
             case .spaces: return "square.stack"
             case .passwords: return "key"
             case .privacy: return "hand.raised"
+            case .agents: return "sparkles"
             case .ai: return "sparkles"
             case .extensions: return "puzzlepiece.extension"
             case .keyboard: return "keyboard"
@@ -89,7 +91,7 @@ struct SettingsPanel: View {
         }
         /// The rail's three blocks: the browser, your data and tools, About.
         static var blocks: [[Page]] {
-            [[.general, .appearance, .tabs, .browsing, .spaces],
+            [[.general, .agents, .appearance, .tabs, .browsing, .spaces],
              [.passwords, .privacy] + (AI.shipped ? [.ai] : []) + [.extensions, .keyboard],
              [.about]]
         }
@@ -354,6 +356,9 @@ struct SettingsPanel: View {
                     ProxySettings()
                 }
             }
+        case .agents:
+            AgentsCard(prefs: prefs, roomy: roomy)
+            groups(of: page)
         case .extensions:
             ExtensionsPage(browser: browser)
         case .ai:
@@ -533,7 +538,25 @@ struct SettingsPanel: View {
         case .browsing: browsingControl(item.id)
         case .spaces: spacesControl(item.id)
         case .passwords, .privacy: keptControl(item.id)
+        case .agents: agentsControl(item.id)
         case .keyboard, .about: otherControl(item.id)
+        default: EmptyView()
+        }
+    }
+
+    /// AI & Agents: Apple Intelligence, Writing Tools, history by meaning,
+    /// and the coding agents' two switches.
+    @ViewBuilder
+    private func agentsControl(_ id: String) -> some View {
+        switch id {
+        case "tabs.shortTitles": Switch(on: $prefs.shortTitles)
+        case "links.summaries": Switch(on: $prefs.summarizesLinks)
+        case "groups.autoName": Switch(on: $prefs.namesGroups)
+        case "downloads.names": Switch(on: $prefs.namesDownloads)
+        case "pages.writingTools": Switch(on: $prefs.writingTools)
+        case "history.meaning": Switch(on: $prefs.meaningSearch)
+        case "agents": Switch(on: $prefs.agents)
+        case "agents.full": Switch(on: $prefs.agentsFull)
         default: EmptyView()
         }
     }
@@ -679,10 +702,6 @@ struct SettingsPanel: View {
     @ViewBuilder
     private func tabsControl(_ id: String) -> some View {
         switch id {
-        case "tabs.shortTitles": Switch(on: $prefs.shortTitles)
-        case "links.summaries": Switch(on: $prefs.summarizesLinks)
-        case "groups.autoName": Switch(on: $prefs.namesGroups)
-        case "downloads.names": Switch(on: $prefs.namesDownloads)
         case "tabs.newPlace":
             Picker("New tab position", selection: $prefs.newTabPlace) {
                 Text("After current").tag(NewTabPlace.next)
@@ -910,8 +929,6 @@ struct SettingsPanel: View {
         case "about.feedback": Pill("Send Feedback") { Links.writeFeedback() }
         case "about.notes": Pill("What's New…") { browser.lead(to: InternalPage(.notes)) }
         case "bench": Switch(on: $prefs.bench)
-        case "agents": Switch(on: $prefs.agents)
-        case "agents.full": Switch(on: $prefs.agentsFull)
         default: EmptyView()
         }
     }
@@ -1981,6 +1998,108 @@ private struct NotificationSites: View {
                 }
             }
         }
+    }
+}
+
+/// The top of Settings › AI & Agents: what an agent can do in Quo, and
+/// a small picture of one at work in a column of tabs, the
+/// pointer moving from tab to tab with the dot a tab wears while an agent
+/// works in it (AgentMark).
+private struct AgentsCard: View {
+    @ObservedObject var prefs: Preferences
+    let roomy: Bool
+    @Environment(\.colorScheme) private var scheme
+    @State private var step = 0
+    private let tick = Timer.publish(every: 1.8, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 24) {
+            VStack(alignment: .leading, spacing: roomy ? 11 : 9) {
+                Text("\(Store.name), run by your agents")
+                    .font(.system(size: roomy ? 22 : 20, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
+                Text("Claude Code, Codex or any agent on your Mac can use \(Store.name) the way you do: open and sort tabs, spaces and windows, work in pages with your sign-ins, run every menu command and change settings, over MCP.")
+                    .font(.system(size: roomy ? 13.5 : 12.5))
+                    .foregroundStyle(Palette.ink.opacity(0.72))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            AgentsPicture(row: [1, 3, 2][step])
+                .frame(width: 176, height: 134)
+        }
+        .padding(roomy ? 26 : 22)
+        .background {
+            ZStack {
+                Palette.wash
+                // A soft light from the picture's side, and a sheen across.
+                RadialGradient(colors: [Color.accentColor.opacity(scheme == .dark ? 0.16 : 0.10), .clear],
+                               center: .topTrailing, startRadius: 0, endRadius: 340)
+                LinearGradient(colors: [Palette.ink.opacity(scheme == .dark ? 0.05 : 0.025), .clear],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [Color.accentColor.opacity(0.35), Palette.hairline, Palette.hairline],
+                                             startPoint: .topTrailing, endPoint: .bottomLeading), lineWidth: 1)
+        )
+        .onReceive(tick) { _ in
+            guard !Motion.reduced else { return }
+            withAnimation(.spring(response: 0.7, dampingFraction: 1)) { step = (step + 1) % 3 }
+        }
+    }
+}
+
+/// A column of tabs with an agent at work: the pointer on one, that tab
+/// lit and wearing the agent's dot.
+private struct AgentsPicture: View {
+    let row: Int
+    private let widths: [CGFloat] = [88, 64, 100, 56]
+    private static let top: CGFloat = 30
+    private static let pitch: CGFloat = 25
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Palette.ground)
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { _ in Circle().fill(Palette.muted.opacity(0.3)).frame(width: 6, height: 6) }
+                }
+                .frame(height: 13, alignment: .top)
+                ForEach(0..<4, id: \.self) { i in
+                    let lit = i == row
+                    HStack(spacing: 7) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Palette.muted.opacity(lit ? 0.75 : 0.3))
+                            .frame(width: 11, height: 11)
+                            .overlay(alignment: .bottomTrailing) {
+                                if lit {
+                                    Circle().fill(Color.accentColor).frame(width: 5, height: 5)
+                                        .padding(1).background(Circle().fill(Palette.ground)).offset(x: 3, y: 3)
+                                        .transition(.opacity)
+                                }
+                            }
+                        Capsule().fill(Palette.muted.opacity(lit ? 0.55 : 0.22)).frame(width: widths[i], height: 5)
+                    }
+                    .padding(.horizontal, 7)
+                    .frame(width: 150, height: 20, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Palette.ink.opacity(lit ? 0.07 : 0)))
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.top, 10)
+            Image(systemName: "cursorarrow")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .offset(x: 26 + widths[row] - 10, y: Self.top + CGFloat(row) * Self.pitch + 4)
+        }
+        .accessibilityHidden(true)
     }
 }
 

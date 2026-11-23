@@ -352,7 +352,7 @@ final class MCPServer {
         let path = AgentControl.socket.path
         if FileManager.default.fileExists(atPath: path) { return path }
         let off = MCPRefusal(code: "not_listening", message: "\(Store.name) isn't open for coding agents",
-                             hint: "Ask the person to turn on Settings › About › Developer › “Let coding agents use \(Store.name)”.")
+                             hint: "Ask the person to turn on Settings › AI & Agents › “Let coding agents use \(Store.name)”.")
         guard !Store.testing, Store.settings.bool(forKey: "agents") else { throw off }
         let running = !NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").isEmpty
         if !running {
@@ -417,7 +417,7 @@ final class MCPServer {
         let name = Store.name
         return """
         This is the person's own \(name) browser on their Mac, used with their permission: the first tool call asks \
-        them in \(name)'s window and waits. If they turned on full control (Settings › About › Developer), you can use \
+        them in \(name)'s window and waits. If they turned on full control (Settings › AI & Agents), you can use \
         the whole browser as they do: get_state shows every window, space, group and tab; list_commands and \
         run_command reach every menu command; tab_action, space_action, group_action and window_action rearrange \
         things; bookmarks, history, downloads and settings read and change those; run_script runs JavaScript in a \

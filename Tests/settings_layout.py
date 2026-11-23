@@ -86,7 +86,7 @@ def case_reachable(t):
     # Fifty when this was written; Settings has grown to a hundred and more
     # since. Still a check that the sections are neither empty nor doubled.
     t.ok("a hundred-odd rows in the sections", 45 <= len(shown) <= 140, len(shown))
-    t.ok("ten sections", len(every["pages"]) == 10, every["pages"])
+    t.ok("eleven sections, AI & Agents among them", len(every["pages"]) == 11 and "agents" in every["pages"], every["pages"])
     # Old addresses land in the new sections.
     sv.cmd({"do": "ui", "show": "search://settings/shortcuts"}); time.sleep(0.6)
     t.ok("search://settings/shortcuts opens Keyboard & Mouse", settings()["settingsPage"] == "keyboard",

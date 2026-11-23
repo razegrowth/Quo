@@ -139,7 +139,7 @@ enum Web {
         NativePiP.allow(config.preferences)
         // Apple's Writing Tools in a page's text boxes, rewriting in place
         // as in Safari and Mail, on a Mac with Apple Intelligence.
-        if #available(macOS 15.0, *) { config.writingToolsBehavior = .complete }
+        if #available(macOS 15.0, *) { config.writingToolsBehavior = (Store.settings.object(forKey: "pages.writingTools") as? Bool ?? true) ? .complete : .none }
         return config
     }
 
@@ -2563,18 +2563,6 @@ final class PageView: WKWebView {
                 ?? 0
             menu.insertItem(go, at: at)
         }
-        // The bench's linkmenu: the item it names is chosen as the menu
-        // comes up, the way a hand would choose it, and the menu goes.
-        if Store.testing, let title = PageView.picking {
-            PageView.picking = nil
-            PageView.lastMenu = menu.items.filter { !$0.isSeparatorItem }.map { item in
-                item.submenu.map { sub in item.title + " › " + sub.items.filter { !$0.isSeparatorItem }.map(\.title).joined(separator: " | ") } ?? item.title
-            }
-            RunLoop.main.perform(inModes: [.eventTracking, .default]) {
-                if let index = menu.items.firstIndex(where: { $0.title == title }) { menu.performActionForItem(at: index) }
-                menu.cancelTracking()
-            }
-        }
         // Translate Page, off unless switched on in Settings (Translate.swift).
         if let item = translateItem() {
             menu.addItem(.separator())
@@ -2594,7 +2582,7 @@ final class PageView: WKWebView {
         // Apple's Writing Tools for the text box under the click, first in
         // its menu as in Safari and Mail: WebKit leaves them out of an app's
         // own menu. Only in something you can type in, and only once.
-        if #available(macOS 15.2, *), OnDevice.available,
+        if #available(macOS 15.2, *), OnDevice.available, Shared.prefs.writingTools,
            menu.items.contains(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierPaste" }),
            !menu.items.contains(where: { $0.action == #selector(NSResponder.showWritingTools(_:)) || $0.title == "Writing Tools" }) {
             let tools = NSMenuItem.writingToolsItems
@@ -2609,6 +2597,19 @@ final class PageView: WKWebView {
             inspectItem = (item.target, item.action)
             item.target = self
             item.action = #selector(inspectFromPage(_:))
+        }
+        // The bench's linkmenu: the item it names is chosen as the menu
+        // comes up, the way a hand would choose it, and the menu goes. Last,
+        // so it sees the menu as it is shown.
+        if Store.testing, let title = PageView.picking {
+            PageView.picking = nil
+            PageView.lastMenu = menu.items.filter { !$0.isSeparatorItem }.map { item in
+                item.submenu.map { sub in item.title + " › " + sub.items.filter { !$0.isSeparatorItem }.map(\.title).joined(separator: " | ") } ?? item.title
+            }
+            RunLoop.main.perform(inModes: [.eventTracking, .default]) {
+                if let index = menu.items.firstIndex(where: { $0.title == title }) { menu.performActionForItem(at: index) }
+                menu.cancelTracking()
+            }
         }
     }
 

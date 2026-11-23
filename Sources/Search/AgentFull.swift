@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-// Full control: an agent you allowed, with Settings › About › Developer ›
+// Full control: an agent you allowed, with Settings › AI & Agents ›
 // Give agents full control on, uses the whole browser as you would. Every
 // window, space, group, pin and tab; every menu command (Shortcuts.swift's
 // Command); bookmarks, history, downloads and settings; and pages — any

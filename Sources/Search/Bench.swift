@@ -4991,6 +4991,9 @@ final class Bench {
             if let mode = (request["pages120"] as? String).flatMap(FastPages.init) { browser.prefs.fastPages = mode }
             if let on = request["dusk"] as? Bool { browser.prefs.darkensPages = on }
             if let on = request["captures"] as? Bool { browser.prefs.capturesPages = on }
+            // Settings › AI & Agents: Writing Tools and history by meaning.
+            if let on = request["writingTools"] as? Bool { browser.prefs.writingTools = on }
+            if let on = request["meaning"] as? Bool { browser.prefs.meaningSearch = on }
             if let zoom = request["pageZoom"] as? Double { browser.prefs.pageZoom = zoom }
             if let on = request["sidebar"] as? Bool { browser.prefs.sidebar = on }
             // Swipe between pages, standing in for the Mac's own setting.

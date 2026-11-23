@@ -201,5 +201,9 @@ enum AgentSettings {
         .bool("launcher.on", \.launcher),
         .bool("launcher.little", \.launcherLittle),
         .bool("newtab.recent", \.recentInNewTab),
+        .bool(Preferences.writingToolsKey, \.writingTools),
+        .bool(Preferences.meaningKey, \.meaningSearch),
+        .bool(GroupNames.key, \.namesGroups),
+        .bool(DownloadNames.key, \.namesDownloads),
     ]
 }

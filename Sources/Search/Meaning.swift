@@ -91,11 +91,15 @@ enum Meaning {
         }
     }
 
+    /// Settings › AI & Agents › Find history by what it was about.
+    nonisolated(unsafe) static var on = true
+
     /// The traces closest in meaning to `query`, best first, those already
-    /// listed left out. Worked out away from the window's thread.
+    /// listed left out. Worked out away from the window's thread. None with
+    /// the switch off.
     static func related(to query: String, among traces: [History.Trace], limit: Int = 30) async -> [History.Trace] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 3 else { return [] }
+        guard on, query.count >= 3 else { return [] }
         let candidates = Array(traces.prefix(4000))
         return await Task.detached(priority: .userInitiated) {
             let texts = candidates.map { trace -> String in

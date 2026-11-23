@@ -76,7 +76,9 @@ enum SettingsIndex {
         .init(id: "memory", page: .tabs, title: "Memory", icon: "moon.zzz"),
         .init(id: "tabbar", page: .tabs, title: "In the tab bar", icon: "number"),
         .init(id: "tabwindows", page: .tabs, title: "Windows", icon: "macwindow.on.rectangle"),
-        .init(id: "intelligence", page: .tabs, title: "Apple Intelligence", icon: "apple.intelligence"),
+        .init(id: "agents", page: .agents, title: "Agents", icon: "cursorarrow.rays"),
+        .init(id: "intelligence", page: .agents, title: "Apple Intelligence", icon: "apple.intelligence"),
+        .init(id: "macwords", page: .agents, title: "Writing and finding", icon: "text.magnifyingglass"),
 
         .init(id: "search", page: .browsing, title: "Searching", icon: "magnifyingglass"),
         .init(id: "links", page: .browsing, title: "Links", icon: "link"),
@@ -149,7 +151,7 @@ enum SettingsIndex {
         // Keyboard & Mouse
         "links.peek.stays", "links.optionSplit", "autoscroll", "scroll.smoothWheel", "pages.bounce", "swipe.history",
         // About
-        "bench", "agents", "agents.full",
+        "bench",
     ]
 
     // MARK: - rows
@@ -378,6 +380,14 @@ enum SettingsIndex {
               title: "Suggest names for downloads", detail: "A file named \"document(3).pdf\" gets a name that says what it is, a click away",
               more: "Read on this Mac, a PDF's text or a picture's words, and named by Apple Intelligence. The download's card offers the name; nothing is renamed unless you click.",
               keys: [DownloadNames.key], words: ["rename", "file name", "downloads", "tidy", "apple intelligence", "ai"]),
+        .init(id: "pages.writingTools", group: "macwords", icon: "pencil.and.outline",
+              title: "Writing Tools in text boxes", detail: "Proofread, Rewrite and the rest, first when you right-click something you type in",
+              more: "Apple's own Writing Tools, as in Safari and Mail, rewriting in place. Off, pages you open from then on don't offer them.",
+              keys: [Preferences.writingToolsKey], words: ["writing tools", "proofread", "rewrite", "grammar", "apple intelligence", "ai"]),
+        .init(id: "history.meaning", group: "macwords", icon: "text.magnifyingglass",
+              title: "Find history by what it was about", detail: "“japan trip” finds the Tokyo pages you looked at, under the ones that match",
+              more: "Matched on this Mac by macOS's own word meanings, in a few milliseconds, with nothing sent anywhere. It works on any Mac, Apple Intelligence or not.",
+              keys: [Preferences.meaningKey], words: ["history", "search", "meaning", "related", "semantic", "find"]),
         .init(id: "note.tidy", group: "intelligence", icon: "rectangle.3.group",
               title: "Tidy Tabs", detail: "In the View menu and the space's menu: your loose tabs, sorted into named groups",
               words: ["tidy", "organize", "organise", "sort tabs", "group tabs", "arc max", "apple intelligence", "ai"], kind: .note),
@@ -623,12 +633,12 @@ enum SettingsIndex {
               title: "Let a script drive \(Store.name)", detail: "A local socket for testing; its tabs never take over",
               more: "Its tabs open beside yours with a flask on them. See ./bench.",
               keys: ["bench"], words: ["automation", "script", "developer"]),
-        .init(id: "agents", group: "developer", icon: "cursorarrow.rays",
+        .init(id: "agents", group: "agents", icon: "cursorarrow.rays",
               title: "Let coding agents use \(Store.name)", detail: "Claude Code, Codex or another agent on this Mac can ask to use \(Store.name) over MCP",
               more: "Each time one connects, the window asks you first, unless you ticked “Always allow” for it — offered only for Claude Code's own `claude`, signed by Anthropic; kept 30 days at most and 7 after its last use, and asked again after you press Stop; forget it here. Nothing is drawn over the page: the tab it works in wears a small dot, and Stop is on the column's foot (or the tab strip) and in File › Stop Agent (⌃⌥⌘.) until it goes. Without full control it works in tabs of its own; your tabs it can read only if you tick “Let it see my open tabs”, and never uses. It never sees passwords, card numbers, one-time codes or private tabs. It connects through a file on this Mac only, never the network, with \(Store.name)'s own MCP server: Add to Claude Code below, or copy the command for another agent.",
               keys: ["agents"],
               words: ["agent", "ai", "claude", "claude code", "codex", "mcp", "automation", "computer use", "developer"]),
-        .init(id: "agents.full", group: "developer", icon: "macwindow.and.cursorarrow",
+        .init(id: "agents.full", group: "agents", icon: "macwindow.and.cursorarrow",
               title: "Give agents full control", detail: "Every tab, window, space, bookmark, setting and menu command, as you use them",
               more: "An agent you allow can then do anything you can do in \(Store.name): use your tabs with your sign-ins, run scripts in pages, open, close, move, pin, group and split tabs, make and change spaces and windows, read and change bookmarks, history and settings, download files and run any menu command. It still never sees saved passwords, card numbers or one-time codes, can't change this setting or the agents you always allow, and asks you before clearing your history or data or closing several tabs at once. Turning it on or off forgets the agents you always allowed.",
               keys: [Preferences.agentsFullKey],
@@ -689,7 +699,7 @@ enum SettingsIndex {
         case "privacy.clickIDs": return ClickIDs.possible
         case "privacy.gpc": return PrivacySignal.possible
         case "privacy.telemetry": return Telemetry.configured
-        case "tabs.shortTitles", "note.tidy", "links.summaries", "groups.autoName", "downloads.names": return OnDevice.available
+        case "tabs.shortTitles", "note.tidy", "links.summaries", "groups.autoName", "downloads.names", "pages.writingTools": return OnDevice.available
         default: return true
         }
     }

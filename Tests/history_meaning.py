@@ -78,6 +78,10 @@ def main():
              len(tokyo["literal"]) == 3 and not any("Tokyo" in x for x in tokyo["related"]), tokyo)
         t.ok("it's quick", max(x["ms"] for x in (trip, loan, plant, food)) < 1500, [x["ms"] for x in (trip, loan, plant, food)])
         t.ok("two letters aren't searched by meaning", look("ja")["related"] == [])
+        sv.cmd({"do": "ui", "meaning": False})
+        t.ok("with its switch off, nothing is found by meaning", look("japan trip")["related"] == [])
+        sv.cmd({"do": "ui", "meaning": True})
+        t.ok("and back on, it is again", look("japan trip")["related"] != [])
     finally:
         t.done()
         sv.finish()

@@ -11,7 +11,7 @@ import FoundationModels
 // PDF's own text, a picture's words by Vision) and Apple's model suggests a
 // name that says what it is, "Acme invoice March 2026.pdf". The download's
 // card offers it, one click to rename; nothing is ever renamed on its own.
-// Settings › Tabs › Suggest names for downloads.
+// Settings › AI & Agents › Suggest names for downloads.
 enum DownloadNames {
     static let key = "downloads.names"
     nonisolated(unsafe) static var on = true

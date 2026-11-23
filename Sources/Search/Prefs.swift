@@ -528,6 +528,22 @@ final class Preferences: ObservableObject {
             LinkPreview.summarizes = summarizesLinks
         }
     }
+    /// Apple's Writing Tools in a page's text boxes: first in the menu, and
+    /// rewriting in place (Tab.swift). On unless turned off; off, pages
+    /// opened from then on don't offer them at all.
+    @Published var writingTools: Bool {
+        didSet { store.set(writingTools, forKey: Self.writingToolsKey) }
+    }
+    static let writingToolsKey = "pages.writingTools"
+    /// History also lists pages close in meaning to what you look for
+    /// (Meaning.swift, Recall.swift). On unless turned off.
+    @Published var meaningSearch: Bool {
+        didSet {
+            store.set(meaningSearch, forKey: Self.meaningKey)
+            Meaning.on = meaningSearch
+        }
+    }
+    static let meaningKey = "history.meaning"
     /// A group you make named from its tabs by Apple's model (GroupNames,
     /// Intelligence.swift). On unless turned off.
     @Published var namesGroups: Bool {
@@ -1218,6 +1234,10 @@ final class Preferences: ObservableObject {
         let names = store.object(forKey: GroupNames.key) as? Bool ?? true
         namesGroups = names
         GroupNames.on = names
+        writingTools = store.object(forKey: Self.writingToolsKey) as? Bool ?? true
+        let meaning = store.object(forKey: Self.meaningKey) as? Bool ?? true
+        meaningSearch = meaning
+        Meaning.on = meaning
         let previews = store.object(forKey: LinkPreview.key) as? Bool ?? true
         previewsLinks = previews
         LinkPreview.on = previews

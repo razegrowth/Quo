@@ -11,7 +11,7 @@ import FoundationModels
 // it is good at, and nothing it reads leaves the Mac.
 //
 //   - a shorter name for a tab whose page calls itself something long
-//     (TabTitles, Settings › Tabs);
+//     (TabTitles, Settings › AI & Agents);
 //   - Tidy Tabs: a space's loose tabs sorted into named groups (Browser
 //     .tidyTabs, the View menu and the space's menu);
 //   - what a link says, before you open it: hold Shift over it (LinkPreview).
@@ -148,7 +148,7 @@ struct Sorted {
 
 /// A group you make named from its tabs as you make it, "Tokyo trip" where
 /// it would have been "Group 3", and named again as tabs come and go, until
-/// you give it a name of your own (Settings › Tabs › Name new groups).
+/// you give it a name of your own (Settings › AI & Agents › Name new groups).
 enum GroupNames {
     static let key = "groups.autoName"
     nonisolated(unsafe) static var on = true
@@ -196,7 +196,7 @@ extension Browser {
 
 // MARK: - shorter tab names
 
-/// Settings › Tabs › Shorter tab names: a long page title, as its tab shows
+/// Settings › AI & Agents › Shorter tab names: a long page title, as its tab shows
 /// it, in a few words of Apple's model's choosing ("Q3 Growth Plan" for
 /// "Untitled document - Google Docs"). The page's own title stays everywhere
 /// else (the window, bookmarks, history, a tab's tooltip), and a name you

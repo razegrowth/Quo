@@ -45,6 +45,17 @@ def main():
         x, y = sv.ev(page, js)
         menu = sv.cmd({"do": "linkmenu", "id": page, "x": x, "y": y, "pick": "nothing"}).get("menu", [])
         t.ok("words you can't edit don't get them", not any(m.startswith("Writing Tools") for m in menu), menu[:4])
+
+        # Its switch off: a page opened from then on offers none.
+        sv.cmd({"do": "ui", "writingTools": False})
+        off = sv.page("words")
+        js = """(() => { document.body.innerHTML = '<textarea id=t style="width:500px;height:200px;margin:40px">some words</textarea>';
+          const t = document.getElementById('t'); t.focus(); t.select(); const r = t.getBoundingClientRect(); return [r.left + 50, r.top + 30]; })()"""
+        x, y = sv.ev(off, js)
+        menu = sv.cmd({"do": "linkmenu", "id": off, "x": x, "y": y, "pick": "nothing"}).get("menu", [])
+        t.ok("with its switch off, a text box's menu has none", not any(m.startswith("Writing Tools") for m in menu), menu[:4])
+        t.ok("and the page doesn't rewrite in place", sv.cmd({"do": "writingtools", "id": off})["behavior"] != 1)
+        sv.cmd({"do": "ui", "writingTools": True})
     finally:
         t.done()
         sv.finish()
