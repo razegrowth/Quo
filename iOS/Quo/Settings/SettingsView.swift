@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 import WebKit
 
 /// App settings: what Quo does everywhere.
@@ -51,7 +52,16 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: $settings.autoKeyboard) { label("keyboard", "Auto-open keyboard") }
+                    Toggle(isOn: $settings.autoKeyboard) { label("keyboard", "Auto-open keyboard") }.tint(Q.on)
+                    Toggle(isOn: $settings.playsInBackground) { label("play.circle", "Keep playing when you leave Quo") }.tint(Q.on)
+                    if IncognitoLock.available {
+                        Toggle(isOn: $settings.lockIncognito) { label("lock", "Lock Incognito tabs with \(IncognitoLock.method)") }.tint(Q.on)
+                            .onChange(of: settings.lockIncognito) { _, on in
+                                // Switched off while locked: only once Face ID says it's you.
+                                guard !on, IncognitoLock.shared.locked else { return }
+                                Task { if !(await IncognitoLock.shared.unlock()) { settings.lockIncognito = true } }
+                            }
+                    }
                     Picker(selection: $settings.archiveAfter) {
                         ForEach(ArchiveAfter.allCases) { Text($0.title).tag($0) }
                     } label: { label("archivebox", "Archive inactive tabs") }
@@ -77,7 +87,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: $settings.sharesUsage) { label("chart.bar", "Help count how many people use Quo") }
+                    Toggle(isOn: $settings.sharesUsage) { label("chart.bar", "Help count how many people use Quo") }.tint(Q.on)
                 } footer: {
                     Text("Once a day: the version, your iPhone\u{2019}s model and iOS. Never what you browse.")
                 }
@@ -100,12 +110,17 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.fontWeight(.semibold) } }
             .confirmationDialog("Clear browsing data", isPresented: $clearing, titleVisibility: .visible) {
-                Button("Clear History") { History.shared.clear() }
-                Button("Clear Cookies and Site Data", role: .destructive) { Cleaner.siteData() }
-                Button("Clear Everything", role: .destructive) { Cleaner.everything() }
+                ForEach(Cleaner.Span.allCases) { span in
+                    Button(span.button, role: span == .everything ? .destructive : nil) {
+                        Cleaner.clear(span)
+                        Haptics.done()
+                        Browser.shared.say(span.done)
+                    }
+                    .accessibilityIdentifier("clear.\(span.rawValue)")
+                }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Clearing cookies signs you out of sites. Your Mac\u{2019}s spaces, pins and bookmarks stay.")
+                Text("History, closed tabs and site data from then: those sites sign you out. Everything also closes your tabs.")
             }
             .navigationDestination(isPresented: $showDownloads) { DownloadsView() }
             .navigationDestination(isPresented: $showArchive) { ArchiveView() }
@@ -145,17 +160,45 @@ struct SettingsView: View {
 }
 
 enum Cleaner {
-    @MainActor static func siteData() {
-        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
-        HTTPCookieStorage.shared.removeCookies(since: .distantPast)
+    /// How far back Clear Browsing Data goes.
+    enum Span: String, CaseIterable, Identifiable {
+        case hour, day, everything
+        var id: String { rawValue }
+        var button: String {
+            switch self {
+            case .hour: return "Clear the Last Hour"
+            case .day: return "Clear the Last Day"
+            case .everything: return "Clear Everything"
+            }
+        }
+        var done: String {
+            switch self {
+            case .hour: return "Cleared the last hour"
+            case .day: return "Cleared the last day"
+            case .everything: return "Cleared everything"
+            }
+        }
+        func since(_ now: Date = Date()) -> Date {
+            switch self {
+            case .hour: return now.addingTimeInterval(-3600)
+            case .day: return now.addingTimeInterval(-86_400)
+            case .everything: return .distantPast
+            }
+        }
     }
 
-    @MainActor static func everything() {
-        siteData()
-        History.shared.clear()
+    /// History, recently closed tabs, cookies and site data from the span;
+    /// for everything, the tabs, the archive and sites' icons too.
+    @MainActor static func clear(_ span: Span) {
+        let since = span.since()
+        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: since) {}
+        HTTPCookieStorage.shared.removeCookies(since: since)
+        History.shared.clear(since: since)
+        Tabs.shared.forgetClosed(since: since)
+        guard span == .everything else { return }
         Favicons.shared.forget()
-        Tabs.shared.closeAll(incognito: false)
-        Tabs.shared.closeAll(incognito: true)
+        Tabs.shared.closeAll(incognito: false, remember: false)
+        Tabs.shared.closeAll(incognito: true, remember: false)
         Tabs.shared.clearArchive()
     }
 }
@@ -181,7 +224,7 @@ struct SyncView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Sync with Quo on your Mac", isOn: $sync.on)
+                Toggle("Sync with Quo on your Mac", isOn: $sync.on).tint(Q.on)
             } footer: {
                 Text("Your Mac\u{2019}s spaces, pins and bookmarks, through your own iCloud. End to end encrypted with a key in your iCloud Keychain: nobody else can read them, Apple and us included. There\u{2019}s no account to make.")
             }
@@ -202,9 +245,15 @@ struct SyncView: View {
                     .disabled(sync.running || !sync.available)
                 }
                 Section {
-                    Text("Comes from your Mac: spaces, their pins, your bookmarks, and the search engine you use there.")
+                    Toggle("Sync history", isOn: $sync.syncsHistory).tint(Q.on)
+                        .accessibilityIdentifier("sync.history")
+                } footer: {
+                    Text("The pages you\u{2019}ve visited, both ways, so they come up as you type on either. What you clear here is cleared there too. Never Incognito.")
+                }
+                Section {
+                    Text("Comes from your Mac: spaces, their pins, your bookmarks, the search engine you use there, its open tabs\(sync.syncsHistory ? " and its history" : "").")
                         .font(Q.footnote).foregroundStyle(Q.muted)
-                    Text("Goes to your Mac: what you pin here. Your iPhone\u{2019}s open tabs, history and passwords stay here.")
+                    Text("Goes to your Mac: what you pin here, your open tabs\(sync.syncsHistory ? " and your history" : ""). Never an Incognito tab, and never passwords.")
                         .font(Q.footnote).foregroundStyle(Q.muted)
                 } header: { Text("What syncs") }
                 Section {
@@ -272,6 +321,7 @@ struct GlobalSiteSettingsView: View {
         })) {
             Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(Q.muted) }
         }
+        .tint(Q.on)
     }
 }
 
@@ -305,7 +355,7 @@ struct EngineView: View {
                 }
             }
             Section {
-                Toggle("Suggestions as you type", isOn: $settings.engineSuggests)
+                Toggle("Suggestions as you type", isOn: $settings.engineSuggests).tint(Q.on)
             } footer: {
                 Text("What you type goes to the search engine to suggest searches. Never in Incognito.")
             }
@@ -452,32 +502,177 @@ struct LicencesView: View {
 struct DownloadsView: View {
     @ObservedObject private var downloads = Downloads.shared
     @State private var previewing: URL?
+    @State private var clearing = false
 
     var body: some View {
         List {
-            if downloads.items.isEmpty {
-                Text("Nothing downloaded yet. Downloads also appear in the Files app, under On My iPhone \u{203A} Quo.")
-                    .font(Q.footnote).foregroundStyle(Q.muted)
-            }
-            ForEach(downloads.items) { item in
-                HStack(spacing: 12) {
-                    Image(systemName: item.failed ? "exclamationmark.circle" : "doc").foregroundStyle(Q.muted)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name).lineLimit(1).truncationMode(.middle)
-                        if !item.done && !item.failed { ProgressView().controlSize(.mini) }
-                        if item.failed { Text("Didn\u{2019}t finish").font(Q.footnote).foregroundStyle(Q.muted) }
+            Section {
+                if downloads.items.isEmpty {
+                    Text("Nothing downloaded yet. Downloads are kept in the Files app too, under On My iPhone \u{203A} Quo.")
+                        .font(Q.footnote).foregroundStyle(Q.muted)
+                }
+                ForEach(downloads.items) { item in
+                    DownloadRow(item: item) {
+                        if item.done, let file = item.file { previewing = file }
+                        else if item.failed { downloads.retry(item) }
                     }
-                    Spacer()
-                    if item.done, let file = item.file {
-                        ShareLink(item: file) { Image(systemName: "square.and.arrow.up") }
+                    .swipeActions {
+                        Button(item.running ? "Cancel" : "Delete", role: .destructive) { downloads.remove(item) }
+                    }
+                    .contextMenu {
+                        if item.done, let file = item.file {
+                            Button { previewing = file } label: { Label("Open", systemImage: "eye") }
+                            ShareLink(item: file) { Label("Share\u{2026}", systemImage: "square.and.arrow.up") }
+                        }
+                        if item.failed, item.source != nil {
+                            Button { downloads.retry(item) } label: { Label("Try Again", systemImage: "arrow.clockwise") }
+                        }
+                        if let source = item.source {
+                            Button { UIPasteboard.general.url = source } label: { Label("Copy Address", systemImage: "link") }
+                        }
+                        Button(role: .destructive) { downloads.remove(item) } label: {
+                            Label(item.running ? "Cancel" : "Delete", systemImage: item.running ? "xmark" : "trash")
+                        }
                     }
                 }
-                .swipeActions { Button("Delete", role: .destructive) { downloads.remove(item) } }
+            } footer: {
+                if !downloads.items.isEmpty {
+                    Text("Also in the Files app, under On My iPhone \u{203A} Quo \u{203A} Downloads.")
+                }
+            }
+            if downloads.items.contains(where: { !$0.running }) {
+                Section {
+                    Button("Clear Downloads", role: .destructive) { clearing = true }
+                        .accessibilityIdentifier("downloads.clear")
+                }
             }
         }
         .tint(Q.ink)
         .navigationTitle("Downloads")
         .navigationBarTitleDisplayMode(.inline)
+        .quickLookPreview($previewing, in: downloads.finishedFiles)
+        .confirmationDialog("The files are deleted from this iPhone.", isPresented: $clearing, titleVisibility: .visible) {
+            Button("Delete Downloads", role: .destructive) { downloads.clear() }
+        }
+    }
+}
+
+/// One download: what kind of file, its name, and how far it's got.
+private struct DownloadRow: View {
+    let item: Downloads.Item
+    let tap: () -> Void
+
+    var body: some View {
+        Button(action: tap) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(item.failed ? Q.caution : Q.muted)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(Q.body)
+                        .foregroundStyle(Q.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if item.running {
+                        if let fraction = item.fraction {
+                            ProgressView(value: fraction).tint(Q.ink)
+                        } else {
+                            ProgressView(value: 0).progressViewStyle(.linear).tint(Q.ink).opacity(0.4)
+                        }
+                    }
+                    Text(item.failed && item.source != nil ? "Didn\u{2019}t finish \u{00B7} Tap to try again" : item.detail)
+                        .font(Q.footnote)
+                        .foregroundStyle(Q.muted)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("download.\(item.name)")
+    }
+
+    private var symbol: String {
+        if item.failed { return "exclamationmark.circle" }
+        if item.running { return "arrow.down.circle" }
+        switch (item.name as NSString).pathExtension.lowercased() {
+        case "pdf": return "doc.richtext"
+        case "jpg", "jpeg", "png", "heic", "gif", "webp", "svg", "tif", "tiff": return "photo"
+        case "mp4", "mov", "m4v", "webm": return "film"
+        case "mp3", "m4a", "wav", "aac", "flac": return "waveform"
+        case "zip", "gz", "tar", "7z", "rar": return "doc.zipper"
+        case "txt", "md", "csv", "json", "rtf": return "doc.plaintext"
+        default: return "doc"
+        }
+    }
+}
+
+/// Tabs closed lately, the last first, a tap from coming back with their
+/// history. Never an incognito one.
+struct ClosedTabsView: View {
+    @ObservedObject private var tabs = Tabs.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                if tabs.recentlyClosed.isEmpty {
+                    Text("Tabs you close come here, a tap from coming back. Hold + to get to them.")
+                        .font(Q.footnote).foregroundStyle(Q.muted)
+                }
+                ForEach(tabs.recentlyClosed) { item in
+                    Button {
+                        tabs.reopen(item)
+                        Browser.shared.sheet = nil
+                        Browser.shared.panel = .none
+                    } label: {
+                        HStack(spacing: 12) {
+                            SiteMark(host: URL(string: item.url)?.host(), size: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title).foregroundStyle(Q.ink).lineLimit(1)
+                                Text(item.closedAt.formatted(.relative(presentation: .named)))
+                                    .font(Q.footnote).foregroundStyle(Q.muted)
+                            }
+                        }
+                    }
+                    .swipeActions { Button("Remove", role: .destructive) { tabs.forgetClosed(item) } }
+                }
+            }
+        }
+        .tint(Q.ink)
+        .navigationTitle("Recently Closed")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.fontWeight(.semibold) } }
+    }
+}
+
+/// Holding +: the last few tabs closed, and the whole list.
+struct ClosedMenu: View {
+    @ObservedObject private var tabs = Tabs.shared
+
+    var body: some View {
+        let items = Array(tabs.recentlyClosed.prefix(8))
+        if items.isEmpty {
+            Text("No recently closed tabs")
+        } else {
+            Section("Recently Closed") {
+                ForEach(items) { item in
+                    Button {
+                        tabs.reopen(item)
+                        Browser.shared.panel = .none
+                    } label: {
+                        Label(item.title, systemImage: "arrow.uturn.backward")
+                    }
+                }
+            }
+            Button { Browser.shared.sheet = .closed } label: {
+                Label("Show All Recently Closed", systemImage: "clock.arrow.circlepath")
+            }
+        }
     }
 }
 

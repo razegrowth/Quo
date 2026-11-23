@@ -593,4 +593,73 @@ final class SyncTests: XCTestCase {
                        ["https://a.example/", "https://b.example/", "https://c.example/"])
         XCTAssertEqual(device.tabs(in: "work", known: ["home", "work"]).count, 0)
     }
+
+    // MARK: - sending a page
+
+    func testASentPageGoesToItsDeviceOnlyAndOpensOnce() throws {
+        let page = SentTab(id: "s1", url: "https://a.example/read", title: "Read", to: "iphone-a", at: 7000)
+        let other = SentTab(id: "s2", url: "https://b.example/", title: "B", to: "mac-b", at: 7010)
+        let file = SyncTabs.file(device: "mac-a", name: "Studio", phone: false, scope: tabsScope,
+                                 tabs: [], spaces: [], sent: [page, other], now: 7020)
+        let back = try XCTUnwrap(SyncMerge.decode(XCTUnwrap(SyncMerge.encode(file)), scope: tabsScope))
+        XCTAssertEqual(SyncTabs.read(back)?.sent, [other, page])
+
+        let arrived = SyncTabs.arrived([back], scope: tabsScope, device: "iphone-a", opened: [], now: 7030)
+        XCTAssertEqual(arrived.map(\.tab.id), ["s1"])
+        XCTAssertEqual(arrived.first?.fromName, "Studio")
+        XCTAssertTrue(SyncTabs.arrived([back], scope: tabsScope, device: "iphone-a", opened: ["s1"], now: 7030).isEmpty)
+        // Never its own, never another profile's.
+        XCTAssertTrue(SyncTabs.arrived([back], scope: tabsScope, device: "mac-a", opened: [], now: 7030).isEmpty)
+        XCTAssertTrue(SyncTabs.arrived([back], scope: "tabs-profile-other", device: "iphone-a", opened: [], now: 7030).isEmpty)
+    }
+
+    func testASentPageIsLetGoAfterAWhileAndOnlyWebPagesGo() {
+        let now = 1_000_000.0
+        let fresh = SentTab(id: "a", url: "https://a.example/", title: "", to: "x", at: now - 60)
+        let old = SentTab(id: "b", url: "https://b.example/", title: "", to: "x", at: now - SyncTabs.keepSent - 1)
+        let notWeb = SentTab(id: "c", url: "file:///etc/hosts", title: "", to: "x", at: now)
+        XCTAssertEqual(SyncTabs.tidySent([fresh, old, notWeb, fresh], now: now), [fresh])
+        let many = (0..<50).map { SentTab(id: "\($0)", url: "https://a.example/\($0)", title: "", to: "x", at: now - Double($0)) }
+        XCTAssertEqual(SyncTabs.tidySent(many, now: now).count, SyncTabs.mostSent)
+        XCTAssertEqual(SyncTabs.tidySent(many, now: now).first?.id, "0")
+        // No pages sent: no item, as before sending was there.
+        let plain = SyncTabs.file(device: "d", name: "n", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now)
+        XCTAssertNil(plain.items[SyncTabs.sentKey])
+    }
+
+    func testAPageJustSentIsWrittenAtOnceEvenRightAfterTheLastWrite() {
+        let tabs = [tab("https://a.example/")]
+        let written = SyncTabs.file(device: "d", name: "iPhone", phone: true, scope: tabsScope, tabs: tabs, spaces: [], now: 9000)
+        // Five seconds later the tabs alone would wait (SyncTabs.every)...
+        XCTAssertFalse(SyncTabs.due(written, tabs: tabs + [tab("https://b.example/")], spaces: [], name: "iPhone",
+                                    now: 9005, going: false))
+        // ...but a page sent goes now.
+        let page = SyncTabs.send("https://c.example/", title: "C", to: "mac", now: 9005)
+        XCTAssertTrue(SyncTabs.due(written, tabs: tabs, spaces: [], name: "iPhone", sent: [page], now: 9005, going: false))
+        let after = SyncTabs.file(device: "d", name: "iPhone", phone: true, scope: tabsScope, tabs: tabs, spaces: [], sent: [page], now: 9005)
+        XCTAssertFalse(SyncTabs.due(after, tabs: tabs, spaces: [], name: "iPhone", sent: [page], now: 9006, going: false))
+    }
+
+    func testEveryDeviceHeardFromLatelyCanBeSentToEvenWithNothingOpen() {
+        let now = 50_000_000.0
+        let empty = SyncTabs.file(device: "iphone", name: "Edin\u{2019}s iPhone", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now - 10)
+        let quiet = SyncTabs.file(device: "old", name: "Old Mac", phone: false, scope: tabsScope, tabs: [], spaces: [], now: now - SyncTabs.stale - 1)
+        let mine = SyncTabs.file(device: "me", name: "Studio", phone: false, scope: tabsScope, tabs: [], spaces: [], now: now)
+        let targets = SyncTabs.targets([empty, quiet, mine], scope: tabsScope, device: "me", now: now)
+        XCTAssertEqual(targets, [TabTarget(device: "iphone", name: "Edin\u{2019}s iPhone", phone: true)])
+    }
+
+    func testTheSentBookKeepsAnOutboxPerScopeAndWhatWasOpened() {
+        let defaults = UserDefaults(suiteName: "sentbook-\(UUID().uuidString)")!
+        let book = SentBook(defaults: defaults)
+        let page = SyncTabs.send("https://a.example/", title: "A", to: "x", now: 100)
+        book.add(page, scope: "tabs-p", now: 100)
+        XCTAssertEqual(book.outbox("tabs-p", now: 101), [page])
+        XCTAssertTrue(book.outbox("tabs-q", now: 101).isEmpty)
+        XCTAssertTrue(book.outbox("tabs-p", now: 100 + SyncTabs.keepSent + 1).isEmpty)
+        book.markOpened(["s1"], now: 100)
+        XCTAssertEqual(book.opened, ["s1"])
+        book.markOpened(["s2"], now: 100 + SyncTabs.keepSent + 25 * 60 * 60)
+        XCTAssertEqual(book.opened, ["s2"])
+    }
 }

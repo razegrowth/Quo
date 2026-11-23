@@ -42,6 +42,13 @@ final class MacSync: ObservableObject {
     /// Each Mac's open tabs (and any other device's), the one heard from
     /// last first.
     @Published private(set) var elsewhere: [DeviceTabs] = []
+    /// The devices a page can be sent to: each Mac heard from lately.
+    @Published private(set) var targets: [TabTarget] = []
+    /// A page another device sent here, to open (BrowserController).
+    var onArrived: ((ArrivedTab) -> Void)?
+    private let book = SentBook(defaults: .standard)
+    /// A pass asked for while one ran: another once it's done.
+    private var again = false
     @Published var currentSpaceID: UUID {
         didSet { UserDefaults.standard.set(currentSpaceID.uuidString, forKey: "sync.space") }
     }
@@ -54,7 +61,14 @@ final class MacSync: ObservableObject {
     @Published var on: Bool {
         didSet {
             UserDefaults.standard.set(on, forKey: "sync.on")
-            if on { pass() } else { withdrawTabs() }
+            if on { pass() } else { withdrawTabs(); withdrawHistory() }
+        }
+    }
+    /// History handed between this iPhone and your Macs, while sync is on.
+    @Published var syncsHistory: Bool {
+        didSet {
+            UserDefaults.standard.set(syncsHistory, forKey: "sync.history")
+            if syncsHistory { pass() } else { withdrawHistory() }
         }
     }
 
@@ -68,6 +82,8 @@ final class MacSync: ObservableObject {
     static let personal = "profile-" + Profile.personalID.uuidString
     /// The Personal profile's open tabs, every device's.
     static let tabsScope = SyncTabs.scope(personal)
+    /// The Personal profile's history, every device's.
+    static let historyScope = SyncHistory.scope(personal)
 
     /// Every device's file, as last fetched, by record name: the Mac's
     /// own cache format.
@@ -84,8 +100,9 @@ final class MacSync: ObservableObject {
     private var tabsSoon: DispatchWorkItem?
 
     private init() {
-        UserDefaults.standard.register(defaults: ["sync.on": true])
+        UserDefaults.standard.register(defaults: ["sync.on": true, "sync.history": true])
         on = UserDefaults.standard.bool(forKey: "sync.on")
+        syncsHistory = UserDefaults.standard.bool(forKey: "sync.history")
         currentSpaceID = UserDefaults.standard.string(forKey: "sync.space").flatMap(UUID.init(uuidString:)) ?? Space.firstID
         files = Store.read([String: SyncFile].self, "sync-cloud.json") ?? [:]
         token = try? Data(contentsOf: Store.file("sync-cloud-token"))
@@ -134,7 +151,7 @@ final class MacSync: ObservableObject {
     /// Fetch what changed, merge each scope as a Mac would, keep and show
     /// it, and write this iPhone's file where it says something new.
     func pass() {
-        guard !running else { return }
+        guard !running else { again = true; return }
         guard on, available else {
             // Off: what's here is still merged with what was made here.
             settleLocally()
@@ -144,7 +161,10 @@ final class MacSync: ObservableObject {
         guard let backend else { return }
         running = true
         Task { @MainActor in
-            defer { running = false }
+            defer {
+                running = false
+                if again { again = false; pass() }
+            }
             do {
                 let account = try await backend.prepare()
                 let before = UserDefaults.standard.string(forKey: "sync.account")
@@ -191,6 +211,8 @@ final class MacSync: ObservableObject {
                 }
             }
             await publishTabs(with: backend, now: now)
+            await passHistory(with: backend, now: now)
+            openArrived(now: now)
             macs = Array(Set(files.values.filter { $0.device != device }.map { $0.name ?? "A Mac" })).sorted()
             readSettings()
             rebuild()
@@ -209,8 +231,11 @@ final class MacSync: ObservableObject {
         guard problem == nil, files.values.contains(where: { $0.device != device }) else { return }
         let scope = MacSync.tabsScope, name = SyncRecord.name(scope: scope, device: device)
         let mine = MacSync.ownTabs()
-        guard SyncTabs.due(files[name], tabs: mine, spaces: [], name: MacSync.deviceName, now: now, going: going) else { return }
-        let file = SyncTabs.file(device: device, name: MacSync.deviceName, phone: true, scope: scope, tabs: mine, spaces: [], now: now)
+        let sent = book.outbox(scope, now: now)
+        guard SyncTabs.due(files[name], tabs: mine, spaces: [], name: MacSync.deviceName, sent: sent,
+                           now: now, going: going) else { return }
+        let file = SyncTabs.file(device: device, name: MacSync.deviceName, phone: true, scope: scope,
+                                 tabs: mine, spaces: [], sent: sent, now: now)
         do {
             try await backend.save(file, as: name)
             files[name] = file
@@ -218,6 +243,86 @@ final class MacSync: ObservableObject {
         } catch {
             problem = MacSync.describe(error)
         }
+    }
+
+    // MARK: - history
+
+    /// The others' history taken in, then this iPhone's written when it
+    /// says something new (SyncHistory.due): a forget at once, new visits
+    /// at most every two minutes. Only once another device is there.
+    private func passHistory(with backend: SyncBackend, now: Double) async {
+        guard syncsHistory, problem == nil else { return }
+        let history = History.shared
+        MacSync.takeHistory(SyncHistory.others(Array(files.values), scope: MacSync.historyScope, device: device), into: history)
+        guard files.values.contains(where: { $0.device != device }) else { return }
+        let mine = history.handed(), forgets = history.forgets
+        let name = SyncRecord.name(scope: MacSync.historyScope, device: device)
+        guard !mine.isEmpty || !forgets.isEmpty,
+              SyncHistory.due(files[name], visits: mine, forgets: forgets, name: MacSync.deviceName, now: now) else { return }
+        let file = SyncHistory.file(device: device, name: MacSync.deviceName, scope: MacSync.historyScope,
+                                    visits: mine, forgets: forgets, now: now)
+        do {
+            try await backend.save(file, as: name)
+            files[name] = file
+            keepFetched()
+        } catch {
+            problem = MacSync.describe(error)
+        }
+    }
+
+    /// As the Mac does it (Sync.takeHistory): what each other device forgot
+    /// goes from here first, then every device's pages come in, less what
+    /// any of them, or this iPhone, forgot since.
+    static func takeHistory(_ theirs: [DeviceHistory], into history: History) {
+        for other in theirs { history.forget(handed: other.forgets) }
+        var forgot = history.forgets
+        for other in theirs {
+            if let all = other.forgets.all { forgot.all = max(forgot.all ?? 0, all) }
+            forgot.pages.merge(other.forgets.pages) { max($0, $1) }
+        }
+        for other in theirs { history.take(handed: SyncHistory.taken(other.visits, mine: forgot)) }
+    }
+
+    /// History cleared here: written in a pass a moment later, so your
+    /// other devices forget it too.
+    func historyChanged() {
+        guard on, available, syncsHistory else { return }
+        tabsSoon?.cancel()
+        let work = DispatchWorkItem { MainActor.assumeIsolated { MacSync.shared.pass() } }
+        tabsSoon = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    /// Sync history turned off: this iPhone's history leaves iCloud. What
+    /// it took from the others stays, as theirs did.
+    private func withdrawHistory() {
+        let name = SyncRecord.name(scope: MacSync.historyScope, device: device)
+        guard files[name] != nil, let backend = backend ?? makeBackend() else { return }
+        files[name] = nil
+        keepFetched()
+        Task { @MainActor in try? await backend.delete(name) }
+    }
+
+    // MARK: - sending a page
+
+    /// A page sent to a Mac: in this iPhone's own file, written now, for
+    /// that Mac to open on its next look (within half a minute).
+    func send(_ url: URL, title: String, to target: TabTarget) {
+        guard SyncTabs.handed(url.absoluteString) else { return }
+        let now = Date().timeIntervalSince1970
+        book.add(SyncTabs.send(url.absoluteString, title: title, to: target.device, now: now),
+                 scope: MacSync.tabsScope, now: now)
+        tabsSoon?.cancel()
+        pass()
+    }
+
+    /// Pages a Mac sent here, each opened once, in the order they were sent.
+    private func openArrived(now: Double) {
+        let arrived = SyncTabs.arrived(Array(files.values), scope: MacSync.tabsScope, device: device,
+                                       opened: book.opened, now: now)
+        guard !arrived.isEmpty else { return }
+        book.markOpened(arrived.map(\.tab.id), now: now)
+        for page in arrived { onArrived?(page) }
     }
 
     /// The regular tabs, never an incognito one.
@@ -312,6 +417,9 @@ final class MacSync: ObservableObject {
         bookmarks = SyncItems.applyBookmarks(live)
         let devices = SyncTabs.others(Array(files.values), scope: MacSync.tabsScope, device: device, now: Date().timeIntervalSince1970)
         if elsewhere != devices { elsewhere = devices }
+        let reachable = SyncTabs.targets(Array(files.values), scope: MacSync.tabsScope, device: device,
+                                         now: Date().timeIntervalSince1970)
+        if targets != reachable { targets = reachable }
         if !made.contains(where: { $0.id == currentSpaceID }) { currentSpaceID = made.first?.id ?? Space.firstID }
     }
 

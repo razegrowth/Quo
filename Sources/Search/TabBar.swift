@@ -1741,6 +1741,21 @@ struct TabMenu: View {
             browser.copyCleanLink()
         }
         .disabled(!tab.isWeb)
+        // To your iPhone (or another Mac), through sync: opens there.
+        let targets = browser.sendable(tab) == nil ? [] : browser.sendTargets
+        if targets.count == 1, let only = targets.first {
+            Button("Send to \(only.name)") { browser.send(tab, to: only) }
+        } else if targets.count > 1 {
+            Menu("Send to Device") {
+                ForEach(targets) { target in
+                    Button {
+                        browser.send(tab, to: target)
+                    } label: {
+                        Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    }
+                }
+            }
+        }
         if browser.prefs.sitesInPanel {
             Button("Open in Side Panel") { browser.openInSidePanel(tab) }
                 .disabled(!tab.isWeb || tab.shy)

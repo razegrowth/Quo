@@ -20,8 +20,17 @@ import Foundation
 // which a Mac from before never reads.
 //
 // Its items: "tabs", the list of SyncedTab, the one looked at last first;
-// "spaces", the names of the spaces they are in; and "kind", "mac" or
-// "iphone". Each stamped when the file was written, by its device.
+// "spaces", the names of the spaces they are in; "kind", "mac" or
+// "iphone"; and "sent", pages sent to one other device to open there
+// (SentTab), only while there are some. Each stamped when the file was
+// written, by its device.
+//
+// Sending a page: the sender puts it in its own file, addressed to the
+// other device by id, and writes the file at once. The other device opens
+// each one addressed to it once, remembering which it opened, and the
+// sender lets it go after a while (SyncTabs.keepSent). A Quo from before
+// sending has no "sent" to read and passes it over, as any item it doesn't
+// know.
 //
 // What is never published: private tabs and windows, incognito tabs, tabs a
 // script or an agent opened or works in, pins (they sync as pins), and
@@ -35,6 +44,33 @@ struct SyncedTab: Codable, Equatable, Hashable {
     var space: String?
     /// When it was last looked at, seconds since 1970, to the minute.
     var active: Double
+}
+
+/// A page sent to one other device, to open there.
+struct SentTab: Codable, Equatable, Hashable, Identifiable {
+    /// Made once, so the other device opens it only once.
+    var id: String
+    var url: String
+    var title: String
+    /// The device it's for, by id.
+    var to: String
+    /// When it was sent, seconds since 1970.
+    var at: Double
+}
+
+/// A device a page can be sent to.
+struct TabTarget: Equatable, Hashable, Identifiable {
+    var device: String
+    var name: String
+    var phone: Bool
+    var id: String { device }
+}
+
+/// A page another device sent here, and who sent it.
+struct ArrivedTab: Equatable {
+    var from: String
+    var fromName: String
+    var tab: SentTab
 }
 
 /// A space that has tabs in the list: its name, for a device that doesn't
@@ -52,6 +88,7 @@ struct DeviceTabs: Equatable, Identifiable {
     var written: Double
     var tabs: [SyncedTab]
     var spaces: [SyncedTabSpace]
+    var sent: [SentTab] = []
     var id: String { device }
 
     /// The tabs open in a space, the one looked at last first. `orHome`:
@@ -91,6 +128,13 @@ enum SyncTabs {
     static let tabsKey = "tabs"
     static let spacesKey = "spaces"
     static let kindKey = "kind"
+    static let sentKey = "sent"
+
+    /// How long a sent page waits in its sender's file for the other
+    /// device to come by: one away for longer likely doesn't want it now.
+    static let keepSent: Double = 3 * 24 * 60 * 60
+    /// How many sent pages a file carries at most, the newest.
+    static let mostSent = 30
 
     /// Whether a page can be handed to another device: a web page, with an
     /// address of reasonable length.
@@ -129,16 +173,18 @@ enum SyncTabs {
 
     /// A device's tabs as its file for a scope.
     static func file(device: String, name: String, phone: Bool, scope: String,
-                     tabs: [SyncedTab], spaces: [SyncedTabSpace], now: Double) -> SyncFile {
+                     tabs: [SyncedTab], spaces: [SyncedTabSpace], sent: [SentTab] = [], now: Double) -> SyncFile {
         let list = tidy(tabs)
         let used = Set(list.compactMap(\.space))
         let named = spaces.filter { used.contains($0.id) }
         func entry(_ text: String?) -> SyncEntry { SyncEntry(v: text, t: now, d: device) }
-        let items: [String: SyncEntry] = [
+        var items: [String: SyncEntry] = [
             tabsKey: entry(SyncMerge.text(list)),
             spacesKey: entry(SyncMerge.text(named)),
             kindKey: entry(SyncMerge.text(phone ? "iphone" : "mac")),
         ]
+        let outbox = tidySent(sent, now: now)
+        if !outbox.isEmpty { items[sentKey] = entry(SyncMerge.text(outbox)) }
         return SyncFile(format: SyncMerge.format, device: device, name: name, scope: scope, written: now, items: items)
     }
 
@@ -149,26 +195,75 @@ enum SyncTabs {
               let tabs = SyncMerge.value([SyncedTab].self, text) else { return nil }
         let spaces = file.items[spacesKey]?.v.flatMap { SyncMerge.value([SyncedTabSpace].self, $0) } ?? []
         let kind = file.items[kindKey]?.v.flatMap { SyncMerge.value(String.self, $0) }
+        let sent = file.items[sentKey]?.v.flatMap { SyncMerge.value([SentTab].self, $0) } ?? []
         return DeviceTabs(device: file.device, name: file.name ?? (kind == "iphone" ? "iPhone" : "Mac"),
                           phone: kind == "iphone", written: file.written,
-                          tabs: tabs.filter { handed($0.url) }, spaces: spaces)
+                          tabs: tabs.filter { handed($0.url) }, spaces: spaces,
+                          sent: sent.filter { handed($0.url) })
     }
 
     /// Whether a file already says these tabs: nothing new to write.
-    static func says(_ file: SyncFile?, tabs: [SyncedTab], spaces: [SyncedTabSpace], name: String) -> Bool {
+    static func says(_ file: SyncFile?, tabs: [SyncedTab], spaces: [SyncedTabSpace], name: String,
+                     sent: [SentTab] = [], now: Double = Date().timeIntervalSince1970) -> Bool {
         guard let file, file.name == name, let read = read(file) else { return false }
         let list = tidy(tabs)
         let used = Set(list.compactMap(\.space))
         return read.tabs == list && read.spaces == spaces.filter { used.contains($0.id) }
+            && read.sent == tidySent(sent, now: now)
     }
 
     /// Whether this device should write its tabs now: they changed, and it
     /// last wrote them long enough ago, or it is going away.
     static func due(_ file: SyncFile?, tabs: [SyncedTab], spaces: [SyncedTabSpace], name: String,
-                    now: Double, going: Bool) -> Bool {
-        guard !says(file, tabs: tabs, spaces: spaces, name: name) else { return false }
+                    sent: [SentTab] = [], now: Double, going: Bool) -> Bool {
+        guard !says(file, tabs: tabs, spaces: spaces, name: name, sent: sent, now: now) else { return false }
         guard let written = file?.written, !going else { return true }
+        // A page just sent goes at once: someone is waiting for it.
+        let wrote = file.flatMap(read)?.sent ?? []
+        if tidySent(sent, now: now).contains(where: { !wrote.contains($0) }) { return true }
         return now - written >= every || now < written
+    }
+
+    // MARK: - sending a page
+
+    /// Sent pages as a file carries them: web pages, not yet too old, each
+    /// once, the newest first, at most `mostSent`.
+    static func tidySent(_ sent: [SentTab], now: Double) -> [SentTab] {
+        var seen = Set<String>()
+        return Array(sent
+            .filter { handed($0.url) && $0.at.isFinite && now - $0.at < keepSent && $0.at - now < 60 * 60 }
+            .sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }
+            .filter { seen.insert($0.id).inserted }
+            .prefix(mostSent))
+    }
+
+    /// A page, ready to send to a device.
+    static func send(_ url: String, title: String, to device: String, now: Double) -> SentTab {
+        SentTab(id: UUID().uuidString, url: url, title: String(title.prefix(300)), to: device, at: now)
+    }
+
+    /// The other devices a page can be sent to in a scope: every one heard
+    /// from lately with a tabs file there, open tabs or not, the one heard
+    /// from last first.
+    static func targets(_ files: [SyncFile], scope: String, device: String, now: Double) -> [TabTarget] {
+        files.filter { $0.scope == scope && $0.device != device && now - $0.written < stale }
+            .sorted { a, b in a.written != b.written ? a.written > b.written : a.device < b.device }
+            .compactMap(read)
+            .map { TabTarget(device: $0.device, name: $0.name, phone: $0.phone) }
+    }
+
+    /// Pages the other devices sent to this one that it hasn't opened yet,
+    /// the oldest first, so they open in the order they were sent.
+    static func arrived(_ files: [SyncFile], scope: String, device: String, opened: Set<String>,
+                        now: Double) -> [ArrivedTab] {
+        var out: [ArrivedTab] = []
+        for file in files where file.scope == scope && file.device != device {
+            guard let from = read(file) else { continue }
+            for tab in tidySent(from.sent, now: now) where tab.to == device && !opened.contains(tab.id) {
+                out.append(ArrivedTab(from: from.device, fromName: from.name, tab: tab))
+            }
+        }
+        return out.sorted { a, b in a.tab.at != b.tab.at ? a.tab.at < b.tab.at : a.tab.id < b.tab.id }
     }
 
     /// Every other device's tabs in a scope, the one heard from last first:
@@ -189,5 +284,45 @@ enum SyncTabs {
                 needle.isEmpty || pair.tab.title.lowercased().contains(needle) || pair.tab.url.lowercased().contains(needle)
             }
             .sorted { $0.tab.active > $1.tab.active }
+    }
+}
+
+/// What this device sent and what it opened, kept with its settings: the
+/// pages waiting in its own file for another device, by the scope they go
+/// out in, and the ids of those that came here and were opened, so each
+/// opens once. The same on the Mac and the iPhone.
+struct SentBook {
+    let defaults: UserDefaults
+    static let outboxKey = "sync.sent"
+    static let openedKey = "sync.opened"
+
+    /// The pages waiting to be picked up in a scope.
+    func outbox(_ scope: String, now: Double) -> [SentTab] {
+        SyncTabs.tidySent(all[scope] ?? [], now: now)
+    }
+
+    func add(_ tab: SentTab, scope: String, now: Double) {
+        var all = self.all
+        all[scope] = SyncTabs.tidySent((all[scope] ?? []) + [tab], now: now)
+        for (key, list) in all where list.isEmpty { all[key] = nil }
+        if let data = try? JSONEncoder().encode(all) { defaults.set(data, forKey: SentBook.outboxKey) }
+    }
+
+    private var all: [String: [SentTab]] {
+        defaults.data(forKey: SentBook.outboxKey).flatMap { try? JSONDecoder().decode([String: [SentTab]].self, from: $0) } ?? [:]
+    }
+
+    /// The ids of pages that came here and were opened, with when, kept as
+    /// long as their sender keeps them.
+    var opened: Set<String> { Set(openedTimes.keys) }
+
+    func markOpened(_ ids: [String], now: Double) {
+        var times = openedTimes.filter { now - $0.value < SyncTabs.keepSent + 24 * 60 * 60 }
+        for id in ids { times[id] = now }
+        defaults.set(times, forKey: SentBook.openedKey)
+    }
+
+    private var openedTimes: [String: Double] {
+        (defaults.dictionary(forKey: SentBook.openedKey) as? [String: Double]) ?? [:]
     }
 }

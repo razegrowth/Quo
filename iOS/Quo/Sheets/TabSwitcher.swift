@@ -64,6 +64,7 @@ struct TabSwitcher: View {
         .ignoresSafeArea()
         .environment(\.colorScheme, .dark)
         .onAppear(perform: arrive)
+        .onChange(of: tabs.all.map(\.id)) { _, ids in takeIn(ids) }
     }
 
     // MARK: - one card
@@ -175,12 +176,40 @@ struct TabSwitcher: View {
     }
 
     private func close(_ tab: Tab) {
+        let title = tab.shownTitle
         withAnimation(Self.snap) {
             order.removeAll { $0 == tab.id }
             tabs.close(tab)
             position = min(position, CGFloat(max(0, order.count - 1)))
             lifted = nil
             lift = 0
+        }
+        // Undo, while the notice is up: the card comes back where it was.
+        guard let item = tabs.closed.first(where: { $0.id == tab.id }) else { return }
+        browser.say("Closed \(title)", actionTitle: "Undo") { [browser, tabs] in
+            browser.notice = nil
+            browser.noticeAction = nil
+            Haptics.tap()
+            tabs.reopen(item, front: browser.panel != .switcher)
+        }
+    }
+
+    /// A tab brought back while the deck is open: its card goes in by when
+    /// it was last looked at, and the deck turns to it.
+    private func takeIn(_ ids: [UUID]) {
+        guard phase == .open else { return }
+        let fresh = ids.filter { !order.contains($0) }
+        guard !fresh.isEmpty else { return }
+        withAnimation(Self.snap) {
+            for id in fresh {
+                guard let tab = tabs.all.first(where: { $0.id == id }) else { continue }
+                let at = order.firstIndex { other in
+                    (tabs.all.first { $0.id == other }?.lastActive ?? .distantPast) > tab.lastActive
+                } ?? order.count
+                order.insert(id, at: at)
+                tab.loadThumbnail()
+                position = CGFloat(at)
+            }
         }
     }
 
@@ -234,6 +263,11 @@ struct TabSwitcher: View {
 
     private func tap(_ point: CGPoint, g: Deck, cards: [Tab]) {
         guard phase == .open, axis == nil, let tab = cardAt(point, g: g, cards: cards) else { return }
+        // A locked incognito tab: Face ID first, then in.
+        if tab.incognito && IncognitoLock.shared.locked {
+            Task { if await IncognitoLock.shared.unlock() { choose(tab) } }
+            return
+        }
         choose(tab)
     }
 
@@ -286,6 +320,7 @@ struct TabSwitcher: View {
             .buttonStyle(PressStyle())
             .accessibilityLabel("New search")
             .accessibilityIdentifier("switcher.new")
+            .contextMenu { ClosedMenu() }
             Spacer()
             footCircle("gearshape", label: "Settings", id: "switcher.settings") { browser.sheet = .settings }
         }
@@ -360,6 +395,7 @@ private struct Deck {
 
 private struct DeckCard: View {
     @ObservedObject var tab: Tab
+    @ObservedObject private var lock = IncognitoLock.shared
     let width: CGFloat
     let height: CGFloat
     let radius: CGFloat
@@ -370,7 +406,14 @@ private struct DeckCard: View {
     var body: some View {
         ZStack(alignment: .top) {
             (tab.incognito ? Color(white: 0.12) : Color(uiColor: tab.topColor))
-            if let image = tab.thumbnail {
+            if tab.incognito && lock.hiding {
+                // Locked: no picture of the page, only that it's there.
+                VStack(spacing: 10) {
+                    Image(systemName: "lock.fill").font(.system(size: 26, weight: .medium)).foregroundStyle(.white.opacity(0.8))
+                    Text("Locked").font(Q.footnote).foregroundStyle(.white.opacity(0.55))
+                }
+                .frame(width: width, height: height)
+            } else if let image = tab.thumbnail {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -411,6 +454,7 @@ private struct DeckCard: View {
 
 private struct DeckHeader: View {
     @ObservedObject var tab: Tab
+    @ObservedObject private var lock = IncognitoLock.shared
     /// How wide it may be: up to the next card, which covers the rest.
     let room: CGFloat
 
@@ -422,8 +466,8 @@ private struct DeckHeader: View {
             if tab.incognito {
                 Image(systemName: "eyeglasses").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
             }
-            SiteMark(host: tab.host, size: 18)
-            Text(tab.shownTitle)
+            if !(tab.incognito && lock.hiding) { SiteMark(host: tab.host, size: 18) }
+            Text(tab.incognito && lock.hiding ? "Incognito" : tab.shownTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.92))
                 .lineLimit(1)

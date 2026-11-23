@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: 8B6VFDJHA2
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "4"
     # YES where the build carries the iCloud entitlement (a device build
     # signed for the team); a simulator build without signing says NO and
     # reads a stand-in folder instead.
@@ -30,6 +30,8 @@ targets:
       - path: ../Sources/Search/SyncRecord.swift
         group: Shared
       - path: ../Sources/Search/SyncTabs.swift
+        group: Shared
+      - path: ../Sources/Search/SyncHistory.swift
         group: Shared
       - path: ../Sources/Search/FilterList.swift
         group: Shared

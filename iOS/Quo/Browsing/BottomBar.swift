@@ -116,6 +116,7 @@ struct ChromeContent: View {
             .buttonStyle(PressStyle())
             .accessibilityLabel("New search")
             .accessibilityIdentifier("bar.new")
+            .contextMenu { ClosedMenu() }
 
             Spacer()
 
@@ -181,10 +182,16 @@ private struct TabStack: View {
 /// for a tab not looked at since Quo opened.
 private struct StackCard: View {
     @ObservedObject var tab: Tab
+    @ObservedObject private var lock = IncognitoLock.shared
 
     var body: some View {
         Group {
-            if let image = tab.thumbnail {
+            if tab.incognito && lock.hiding {
+                ZStack {
+                    Color(white: 0.12)
+                    Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                }
+            } else if let image = tab.thumbnail {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
                     .frame(width: 30, height: 40, alignment: .top)
             } else {

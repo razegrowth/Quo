@@ -2587,7 +2587,7 @@ final class Browser: NSObject, ObservableObject {
         return "[\(text)](\(url.absoluteString))"
     }
 
-    func announce(_ text: String, file: URL? = nil) {
+    func announce(_ text: String, file: URL? = nil, lasting: Double? = nil) {
         announcement = text
         announcedFile = file
         hush?.cancel()
@@ -2596,7 +2596,7 @@ final class Browser: NSObject, ObservableObject {
             self?.announcedFile = nil
         }
         hush = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (file == nil ? 1.7 : 4), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (lasting ?? (file == nil ? 1.7 : 4)), execute: work)
     }
 
     /// The names extensions asked their downloads to be saved under.

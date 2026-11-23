@@ -34,9 +34,13 @@ struct QuoApp: App {
         .onChange(of: phase) { _, now in
             switch now {
             case .active:
+                IncognitoLock.shared.back()
                 Tabs.shared.archiveInactive()
                 MacSync.shared.pass()
+            case .inactive:
+                IncognitoLock.shared.leaving()
             case .background:
+                IncognitoLock.shared.left()
                 Tabs.shared.saveDeep()
                 MacSync.shared.handOff()
                 Task { await Tabs.shared.current?.snapshot() }
@@ -64,6 +68,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             KeyboardWarmup.run()
             Haptics.prepare()
             Blocker.shared.start()
+            Media.start()
+            MacSync.shared.onArrived = { Browser.shared.arrived($0) }
             MacSync.shared.start()
             Tabs.shared.archiveInactive()
         }

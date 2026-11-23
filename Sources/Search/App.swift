@@ -91,6 +91,7 @@ struct SearchApp: App {
                 Button("Share…") { browser.share() }
                     .shortcut("file.share")
                     .disabled(!(browser.active?.isWeb ?? false))
+                SendMenuItems(browser: browser)
                 Button("Save Page As…") { browser.savePage() }
                     .shortcut("file.savePage")
                     .disabled(!(browser.active?.isWeb ?? false))

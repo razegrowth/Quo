@@ -30,6 +30,17 @@ final class Tab: ObservableObject, Identifiable {
     var topColor: UIColor { themeColor ?? pageColor ?? .systemBackground }
     /// Why the page couldn't be opened, shown in its place.
     @Published var failure: String?
+    /// The page has a video of its own: Picture in Picture is offered.
+    @Published private(set) var hasVideo = false
+    /// What the page in front is, as its server said: a PDF or another file
+    /// shown as it is can be downloaded from the toolbar.
+    @Published private(set) var mimeType: String?
+    /// The type of the page about to be shown, until it is.
+    fileprivate var arriving: (url: URL?, type: String?)?
+    var isDocument: Bool {
+        guard let mimeType else { return false }
+        return !["text/html", "application/xhtml+xml"].contains(mimeType)
+    }
 
     /// Back and forward as WebKit keeps them, for a tab restored.
     var interactionState: Data?
@@ -59,11 +70,15 @@ final class Tab: ObservableObject, Identifiable {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = store
         config.allowsInlineMediaPlayback = true
+        config.allowsPictureInPictureMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = .all
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let controller = WKUserContentController()
         controller.addUserScript(WKUserScript(source: TabHelper.reportScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        controller.addUserScript(WKUserScript(source: Media.script(keepPlaying: AppSettings.shared.playsInBackground),
+                                              injectionTime: .atDocumentStart, forMainFrameOnly: false))
         controller.add(helper, name: "quo")
+        controller.add(helper, name: "quoMedia")
         config.userContentController = controller
         Blocker.shared.tune(controller, for: url?.host())
 
@@ -224,6 +239,7 @@ final class Tab: ObservableObject, Identifiable {
         guard let web else { return }
         interactionState = web.interactionState as? Data
         web.configuration.userContentController.removeScriptMessageHandler(forName: "quo")
+        web.configuration.userContentController.removeScriptMessageHandler(forName: "quoMedia")
         web.removeFromSuperview()
         watchers = []
         self.web = nil
@@ -246,6 +262,30 @@ final class Tab: ObservableObject, Identifiable {
     }
 
     fileprivate func noteScrubbed(_ count: Int) { scrubbed += count }
+
+    fileprivate func noteVideo(mainFrame: Bool) {
+        if mainFrame, !hasVideo { hasVideo = true }
+    }
+
+    // MARK: - video and sound
+
+    /// The page's video into Picture in Picture, or back out of it: the
+    /// one playing, else the largest. Run from a tap, as a script the app
+    /// runs counts as the person's own gesture.
+    func pictureInPicture() {
+        web?.evaluateJavaScript(Media.pictureInPicture) { result, error in
+            MainActor.assumeIsolated {
+                Trace.mark("pip \(String(describing: result)) \(String(describing: error))")
+                if (result as? String)?.hasPrefix("no") == true { Browser.shared.say("This video can\u{2019}t play in picture in picture") }
+            }
+        }
+    }
+
+    /// Leaving Quo: which of the page's videos and sounds are playing.
+    func noteMedia() { web?.evaluateJavaScript(Media.note, completionHandler: nil) }
+
+    /// Left: those that were playing and were paused on the way out go on.
+    func resumeMedia() { web?.evaluateJavaScript(Media.resume, completionHandler: nil) }
 
     fileprivate func failed(_ error: Error) {
         let error = error as NSError
@@ -275,6 +315,11 @@ final class Tab: ObservableObject, Identifiable {
 
     fileprivate func committed(_ url: URL?) {
         failure = nil
+        hasVideo = false
+        // Back to a page kept in memory brings no response: a .pdf is a PDF.
+        if let arriving, arriving.url == url { mimeType = arriving.type }
+        else { mimeType = url?.pathExtension.lowercased() == "pdf" ? "application/pdf" : nil }
+        arriving = nil
         guard let url else { return }
         if !incognito { History.shared.record(url, title: web?.title) }
         web?.allowsBackForwardNavigationGestures = Sites.shared.settings(for: url.host()).swipe == .edges
@@ -282,13 +327,20 @@ final class Tab: ObservableObject, Identifiable {
 
     /// Opens another tab (a link with target=_blank, window.open).
     var openTab: ((URL, Bool) -> WKWebView?)?
+    /// A long-pressed link opened in another tab: in front or behind, and
+    /// whether in Incognito.
+    var openLink: ((URL, _ front: Bool, _ incognito: Bool) -> Void)?
     var onDownload: ((WKDownload) -> Void)?
+    /// A file the page asked for, to download with this tab's sign-ins.
+    var onStartDownload: ((URLRequest) -> Void)?
 }
 
 /// The page's delegate, kept apart so the tab isn't retained by WebKit.
 @MainActor
 private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     weak var tab: Tab?
+    /// The last page asked for, to download from as it was asked.
+    private var lastRequest: URLRequest?
     init(tab: Tab) { self.tab = tab }
 
     static let reportScript = """
@@ -307,6 +359,10 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
     """
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "quoMedia" {
+            tab?.noteVideo(mainFrame: message.frameInfo.isMainFrame)
+            return
+        }
         guard let body = message.body as? [String: Any] else { return }
         tab?.pageReported(addresses: body["urls"] as? [String] ?? [], icon: body["icon"] as? String)
     }
@@ -316,7 +372,13 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
         guard let tab, let url = action.request.url else { return (.allow, preferences) }
         if action.targetFrame?.isMainFrame ?? true { Trace.mark("decide \(url.host() ?? "")") }
         preferences.preferredContentMode = tab.desktop ? .desktop : .mobile
-        if action.shouldPerformDownload { return (.download, preferences) }
+        // <a download>: started here, as WebKit's own hand-over to a
+        // download never arrives (iOS 27), leaving the tab loading.
+        if action.shouldPerformDownload {
+            tab.onStartDownload?(action.request)
+            return (.cancel, preferences)
+        }
+        if action.targetFrame?.isMainFrame ?? true { lastRequest = action.request }
         let scheme = url.scheme?.lowercased() ?? ""
         // Mail, phone, maps and the App Store: their own apps.
         if !["http", "https", "about", "data", "blob", "file", "javascript"].contains(scheme) {
@@ -343,7 +405,20 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse) async -> WKNavigationResponsePolicy {
-        response.canShowMIMEType ? .allow : .download
+        let attachment = (response.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") ?? false
+        // A file to save, not show: what the page can't show, or what its
+        // server sent as an attachment. Downloaded again from the request
+        // that asked for it (its form and method kept), as WebKit's own
+        // hand-over never arrives.
+        if !response.canShowMIMEType || attachment {
+            guard response.isForMainFrame, let url = response.response.url ?? lastRequest?.url else { return .cancel }
+            let request = lastRequest?.url == url ? lastRequest! : URLRequest(url: url)
+            tab?.onStartDownload?(request)
+            return .cancel
+        }
+        if response.isForMainFrame { tab?.arriving = (response.response.url, response.response.mimeType?.lowercased()) }
+        return .allow
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
@@ -380,6 +455,34 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+
+    // A long press on a link: WebKit's own preview of it, and what Quo
+    // does with links, above what WebKit offers for an image under it.
+    func webView(_ webView: WKWebView, contextMenuConfigurationFor element: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
+        guard let tab, let url = element.linkURL else { return nil }
+        let web = ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        guard web else { return nil }
+        let store = webView.configuration.websiteDataStore
+        let desktop = tab.desktop
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: {
+            MainActor.assumeIsolated { LinkPreview(url: url, store: store, desktop: desktop) }
+        }) { [weak tab] suggested in
+            MainActor.assumeIsolated {
+                guard let tab else { return UIMenu(children: suggested) }
+                return LinkMenu.menu(for: url, in: tab, suggested: suggested)
+            }
+        }
+    }
+
+    // The preview tapped: the link, in this tab.
+    func webView(_ webView: WKWebView, contextMenuForElement element: WKContextMenuElementInfo,
+                 willCommitWithAnimator animator: UIContextMenuInteractionCommitAnimating) {
+        guard let url = element.linkURL else { return }
+        animator.preferredCommitStyle = .pop
+        // Where the preview got to, if it went on from the link.
+        let shown = (animator.previewViewController as? LinkPreview)?.web.url ?? url
+        animator.addCompletion { webView.load(URLRequest(url: shown)) }
+    }
 
     // Alerts, confirms and prompts, as sheets of the system's.
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,

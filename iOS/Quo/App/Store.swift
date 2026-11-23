@@ -81,6 +81,12 @@ final class AppSettings: ObservableObject {
     /// The language pages are translated into.
     @Published var translateTo: String { didSet { defaults.set(translateTo, forKey: "translate.to") } }
     @Published var onboarded: Bool { didSet { defaults.set(onboarded, forKey: "onboarded") } }
+    /// Video and music go on when you leave Quo (Media.swift); pages
+    /// opened from then on.
+    @Published var playsInBackground: Bool { didSet { defaults.set(playsInBackground, forKey: "media.background") } }
+    /// Incognito tabs locked when you leave Quo, opened with Face ID
+    /// (IncognitoLock.swift).
+    @Published var lockIncognito: Bool { didSet { defaults.set(lockIncognito, forKey: "incognito.lock") } }
     /// How many people use Quo, counted once a day (Telemetry.swift).
     @Published var sharesUsage: Bool {
         didSet {
@@ -97,7 +103,7 @@ final class AppSettings: ObservableObject {
     var engine: Engine { engineChoice ?? macEngine ?? .standard }
 
     private init() {
-        defaults.register(defaults: ["keyboard.auto": true, "search.suggest": true, Telemetry.key: true])
+        defaults.register(defaults: ["keyboard.auto": true, "search.suggest": true, Telemetry.key: true, "media.background": true, "incognito.lock": true])
         autoKeyboard = defaults.bool(forKey: "keyboard.auto")
         archiveAfter = ArchiveAfter(rawValue: defaults.string(forKey: "tabs.archive") ?? "") ?? .week
         appLinks = AppLinks(rawValue: defaults.string(forKey: "links.app") ?? "") ?? .app
@@ -105,6 +111,8 @@ final class AppSettings: ObservableObject {
         engineSuggests = defaults.bool(forKey: "search.suggest")
         translateTo = defaults.string(forKey: "translate.to") ?? (Locale.current.language.languageCode?.identifier ?? "en")
         onboarded = defaults.bool(forKey: "onboarded")
+        playsInBackground = defaults.bool(forKey: "media.background")
+        lockIncognito = defaults.bool(forKey: "incognito.lock")
         customTemplate = defaults.string(forKey: "search.custom") ?? ""
         sharesUsage = defaults.bool(forKey: Telemetry.key)
         let on = sharesUsage

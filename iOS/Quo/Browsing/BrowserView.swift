@@ -1,5 +1,6 @@
 import UIKit
 import SwiftUI
+import QuickLook
 import Translation
 import WebKit
 
@@ -9,7 +10,7 @@ enum Panel: Equatable {
 }
 
 enum SheetKind: String, Identifiable {
-    case site, settings, spaces, reader, downloads, archive
+    case site, settings, spaces, reader, downloads, archive, closed
     var id: String { rawValue }
 }
 
@@ -71,6 +72,12 @@ final class Browser: ObservableObject {
     @Published var translating: Translator.State = .idle
     @Published var reader: Reader.Article?
     @Published var notice: String?
+    /// What tapping the notice does, for one that offers something, and
+    /// what it says it does.
+    var noticeAction: (() -> Void)?
+    @Published var noticeActionTitle = "Open"
+    /// A downloaded file open in Quick Look over everything.
+    @Published var previewing: URL?
     @Published var translationConfig: TranslationSession.Configuration?
     var translationTexts: [String] = []
     weak var translationTab: Tab?
@@ -140,10 +147,55 @@ final class Browser: ObservableObject {
         }
     }
 
-    func say(_ text: String) {
+    func say(_ text: String, actionTitle: String = "Open", action: (() -> Void)? = nil) {
         notice = text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
-            MainActor.assumeIsolated { if self?.notice == text { self?.notice = nil } }
+        noticeAction = action
+        noticeActionTitle = actionTitle
+        // One that offers something stays long enough to be taken up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (action == nil ? 2.2 : 4.5)) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.notice == text else { return }
+                self.notice = nil
+                self.noticeAction = nil
+            }
+        }
+    }
+
+    /// The downloads list, over whatever's up.
+    func showDownloads() {
+        notice = nil
+        noticeAction = nil
+        panel = .none
+        sheet = .downloads
+    }
+
+    /// A downloaded file, in Quick Look.
+    func preview(_ file: URL) {
+        notice = nil
+        noticeAction = nil
+        previewing = file
+    }
+
+    /// A page another device sent: in front when nothing else is, or when
+    /// Quo wasn't on screen to say so; otherwise behind the page you're on,
+    /// with a notice that takes you to it.
+    func arrived(_ page: ArrivedTab) {
+        guard let url = URL(string: page.tab.url) else { return }
+        let away = UIApplication.shared.applicationState != .active
+        let busy = tabs.current != nil && panel == .none && !away
+        let tab = tabs.open(url, front: !busy)
+        if tab.title.isEmpty { tab.title = page.tab.title }
+        if busy {
+            Haptics.tap()
+            say("From \(page.fromName): \(page.tab.title.isEmpty ? Address.shown(url) : page.tab.title)") { [weak self] in
+                guard let self else { return }
+                self.tabs.select(tab)
+                self.notice = nil
+                self.noticeAction = nil
+            }
+        } else {
+            panel = .none
+            if !away { say("From \(page.fromName)") }
         }
     }
 
@@ -173,6 +225,7 @@ struct BrowserView: View {
     @StateObject private var browser = Browser.shared
     @ObservedObject private var tabs = Tabs.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var lock = IncognitoLock.shared
 
     var body: some View {
         ZStack {
@@ -181,14 +234,34 @@ struct BrowserView: View {
             BrowserScreen()
                 .ignoresSafeArea()
 
+            // An incognito page while Incognito's locked, or Quo's leaving.
+            if lock.hiding, tabs.current?.incognito == true, browser.panel != .switcher {
+                IncognitoLockCover(browser: browser)
+                    .transition(.opacity)
+                    .zIndex(5)
+            }
+
             if let notice = browser.notice {
-                Text(notice)
-                    .font(Q.footnote.weight(.medium))
-                    .foregroundStyle(Q.ink)
+                Button { browser.noticeAction?() } label: {
+                    HStack(spacing: 8) {
+                        Text(notice)
+                            .font(Q.footnote.weight(.medium))
+                            .foregroundStyle(Q.ink)
+                            .lineLimit(1)
+                        if browser.noticeAction != nil {
+                            Text(browser.noticeActionTitle)
+                                .font(Q.footnote.weight(.semibold))
+                                .foregroundStyle(Q.muted)
+                        }
+                    }
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(.regularMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(Q.hairline))
-                    .frame(maxHeight: .infinity, alignment: .top)
+                }
+                .buttonStyle(PressStyle())
+                .disabled(browser.noticeAction == nil)
+                .padding(.horizontal, 24)
+                .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 8)
                     // In from the top and back out the same way, leaving
                     // quicker than it came.
@@ -219,8 +292,10 @@ struct BrowserView: View {
             case .reader: ReaderSheet(article: browser.reader)
             case .downloads: NavigationStack { DownloadsView() }
             case .archive: NavigationStack { ArchiveView() }
+            case .closed: NavigationStack { ClosedTabsView() }
             }
         }
+        .quickLookPreview($browser.previewing)
         .translator(browser: browser)
         .onAppear {
             // Not under the onboarding: the keyboard would come up behind it.

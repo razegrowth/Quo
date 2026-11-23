@@ -8,6 +8,7 @@ struct ToolbarPanel: View {
     @ObservedObject var browser: Browser
     @ObservedObject var tab: Tab
     @ObservedObject private var sync = MacSync.shared
+    @ObservedObject private var downloads = Downloads.shared
     /// Display options, open or closed as you last left them; closed at first.
     @AppStorage("toolbar.displayOpen") private var displayOpen = false
     @State private var copied = false
@@ -22,6 +23,7 @@ struct ToolbarPanel: View {
                 address
                 tiles
                 display
+                handOn
                 Button { browser.sheet = .site } label: {
                     Row(symbol: "gearshape", title: "Site settings", chevron: true)
                 }
@@ -182,6 +184,68 @@ struct ToolbarPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: Q.radiusLG, style: .continuous))
     }
 
+    // MARK: - to the Mac, and the video
+
+    /// Send to Mac, once a Mac is there to send to; Picture in Picture
+    /// while the page has a video; Download for a PDF or other file shown
+    /// as it is; and what's downloading, while something is.
+    @ViewBuilder
+    private var handOn: some View {
+        let targets = sync.on ? sync.targets : []
+        let send = tab.url != nil && !tab.incognito && !targets.isEmpty
+        let save = tab.url != nil && tab.isDocument
+        let coming = downloads.active
+        if send || tab.hasVideo || save || !coming.isEmpty {
+            VStack(spacing: 0) {
+                if save, let url = tab.url {
+                    Button {
+                        dismiss()
+                        downloads.start(url, in: tab)
+                    } label: {
+                        Row(symbol: "arrow.down.circle", title: tab.mimeType == "application/pdf" ? "Download PDF" : "Download file")
+                    }
+                    .buttonStyle(RowButton())
+                    .accessibilityIdentifier("toolbar.download")
+                    if send || tab.hasVideo || !coming.isEmpty { Divider().overlay(Q.hairline).padding(.leading, 52) }
+                }
+                if !coming.isEmpty {
+                    Button { browser.showDownloads() } label: {
+                        Row(symbol: "arrow.down.circle.dotted",
+                            title: coming.count == 1 ? "Downloading \(coming[0].name)" : "Downloading \(coming.count) files",
+                            chevron: true)
+                    }
+                    .buttonStyle(RowButton())
+                    .accessibilityIdentifier("toolbar.downloads")
+                    if send || tab.hasVideo { Divider().overlay(Q.hairline).padding(.leading, 52) }
+                }
+                if let url = tab.url, !tab.incognito, !targets.isEmpty {
+                    SendMenu(targets: targets) { target in
+                        sync.send(url, title: tab.shownTitle, to: target)
+                        Haptics.done()
+                        dismiss()
+                        browser.say("Sent to \(target.name)")
+                    } label: { title in
+                        Row(symbol: "laptopcomputer.and.arrow.down", title: title)
+                    }
+                    .accessibilityIdentifier("toolbar.send")
+                }
+                if tab.hasVideo {
+                    if send {
+                        Divider().overlay(Q.hairline).padding(.leading, 52)
+                    }
+                    Button {
+                        dismiss()
+                        tab.pictureInPicture()
+                    } label: { Row(symbol: "pip.enter", title: "Picture in picture") }
+                        .buttonStyle(RowButton())
+                        .accessibilityIdentifier("toolbar.pip")
+                }
+            }
+            .background(Q.tile, in: RoundedRectangle(cornerRadius: Q.radiusLG, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Q.radiusLG, style: .continuous))
+        }
+    }
+
     // MARK: - what was blocked
 
     private var blocked: some View {
@@ -264,8 +328,8 @@ struct Row: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Q.muted)
                 .frame(width: 24)
-            Text(title).font(Q.body).foregroundStyle(Q.ink)
-            Spacer()
+            Text(title).font(Q.body).foregroundStyle(Q.ink).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
             if let note { Text(note).font(Q.body).foregroundStyle(Q.muted) }
             if chevron {
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Q.faint)
@@ -274,6 +338,29 @@ struct Row: View {
         .padding(.horizontal, 16)
         .frame(height: 50)
         .contentShape(Rectangle())
+    }
+}
+
+/// "Send to <Mac>": a button for one Mac, a menu to pick from for more.
+struct SendMenu<Label: View>: View {
+    let targets: [TabTarget]
+    let send: (TabTarget) -> Void
+    @ViewBuilder let label: (String) -> Label
+
+    var body: some View {
+        if targets.count == 1, let only = targets.first {
+            Button { send(only) } label: { label("Send to \(only.name)") }
+                .buttonStyle(RowButton())
+        } else {
+            Menu {
+                ForEach(targets) { target in
+                    Button { send(target) } label: {
+                        SwiftUI.Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    }
+                }
+            } label: { label("Send to Mac") }
+                .buttonStyle(RowButton())
+        }
     }
 }
 
@@ -376,6 +463,7 @@ struct SiteSettingsView: View {
         Toggle(isOn: Binding(get: { settings[keyPath: path] }, set: { change(path, $0) })) {
             Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(Q.muted) }
         }
+        .tint(Q.on)
     }
 
     private func change<T>(_ path: WritableKeyPath<SiteSettings, T>, _ value: T) {

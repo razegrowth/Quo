@@ -2173,9 +2173,20 @@ final class Bench {
             case "icloud": sync.turnOnCloud()
             case "folder":
                 if let path = request["path"] as? String { sync.turnOn(URL(fileURLWithPath: path, isDirectory: true)) }
+            case "send":
+                // The page in front sent to a device, by id, as the tab
+                // menu's Send to does.
+                if let to = request["to"] as? String, let target = browser.sendTargets.first(where: { $0.device == to }),
+                   let tab = browser.active {
+                    browser.send(tab, to: target)
+                }
             default: break
             }
-            answer(["way": sync.way.rawValue, "available": SyncCloud.available, "problem": sync.problem ?? "", "pushes": sync.pushes, "push": sync.pushRegistration,
+            answer(["way": sync.way.rawValue, "said": browser.announcement ?? "",
+                    // A tab's page as it can be sent (by `id`, else the one in front).
+                    "sendable": (request["id"] != nil ? find(request, in: browser) : browser.active)
+                        .flatMap { browser.sendable($0) }?.absoluteString ?? "",
+                    "targets": sync.targets(browser.profileID).map { ["device": $0.device, "name": $0.name, "phone": $0.phone] as [String: Any] }, "available": SyncCloud.available, "problem": sync.problem ?? "", "pushes": sync.pushes, "push": sync.pushRegistration,
                     "others": sync.others, "synced": sync.lastSynced.map { $0.timeIntervalSince1970 } ?? 0,
                     "device": sync.device,
                     // The other devices' open tabs this window's profile sees, by name.

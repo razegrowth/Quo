@@ -12,6 +12,28 @@ final class Tabs: ObservableObject {
     /// to put the right page in front in the same frame.
     var changed: (() -> Void)?
     @Published private(set) var archived: [Archived] = []
+    /// Tabs closed lately, the last first: a flick undone, or one brought
+    /// back from the list. Incognito ones only until Quo is closed, and
+    /// never in the list.
+    @Published private(set) var closed: [Closed] = []
+    /// Their pictures, while Quo is open, so one brought back has its card.
+    private var closedPictures: [UUID: UIImage] = [:]
+    static let mostClosed = 30
+
+    struct Closed: Codable, Identifiable, Equatable {
+        var id: UUID
+        var url: String
+        var title: String
+        var incognito = false
+        var lastActive: Date
+        var closedAt: Date
+        /// Back and forward, as WebKit kept them.
+        var state: Data?
+        var index: Int
+    }
+
+    /// The closed tabs the list shows: never an incognito one.
+    var recentlyClosed: [Closed] { closed.filter { !$0.incognito } }
 
     struct Saved: Codable {
         var id: UUID
@@ -47,6 +69,7 @@ final class Tabs: ObservableObject {
             return tab
         }
         archived = Store.read([Archived].self, "archive.json") ?? []
+        closed = Store.read([Closed].self, "closed.json") ?? []
         let front = UserDefaults.standard.string(forKey: "tabs.front").flatMap(UUID.init(uuidString:))
         current = all.first { $0.id == front }
         all.forEach(wire)
@@ -64,6 +87,23 @@ final class Tabs: ObservableObject {
             return nil
         }
         tab.onDownload = { download in Downloads.shared.take(download) }
+        tab.onStartDownload = { [weak self, weak tab] request in
+            guard let self, let tab else { return }
+            Downloads.shared.start(request, in: tab)
+            // A tab opened only for the file (a link to it in a new window)
+            // goes once the download's under way, back to the page before.
+            if tab.webViewIfBuilt?.backForwardList.currentItem == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak tab] in
+                    guard let tab, tab.webViewIfBuilt?.backForwardList.currentItem == nil else { return }
+                    if self.current?.id == tab.id, let back = self.previous { self.select(back) }
+                    self.close(tab, remember: false)
+                }
+            }
+        }
+        tab.openLink = { [weak self] url, front, incognito in
+            guard let self else { return }
+            self.open(url, incognito: incognito, front: front)
+        }
     }
 
     // MARK: - opening and closing
@@ -97,8 +137,19 @@ final class Tabs: ObservableObject {
         save()
     }
 
-    func close(_ tab: Tab) {
+    func close(_ tab: Tab, remember: Bool = true) {
         guard let index = all.firstIndex(where: { $0.id == tab.id }) else { return }
+        if remember, let url = tab.url {
+            closed.insert(Closed(id: tab.id, url: url.absoluteString, title: tab.shownTitle, incognito: tab.incognito,
+                                 lastActive: tab.lastActive, closedAt: Date(),
+                                 state: tab.liveState ?? tab.interactionState, index: index), at: 0)
+            if let picture = tab.thumbnail { closedPictures[tab.id] = picture }
+            if closed.count > Tabs.mostClosed {
+                for gone in closed[Tabs.mostClosed...] { closedPictures[gone.id] = nil }
+                closed.removeLast(closed.count - Tabs.mostClosed)
+            }
+            saveClosed()
+        }
         tab.close()
         all.remove(at: index)
         if current?.id == tab.id {
@@ -106,11 +157,49 @@ final class Tabs: ObservableObject {
             UserDefaults.standard.removeObject(forKey: "tabs.front")
         }
         if incognito.isEmpty { incognitoStore = nil }
+        IncognitoLock.shared.tabsChanged()
         save()
     }
 
-    func closeAll(incognito: Bool) {
-        for tab in all where tab.incognito == incognito { close(tab) }
+    func closeAll(incognito: Bool, remember: Bool = true) {
+        for tab in all where tab.incognito == incognito { close(tab, remember: remember) }
+    }
+
+    // MARK: - closed lately
+
+    /// A closed tab back where it was, its history with it. Behind the one
+    /// in front when the tab switcher's open, which puts its card back.
+    @discardableResult
+    func reopen(_ item: Closed, front: Bool = true) -> Tab? {
+        closed.removeAll { $0.id == item.id }
+        saveClosed()
+        guard all.first(where: { $0.id == item.id }) == nil else { return nil }
+        let tab = Tab(id: item.id, url: URL(string: item.url), title: item.title, incognito: item.incognito,
+                      lastActive: item.lastActive)
+        tab.interactionState = item.state
+        tab.thumbnail = closedPictures.removeValue(forKey: item.id)
+        wire(tab)
+        all.insert(tab, at: min(max(0, item.index), all.count))
+        if front { select(tab) } else { save() }
+        return tab
+    }
+
+    func forgetClosed(_ item: Closed) {
+        closed.removeAll { $0.id == item.id }
+        closedPictures[item.id] = nil
+        saveClosed()
+    }
+
+    /// Those closed since a time, as Clear Browsing Data asks.
+    func forgetClosed(since: Date) {
+        for item in closed where item.closedAt >= since { closedPictures[item.id] = nil }
+        closed.removeAll { $0.closedAt >= since }
+        saveClosed()
+    }
+
+    /// The incognito ones, kept only in memory, never written down.
+    private func saveClosed() {
+        Store.write(closed.filter { !$0.incognito }, "closed.json")
     }
 
     func move(from source: Int, to destination: Int) {
@@ -206,76 +295,4 @@ final class Tabs: ObservableObject {
 
 extension Tab {
     var liveState: Data? { isBuilt ? (webViewIfBuilt?.interactionState as? Data) : nil }
-}
-
-/// What's been downloaded, kept in Documents/Downloads where Files shows it.
-@MainActor
-final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
-    static let shared = Downloads()
-
-    struct Item: Identifiable, Equatable {
-        let id = UUID()
-        var name: String
-        var file: URL?
-        var done = false
-        var failed = false
-        var progress: Double = 0
-    }
-
-    @Published private(set) var items: [Item] = []
-    private var running: [ObjectIdentifier: UUID] = [:]
-
-    static let folder: URL = {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let url = docs.appendingPathComponent("Downloads", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }()
-
-    override init() {
-        super.init()
-        let files = (try? FileManager.default.contentsOfDirectory(at: Downloads.folder, includingPropertiesForKeys: [.creationDateKey])) ?? []
-        items = files.sorted { ($0.creationDate ?? .distantPast) > ($1.creationDate ?? .distantPast) }
-            .map { Item(name: $0.lastPathComponent, file: $0, done: true, progress: 1) }
-    }
-
-    func take(_ download: WKDownload) {
-        download.delegate = self
-    }
-
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String) async -> URL? {
-        var url = Downloads.folder.appendingPathComponent(suggestedFilename)
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            let base = (suggestedFilename as NSString).deletingPathExtension, ext = (suggestedFilename as NSString).pathExtension
-            url = Downloads.folder.appendingPathComponent(ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
-            n += 1
-        }
-        let item = Item(name: url.lastPathComponent, file: url)
-        items.insert(item, at: 0)
-        running[ObjectIdentifier(download)] = item.id
-        return url
-    }
-
-    func downloadDidFinish(_ download: WKDownload) {
-        update(download) { $0.done = true; $0.progress = 1 }
-    }
-
-    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-        update(download) { $0.failed = true }
-    }
-
-    private func update(_ download: WKDownload, _ change: (inout Item) -> Void) {
-        guard let id = running[ObjectIdentifier(download)], let index = items.firstIndex(where: { $0.id == id }) else { return }
-        change(&items[index])
-    }
-
-    func remove(_ item: Item) {
-        if let file = item.file { try? FileManager.default.removeItem(at: file) }
-        items.removeAll { $0.id == item.id }
-    }
-}
-
-private extension URL {
-    var creationDate: Date? { (try? resourceValues(forKeys: [.creationDateKey]))?.creationDate }
 }

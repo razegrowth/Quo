@@ -22,6 +22,9 @@ enum Q {
     static let hover = pair(0xF6F6F6, 0x262626)
     static let safe = pair(0x14803D, 0x4ADE80)
     static let caution = pair(0xB5540A, 0xFABF24)
+    /// A switch turned on: ink in light, a mid grey in dark, where the
+    /// ink's near-white would swallow the white knob.
+    static let on = pair(0x171717, 0x6E6E6E)
 
     /// A sheet's ground: a touch lifted from the frame in dark, white in light.
     static let sheet = pair(0xFFFFFF, 0x222222)

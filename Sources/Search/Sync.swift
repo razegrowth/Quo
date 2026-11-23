@@ -132,6 +132,11 @@ final class Sync: ObservableObject {
     /// The open tabs of the other devices, an iPhone's among them, by the
     /// scope of the profile they are in ("profile-<id>").
     @Published private(set) var elsewhere: [String: [DeviceTabs]] = [:]
+    /// The devices a page can be sent to, an iPhone's among them, by the
+    /// scope of the profile they are in.
+    @Published private(set) var targets: [String: [TabTarget]] = [:]
+    /// What this Mac sent and what it opened (SyncTabs.swift).
+    private let book = SentBook(defaults: Store.settings)
     /// The app went to the back: this Mac's tabs are written in the next
     /// pass even if it wrote them a moment ago, for the iPhone in your hand.
     private var going = false
@@ -167,6 +172,8 @@ final class Sync: ObservableObject {
     private var pending: DispatchWorkItem?
     private var watchers: [String: DispatchSourceFileSystemObject] = [:]
     private var running = false
+    /// A pass wanted while one ran (a page sent): another once it's done.
+    private var again = false
 
     private init() {}
 
@@ -444,23 +451,29 @@ final class Sync: ObservableObject {
         let going = self.going
         self.going = false
         var found: [String: [DeviceTabs]] = [:]
+        var reachable: [String: [TabTarget]] = [:]
         for profile in Profiles.shared.list {
             let scope = SyncTabs.scope(Sync.scope(profile.id))
             let folder = root.appendingPathComponent(scope, isDirectory: true)
             guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else { continue }
             let own = folder.appendingPathComponent(device + ".json")
-            found[Sync.scope(profile.id)] = SyncTabs.others(theirFiles(in: folder, scope: scope, own: own),
-                                                            scope: scope, device: device, now: now)
+            let theirs = theirFiles(in: folder, scope: scope, own: own)
+            found[Sync.scope(profile.id)] = SyncTabs.others(theirs, scope: scope, device: device, now: now)
+            reachable[Sync.scope(profile.id)] = SyncTabs.targets(theirs, scope: scope, device: device, now: now)
             // Before a window is up there is nothing to say yet, not "none".
             guard !Browsers.all.isEmpty else { continue }
+            openArrived(theirs, scope: scope, profile: profile.id, now: now)
             let mine = Sync.openTabs(of: profile.id)
+            let sent = book.outbox(scope, now: now)
             let written = (try? Data(contentsOf: own)).flatMap { SyncMerge.decode($0, scope: scope) }
-            guard SyncTabs.due(written, tabs: mine.tabs, spaces: mine.spaces, name: Sync.macName, now: now, going: going) else { continue }
+            guard SyncTabs.due(written, tabs: mine.tabs, spaces: mine.spaces, name: Sync.macName, sent: sent,
+                               now: now, going: going) else { continue }
             let file = SyncTabs.file(device: device, name: Sync.macName, phone: false, scope: scope,
-                                     tabs: mine.tabs, spaces: mine.spaces, now: now)
+                                     tabs: mine.tabs, spaces: mine.spaces, sent: sent, now: now)
             if let data = SyncMerge.encode(file) { try? data.write(to: own, options: .atomic) }
         }
         if elsewhere != found { elsewhere = found }
+        if targets != reachable { targets = reachable }
     }
 
     /// One scope's items merged with the other Macs', applied here, and what
@@ -494,7 +507,11 @@ final class Sync: ObservableObject {
         running = true
         let store = self.store
         Task { @MainActor in
-            defer { running = false }
+            defer {
+                running = false
+                // A page sent while this pass ran: another, to send it.
+                if again { again = false; pass() }
+            }
             do {
                 // Another Apple ID than last time: what this Mac agreed with
                 // the old one is forgotten, and it joins the new one's as a
@@ -536,21 +553,27 @@ final class Sync: ObservableObject {
             let going = self.going
             self.going = false
             var found: [String: [DeviceTabs]] = [:]
+            var reachable: [String: [TabTarget]] = [:]
             for profile in Profiles.shared.list {
                 let scope = SyncTabs.scope(Sync.scope(profile.id))
-                found[Sync.scope(profile.id)] = SyncTabs.others(store.files(in: scope), scope: scope, device: device, now: now)
+                let theirs = store.files(in: scope)
+                found[Sync.scope(profile.id)] = SyncTabs.others(theirs, scope: scope, device: device, now: now)
+                reachable[Sync.scope(profile.id)] = SyncTabs.targets(theirs, scope: scope, device: device, now: now)
                 guard problem == nil, !Browsers.all.isEmpty else { continue }
+                openArrived(theirs, scope: scope, profile: profile.id, now: now)
                 let mine = Sync.openTabs(of: profile.id)
+                let sent = book.outbox(scope, now: now)
                 guard SyncTabs.due(store.file(scope: scope, device: device), tabs: mine.tabs, spaces: mine.spaces,
-                                   name: Sync.macName, now: now, going: going) else { continue }
+                                   name: Sync.macName, sent: sent, now: now, going: going) else { continue }
                 let file = SyncTabs.file(device: device, name: Sync.macName, phone: false, scope: scope,
-                                         tabs: mine.tabs, spaces: mine.spaces, now: now)
+                                         tabs: mine.tabs, spaces: mine.spaces, sent: sent, now: now)
                 do { try await store.save(file) } catch {
                     problem = SyncCloud.describe(error)
                     if let wait = SyncCloud.retryAfter(error) { retry(after: wait) }
                 }
             }
             if elsewhere != found { elsewhere = found }
+            if targets != reachable { targets = reachable }
             others = seen.sorted()
             if problem == nil { lastSynced = Date() }
         }
@@ -629,6 +652,39 @@ final class Sync: ObservableObject {
     /// The other devices' open tabs in a profile, the one heard from last
     /// first.
     func elsewhere(_ profile: UUID) -> [DeviceTabs] { elsewhere[Sync.scope(profile)] ?? [] }
+
+    // MARK: - sending a page
+
+    /// The devices a page in a profile can be sent to.
+    func targets(_ profile: UUID) -> [TabTarget] { on ? targets[Sync.scope(profile)] ?? [] : [] }
+
+    /// A page sent to another device: in this Mac's own file, written now,
+    /// for the iPhone to open (at once when it's open, else when it next is).
+    func send(_ url: URL, title: String, to target: TabTarget, profile: UUID) {
+        guard on, SyncTabs.handed(url.absoluteString) else { return }
+        let now = Date().timeIntervalSince1970
+        book.add(SyncTabs.send(url.absoluteString, title: title, to: target.device, now: now),
+                 scope: SyncTabs.scope(Sync.scope(profile)), now: now)
+        if running { again = true } else { pass() }
+    }
+
+    /// Pages another device sent here, each opened once, in the order they
+    /// were sent: a tab in front of a window of the profile they're in.
+    private func openArrived(_ files: [SyncFile], scope: String, profile: UUID, now: Double) {
+        let arrived = SyncTabs.arrived(files, scope: scope, device: device, opened: book.opened, now: now)
+        guard !arrived.isEmpty else { return }
+        let windows = Browsers.all.filter { $0.profileID == profile && !$0.isPopup && !$0.retired }
+        guard let browser = windows.first(where: { $0 === Browsers.front }) ?? windows.first(where: { $0.isOpen }) ?? windows.first
+        else { return }
+        book.markOpened(arrived.map(\.tab.id), now: now)
+        for page in arrived {
+            guard let url = URL(string: page.tab.url) else { continue }
+            browser.open(url, foreground: true)
+        }
+        // Who sent it: the last one's device, or how many came.
+        let names = Set(arrived.map(\.fromName))
+        browser.announce(names.count == 1 ? "From \(names.first ?? "")" : "From your other devices", lasting: 3.5)
+    }
 
     /// A profile's open tabs on this Mac, every window's and every space's,
     /// for the other devices: not private ones, not pins (they sync as
