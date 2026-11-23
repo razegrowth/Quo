@@ -53,11 +53,12 @@ The first public version of Quo for iPhone.
 
 In `iOS/AppStore/screenshots/`, in this order. Made by `design/make.py` from the app's own screens in `raw/` (run `python3 design/make.py` to remake them).
 
-1. `1-page.png`: The web, and nothing in the way.
-2. `2-tabs.png`: Tabs that tidy themselves.
-3. `3-blocking.png`: Ads, trackers and cookie banners, gone.
-4. `4-toolbar.png`: Ask the page you're on.
-5. `5-quiet.png`: No account. No servers. Just a browser.
+1. `1-quo.png`: The quiet browser for iPhone (the promo screen: icon, Free, four selling points)
+2. `2-page.png`: The web, and nothing in the way.
+3. `3-tabs.png`: Tabs that tidy themselves.
+4. `4-blocking.png`: Ads, trackers and cookie banners, gone.
+5. `5-toolbar.png`: Ask the page you're on.
+6. `6-quiet.png`: No account. No servers. Just a browser.
 
 ## App Privacy (the "nutrition label")
 
