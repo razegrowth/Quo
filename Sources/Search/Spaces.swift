@@ -1115,9 +1115,12 @@ enum Ask {
     }
 
     /// `returnCancels`: Return is Cancel's, for a yes that can't be undone.
-    static func sure(_ title: String, detail: String, confirm: String, returnCancels: Bool = false, then: @escaping () -> Void) {
+    /// `otherwise`: what a Cancel does, for a caller that waits on the answer
+    /// either way (an agent's request, AgentFull.confirm).
+    static func sure(_ title: String, detail: String, confirm: String, returnCancels: Bool = false,
+                     otherwise: (() -> Void)? = nil, then: @escaping () -> Void) {
         if Store.testing, let yes = testing {
-            if yes { then() }
+            if yes { then() } else { otherwise?() }
             return
         }
         let alert = NSAlert()
@@ -1127,7 +1130,7 @@ enum Ask {
         yes.hasDestructiveAction = true
         let no = alert.addButton(withTitle: "Cancel")
         guard returnCancels else {
-            show(alert) { ok in if ok { then() } }
+            show(alert) { ok in if ok { then() } else { otherwise?() } }
             return
         }
         yes.keyEquivalent = ""
@@ -1141,7 +1144,7 @@ enum Ask {
         }
         show(alert) { ok in
             if let escape { NSEvent.removeMonitor(escape) }
-            if ok { then() }
+            if ok { then() } else { otherwise?() }
         }
     }
 

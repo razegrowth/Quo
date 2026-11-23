@@ -57,6 +57,42 @@ final class AgentControlTests: XCTestCase {
         XCTAssertFalse(consent.may(.drive, own: false))
     }
 
+    func testFullControlIsEveryTabUntilItEnds() {
+        var consent = AgentConsent()
+        consent.hello()
+        consent.answer(allow: true, seesTabs: false, full: true)
+        XCTAssertTrue(consent.full)
+        XCTAssertTrue(consent.seesTabs, "every tab is in full control")
+        XCTAssertTrue(consent.may(.drive, own: false))
+        XCTAssertTrue(consent.may(.read, own: false))
+        consent.end()
+        XCTAssertFalse(consent.full)
+        XCTAssertFalse(consent.may(.read, own: true))
+
+        var refused = AgentConsent()
+        refused.hello()
+        refused.answer(allow: false, seesTabs: true, full: true)
+        XCTAssertFalse(refused.full, "a no is never full control")
+        XCTAssertFalse(refused.may(.read, own: false))
+    }
+
+    @MainActor func testTheAgentsOwnSwitchesAreOutOfReach() {
+        let keys = Set(AgentSettings.all.map(\.key))
+        for key in ["agents", Preferences.agentsFullKey, "bench"] {
+            XCTAssertFalse(keys.contains(key), key)
+        }
+        XCTAssertEqual(keys.count, AgentSettings.all.count, "one row a key")
+    }
+
+    @MainActor func testEveryToolIsAVerbTheAppKnows() {
+        let page = ["tabs", "open", "close", "go", "back", "forward", "read", "click", "type", "press", "scroll", "wait_for", "shot", "bye"]
+        for tool in MCPTool.all {
+            XCTAssertTrue(page.contains(tool.verb) || AgentFull.verbs.contains(tool.verb), tool.name)
+            XCTAssertEqual(tool.full, AgentFull.verbs.contains(tool.verb), tool.name)
+        }
+        XCTAssertEqual(Set(MCPTool.all.map(\.name)).count, MCPTool.all.count, "one tool a name")
+    }
+
     func testRefusedAndEndedAreFinal() {
         var refused = AgentConsent()
         refused.hello()

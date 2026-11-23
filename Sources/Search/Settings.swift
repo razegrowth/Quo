@@ -909,6 +909,7 @@ struct SettingsPanel: View {
         case "about.notes": Pill("What's New…") { browser.lead(to: InternalPage(.notes)) }
         case "bench": Switch(on: $prefs.bench)
         case "agents": Switch(on: $prefs.agents)
+        case "agents.full": Switch(on: $prefs.agentsFull)
         default: EmptyView()
         }
     }
@@ -964,8 +965,13 @@ struct SettingsPanel: View {
                     }
                 }
             }
-        case "agents":
-            if !searched, prefs.agents { RememberedAgents() }
+        // Under Full control, which is there while agents are on: the switch,
+        // its level, then how an agent connects and who is always allowed.
+        case "agents.full":
+            if !searched, prefs.agents {
+                AgentSetup()
+                RememberedAgents()
+            }
         case "passwords.apple":
             ApplePasswordsCard(prefs: prefs, bare: true)
                 .under()
@@ -1970,6 +1976,31 @@ private struct NotificationSites: View {
                 Rule()
                 Line(URL(string: site).map(SiteCard.site) ?? site, "Can send notifications") {
                     Pill("Remove") { SiteNotifications.forget(site) }
+                }
+            }
+        }
+    }
+}
+
+/// How an agent finds Quo: the MCP server inside the app, added to Claude
+/// Code with one click, or its command copied for any other agent.
+private struct AgentSetup: View {
+    @State private var said: String?
+
+    var body: some View {
+        Rule()
+        SettingRow(icon: "puzzlepiece.extension", title: "Connect an agent",
+                   detail: said ?? AgentMCP.addCommand,
+                   more: "\(Store.name)'s MCP server is the app itself, started with --mcp. Claude Code: \(AgentMCP.addCommand). Codex: codex mcp add \(AgentMCP.serverName) -- \(AgentMCP.quotedPath) --mcp. Any other agent: run \(AgentMCP.quotedPath) --mcp as a stdio server.") {
+            HStack(spacing: 6) {
+                Pill("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(AgentMCP.addCommand, forType: .string)
+                    said = "Copied"
+                }
+                Pill("Add to Claude Code") {
+                    said = "Adding…"
+                    AgentMCP.addToClaudeCode { said = $0 }
                 }
             }
         }

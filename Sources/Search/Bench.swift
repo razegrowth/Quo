@@ -559,6 +559,8 @@ final class Bench {
                 agents.idleForTest = request["after"] as? Double
                 agents.letGoForTest = request["letGo"] as? Double
             case "deny": agents.answerForTest(allow: false, seesTabs: false)
+            // Full control (AgentFull) on or off, as its switch in Settings.
+            case "full": browser.prefs.agentsFull = request["on"] as? Bool ?? true
             // The question's Allow pressed with no click behind it, as
             // Accessibility would press it: ignored.
             case "press": agents.answer(allow: true, event: nil)

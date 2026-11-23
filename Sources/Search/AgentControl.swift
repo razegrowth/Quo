@@ -90,16 +90,22 @@ struct AgentConsent: Equatable {
         return true
     }
 
+    /// Full control (Settings › About › Developer), as it stood when you
+    /// answered: every tab is its to use, and the verbs of AgentFull are open.
+    private(set) var full = false
+
     /// Your answer. Only to a question that is up.
-    mutating func answer(allow: Bool, seesTabs: Bool) {
+    mutating func answer(allow: Bool, seesTabs: Bool, full: Bool = false) {
         guard state == .asking else { return }
         state = allow ? .allowed : .refused
-        self.seesTabs = allow && seesTabs
+        self.full = allow && full
+        self.seesTabs = allow && (seesTabs || full)
     }
 
     mutating func end() {
         state = .ended
         seesTabs = false
+        full = false
     }
 
     /// What a request may do now.
@@ -117,7 +123,7 @@ struct AgentConsent: Equatable {
     /// only if you said so.
     func may(_ use: Use, own: Bool) -> Bool {
         guard state == .allowed else { return false }
-        return own || (use == .read && seesTabs)
+        return own || full || (use == .read && seesTabs)
     }
 }
 
@@ -422,11 +428,11 @@ final class AgentSession: ObservableObject, Identifiable {
     fileprivate var pace = AgentPace()
 
     /// p1 → the tab it names. Its own tabs, and yours once listed.
-    fileprivate var pages: [String: Tab.ID] = [:]
+    var pages: [String: Tab.ID] = [:]
     /// The tabs it opened, and the ones those opened.
-    fileprivate(set) var own: Set<Tab.ID> = []
+    var own: Set<Tab.ID> = []
     /// p1 → the number of its last read.
-    fileprivate var snaps: [String: Int] = [:]
+    var snaps: [String: Int] = [:]
     private var counter = 0
 
     fileprivate init(fd: Int32, program: String) {
@@ -434,7 +440,7 @@ final class AgentSession: ObservableObject, Identifiable {
         self.program = program
     }
 
-    fileprivate func handle(for tab: Tab) -> String {
+    func handle(for tab: Tab) -> String {
         if let found = pages.first(where: { $0.value == tab.id }) { return found.key }
         counter += 1
         let handle = "p\(counter)"
@@ -442,7 +448,7 @@ final class AgentSession: ObservableObject, Identifiable {
         return handle
     }
 
-    fileprivate func forget(_ handle: String) {
+    func forget(_ handle: String) {
         pages[handle] = nil
         snaps[handle] = nil
     }
@@ -470,10 +476,13 @@ final class AgentControl: ObservableObject {
     /// let in again, if remembered) on its next request.
     static let letGo: TimeInterval = 300
     /// Where the element lists live in each page, apart from the bench's.
-    private static let key = "__searchAgent"
+    static let key = "__searchAgent"
 
     /// The one connection there is, asking or allowed.
     @Published private(set) var session: AgentSession?
+    /// Full control is switched on (Settings › About › Developer): what an
+    /// agent allowed now gets (AgentConsent.full).
+    static var fullOn: Bool { Shared.prefs.agents && Shared.prefs.agentsFull }
     private(set) var running = false
     private var listener: Int32 = -1
     private var accepting: DispatchSourceRead?
@@ -744,7 +753,8 @@ final class AgentControl: ObservableObject {
             // agent, or the next request, for ever. You, answering the
             // question, are not on a clock.
             if verb != "hello" {
-                let patience = min(60, (request["timeout"] as? Double ?? 20) + 15)
+                // One that may ask you first waits for your answer longer.
+                let patience = AgentFull.mayAsk.contains(verb) ? 180 : min(60, (request["timeout"] as? Double ?? 20) + 15)
                 DispatchQueue.main.asyncAfter(deadline: .now() + patience) {
                     answer(AgentRefusal(code: "no_answer", message: "No answer within \(Int(patience)) s").said)
                 }
@@ -775,7 +785,7 @@ final class AgentControl: ObservableObject {
         if let session { end(session, "stopped from the window") }
     }
 
-    private func end(_ session: AgentSession, _ why: String) {
+    func end(_ session: AgentSession, _ why: String) {
         guard self.session === session else { return }
         let was = session.consent.state
         // Stopped, let in without asking or not: never let in again without
@@ -812,7 +822,7 @@ final class AgentControl: ObservableObject {
     /// Whether a session may still act: the one there is, and allowed.
     /// Asked again before every step that touches a page, so nothing it
     /// asked for runs after Stop.
-    private func live(_ session: AgentSession) -> Bool {
+    func live(_ session: AgentSession) -> Bool {
         self.session === session && session.consent.state == .allowed
     }
 
@@ -885,7 +895,7 @@ final class AgentControl: ObservableObject {
 
     private func decide(allow: Bool, seesTabs: Bool, now: Date) {
         guard let session, session.consent.state == .asking, now.timeIntervalSince(session.asked) > 0.5 else { return }
-        session.consent.answer(allow: allow, seesTabs: seesTabs)
+        session.consent.answer(allow: allow, seesTabs: seesTabs, full: Self.fullOn)
         Self.log.notice("\(allow ? "allowed" : "not allowed", privacy: .public)\(allow && seesTabs ? ", with your tabs" : "", privacy: .public)")
         // Remembered only as ticked, and only a program that can be: the
         // box isn't there otherwise, and this says so again.
@@ -935,8 +945,9 @@ final class AgentControl: ObservableObject {
         }
         session.auto = true
         session.admittedBy = entry.id
-        // Your tabs never without a click of yours in the question.
-        session.consent.answer(allow: true, seesTabs: false)
+        // Your tabs never without a click of yours in the question — unless
+        // you gave agents full control, which is every tab by your own switch.
+        session.consent.answer(allow: true, seesTabs: false, full: Self.fullOn)
         var seen = entry
         seen.path = session.launcher?.path ?? entry.path
         trust.used(seen)
@@ -998,7 +1009,7 @@ final class AgentControl: ObservableObject {
     }
 
     /// The dot goes to the tab it is working in now, and off the one before.
-    private func work(on tab: Tab?, _ session: AgentSession) {
+    func work(on tab: Tab?, _ session: AgentSession) {
         if let before = session.workingOn, before !== tab { before.agentWorking = false }
         session.workingOn = tab
         if let tab, !tab.agentWorking { tab.agentWorking = true }
@@ -1029,6 +1040,7 @@ final class AgentControl: ObservableObject {
         case .ended: "ended"
         }
         return ["running": running, "connected": true, "state": state, "client": session.client,
+                "full": session.consent.full, "fullOn": Self.fullOn,
                 "program": session.program, "seesTabs": session.consent.seesTabs, "wantsTabs": session.wantsTabs,
                 "drawn": allowButton?.window != nil && tabsBox?.window != nil,
                 "own": session.own.count, "auto": session.auto, "justAdmitted": session.justAdmitted, "admissions": admissions, "wantsAlways": session.wantsAlways,
@@ -1092,6 +1104,16 @@ final class AgentControl: ObservableObject {
                 answer(["allowed": true, "seesTabs": session.consent.seesTabs, "client": session.client])
             case "tabs":
                 tabs(session, browser, answer)
+            case "open" where session.consent.full:
+                // With full control, a tab like one you'd open: in your row,
+                // your session and your space, in front if asked.
+                guard let url = AgentRules.address(request["url"] as? String ?? "") else { throw Self.badAddress }
+                let target = try window(request, browser)
+                let tab = target.open(url, foreground: request["foreground"] as? Bool ?? false, atEnd: true)
+                session.own.insert(tab.id)
+                work(on: tab, session)
+                if tab.web.window == nil { PageRoom.shared.house(tab, anyway: true) }
+                settle(tab, session, timeout: request["timeout"] as? Double ?? 20, answer)
             case "open":
                 guard let url = AgentRules.address(request["url"] as? String ?? "") else { throw Self.badAddress }
                 let tab = browser.benchOpen(url, agent: true)
@@ -1148,7 +1170,15 @@ final class AgentControl: ObservableObject {
                 answer(["bye": true])
                 DispatchQueue.main.async { [weak self] in self?.end(session, "it said goodbye") }
             default:
-                throw AgentRefusal(code: "no_verb", message: "\(Store.name) doesn't do “\(verb)” for an agent")
+                // The rest of the browser (AgentFull), with full control only.
+                guard AgentFull.verbs.contains(verb) else {
+                    throw AgentRefusal(code: "no_verb", message: "\(Store.name) doesn't do “\(verb)” for an agent")
+                }
+                guard session.consent.full else {
+                    throw AgentRefusal(code: "full_control_off", message: "Full control is off in \(Store.name)",
+                                       hint: "Only the person can turn on Settings › About › Developer › Give agents full control; then connect again.")
+                }
+                try runFull(verb, request, session, browser, answer)
             }
         } catch let refusal as AgentRefusal {
             refuse(refusal)
@@ -1164,9 +1194,11 @@ final class AgentControl: ObservableObject {
 
     /// The tab a request's page handle names, if it may be used that way.
     /// A private tab is never found, and a tab of yours is read at most.
-    private func tab(_ request: [String: Any], _ session: AgentSession, _ browser: Browser, _ use: AgentConsent.Use) throws -> Tab {
+    func tab(_ request: [String: Any], _ session: AgentSession, _ browser: Browser, _ use: AgentConsent.Use) throws -> Tab {
         let handle = request["page"] as? String ?? ""
-        let found = session.pages[handle].flatMap { id in browser.tabs.first { $0.id == id } }
+        // With full control, a tab in any window.
+        let rows = session.consent.full ? Browsers.all.flatMap(\.tabs) : browser.tabs
+        let found = session.pages[handle].flatMap { id in rows.first { $0.id == id } }
         let refusal = found.map { AgentRules.refusal(for: $0, own: session.own.contains($0.id), consent: session.consent, use: use) }
             ?? "stale_page"
         switch refusal {
@@ -1182,7 +1214,7 @@ final class AgentControl: ObservableObject {
         }
     }
 
-    private func element(_ request: [String: Any], _ session: AgentSession, _ browser: Browser) throws -> (Tab, String, Int, Int) {
+    func element(_ request: [String: Any], _ session: AgentSession, _ browser: Browser) throws -> (Tab, String, Int, Int) {
         let text = request["element"] as? String ?? ""
         let parts = text.split(separator: ".")
         guard parts.count == 3, parts[1].hasPrefix("s"), parts[2].hasPrefix("e"),
@@ -1200,7 +1232,7 @@ final class AgentControl: ObservableObject {
     /// A script of Search's, in Search's world, on the tab's page: its own
     /// tab housed off screen first; one of yours read as it is, and never
     /// woken for it.
-    private func page(_ tab: Tab, _ session: AgentSession, _ script: String,
+    func page(_ tab: Tab, _ session: AgentSession, _ script: String,
                       _ done: @escaping (Result<[String: Any], AgentRefusal>) -> Void) {
         guard live(session) else {
             done(.failure(AgentRefusal(code: "stopped", message: "Stopped in \(Store.name)")))
@@ -1211,7 +1243,20 @@ final class AgentControl: ObservableObject {
             PageRoom.shared.house(tab)
             web = tab.web
         } else if let built = tab.built, !tab.asleep {
+            if session.consent.full, built.window == nil { PageRoom.shared.house(tab, anyway: true) }
             web = built
+        } else if session.consent.full {
+            // Full control wakes a sleeping tab, as clicking it would, and
+            // reads it once its page is back.
+            _ = tab.wake()
+            if tab.web.window == nil { PageRoom.shared.house(tab, anyway: true) }
+            settle(tab, session, timeout: 20) { [weak self] _ in
+                guard let self, !tab.asleep else {
+                    return done(.failure(AgentRefusal(code: "asleep", message: "That tab didn't wake")))
+                }
+                page(tab, session, script, done)
+            }
+            return
         } else {
             done(.failure(AgentRefusal(code: "asleep", message: "That tab is asleep, and isn't woken for an agent")))
             return
@@ -1241,7 +1286,7 @@ final class AgentControl: ObservableObject {
         }
     }
 
-    private func describe(_ tab: Tab, _ session: AgentSession) -> [String: Any] {
+    func describe(_ tab: Tab, _ session: AgentSession) -> [String: Any] {
         var out: [String: Any] = ["page": session.handle(for: tab), "url": AgentRules.url(tab.address?.absoluteString ?? ""),
                                   "title": tab.title, "loading": tab.loading]
         if let failure = tab.failure { out["failure"] = AgentRules.scrubbed(failure) }
@@ -1249,7 +1294,7 @@ final class AgentControl: ObservableObject {
     }
 
     /// Once the page has stopped loading, or the time is up.
-    private func settle(_ tab: Tab, _ session: AgentSession, timeout: Double, _ answer: @escaping ([String: Any]) -> Void) {
+    func settle(_ tab: Tab, _ session: AgentSession, timeout: Double, _ answer: @escaping ([String: Any]) -> Void) {
         let limit = Date().addingTimeInterval(min(max(timeout, 0), 30))
         func look() {
             if !tab.loading, tab.address != nil {
@@ -1272,6 +1317,20 @@ final class AgentControl: ObservableObject {
     }
 
     private func tabs(_ session: AgentSession, _ browser: Browser, _ answer: @escaping ([String: Any]) -> Void) {
+        if session.consent.full {
+            // Every window's, as get_state has them, without the rest.
+            let all = Set(Browsers.all.flatMap(\.tabs).map(\.id))
+            for (handle, id) in session.pages where !all.contains(id) { session.forget(handle) }
+            session.own.formIntersection(all)
+            answer(["tabs": Browsers.all.enumerated().flatMap { n, window in
+                window.tabs.filter { !$0.shy }.map { tab -> [String: Any] in
+                    var out = AgentFull.describe(tab, in: window, session, control: self)
+                    out["window"] = n + 1
+                    return out
+                }
+            }])
+            return
+        }
         let live = Set(browser.tabs.map(\.id))
         for (handle, id) in session.pages where !live.contains(id) { session.forget(handle) }
         session.own.formIntersection(live)
@@ -1296,7 +1355,7 @@ final class AgentControl: ObservableObject {
             case .failure(let refusal): answer(refusal.said)
             case .success(var out):
                 session.snaps[handle] = snap
-                let own = session.own.contains(tab.id)
+                let own = session.own.contains(tab.id) || session.consent.full
                 out["nodes"] = (out["nodes"] as? [[String: Any]] ?? []).map { node in
                     var node = node
                     let index = node.removeValue(forKey: "e") as? Int ?? -1
@@ -1409,7 +1468,7 @@ final class AgentControl: ObservableObject {
         let tab = try self.tab(request, session, browser, .read)
         let timeout = min(max(request["timeout"] as? Double ?? 10, 0), 30)
         let condition: AgentRules.Condition
-        switch AgentRules.condition(request, own: session.own.contains(tab.id)) {
+        switch AgentRules.condition(request, own: session.own.contains(tab.id) || session.consent.full) {
         case .failure(let refusal): throw refusal
         case .success(let made): condition = made
         }
