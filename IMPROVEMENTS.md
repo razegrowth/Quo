@@ -71,6 +71,10 @@ Everything Quo has added to or fixed in [Search](https://github.com/driceroland/
 - **A pin keeps its site, and what leaves it opens in a new tab**: a link in a pin to another site, or another site's address typed into it, opens a new tab beside it, as Dia does, and the pin stays where it was. Search opened such links in a Peek over the pin, which is still a choice (Settings › Spaces & Pins). *Nov 2026*
 - **Chrome's reload keys**: ⇧⌘R reloads skipping the cache, and Reading Mode moves to ⌥⌘R. *Nov 2026*
 
+## AI agents
+
+- **Agents on your Mac can control the whole browser over MCP**: with Settings › About › Developer › Give agents full control on, Claude Code, Codex or any other agent you allow can do what you do in Quo. That means every window, space, group, pin and tab (open, close, select, pin, rename, mute, split, group, move between spaces and windows), every menu command by its id, bookmarks, history, downloads and settings, and pages themselves: any tab's, with your sign-ins, read, clicked, typed into, scrolled, pictured, or run a script in. The MCP server is Quo itself, so there's nothing else to install: Add to Claude Code in Settings, or `claude mcp add quo -- /Applications/Quo.app/Contents/MacOS/Quo --mcp`, and Quo starts in the background if it isn't open. It speaks the current MCP revision (2026-07-28) and the earlier ones. Each agent still asks in the window first, says it wants full control, and stops at Stop. It never sees saved passwords, card numbers or one-time codes (its scripts read those fields as empty, can't turn them into text fields or send their form elsewhere), never private tabs, and can't change its own switches or the agents you always allow. Clearing history, deleting a space, or closing several tabs, a group or a window at once asks you first. Off by default, and offered in onboarding, off. Search let agents work only in tabs of their own, through a separate Python script in its repository. *Nov 2026*
+
 ## Blocking
 
 - **Popular filter lists a click away** (EasyList, EasyPrivacy, Fanboy's Annoyances, the cookie notice list). *Nov 2026*

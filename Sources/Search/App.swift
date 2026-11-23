@@ -5,7 +5,18 @@ import Combine
 // A window, a row of titles, and a field. Typing an address gets you a page;
 // there is nothing else to learn and nothing else to press.
 
+/// Where the app starts. Started with --mcp it is an agent's MCP server and
+/// nothing else (AgentMCP), before SwiftUI makes an app of it: no window, no
+/// Dock icon. Otherwise, the browser.
 @main
+@MainActor
+enum Entry {
+    static func main() {
+        if CommandLine.arguments.contains("--mcp") { AgentMCP.serve(CommandLine.arguments) }
+        SearchApp.main()
+    }
+}
+
 struct SearchApp: App {
     /// The window in front's browser, for the menus (see Windows.swift).
     @StateObject private var front = Front.shared

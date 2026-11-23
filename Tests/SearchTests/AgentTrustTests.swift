@@ -282,10 +282,11 @@ final class AgentTrustTests: XCTestCase {
                                                              identifier: "com.anthropic.claude-code", signer: "Anthropic PBC",
                                                              path: "", added: Date(), used: Date())])
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("Tabs"), "nothing about your tabs is kept")
-        // And AgentControl lets a remembered agent in without them, whatever.
+        // And AgentControl lets a remembered agent in without them — only
+        // full control, by your own switch as it stands now, brings them.
         let source = try String(contentsOfFile: #filePath.replacingOccurrences(of: "Tests/SearchTests/AgentTrustTests.swift",
                                                                                  with: "Sources/Search/AgentControl.swift"), encoding: .utf8)
-        XCTAssertTrue(source.contains("session.consent.answer(allow: true, seesTabs: false)"))
+        XCTAssertTrue(source.contains("session.consent.answer(allow: true, seesTabs: false, full: Self.fullOn)"))
     }
 
     func testTheKeychainItemNamesItsGroup() throws {

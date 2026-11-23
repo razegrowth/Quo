@@ -712,6 +712,18 @@ struct WelcomePanel: View {
                 }
                 .rise(3)
             }
+            // Coding agents with full control (AgentFull): off to start with,
+            // and only ever on by your own switch, here or in Settings.
+            Glass {
+                HStack(spacing: 16) {
+                    Badge(symbol: "cursorarrow.rays")
+                    Toggled("Let AI agents control \(Store.name)",
+                            "Claude Code, Codex and others over MCP, once you allow each one",
+                            on: Binding(get: { prefs.agents && prefs.agentsFull },
+                                        set: { on in prefs.agents = on; prefs.agentsFull = on }))
+                }
+            }
+            .rise(OnDevice.available ? 4 : 3)
         }
     }
 

@@ -218,7 +218,8 @@ private struct AgentQuestion: View {
                     .foregroundStyle(Palette.muted)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("“\(session.client)” wants to use \(Store.name)")
+                    Text(AgentControl.fullOn ? "“\(session.client)” wants full control of \(Store.name)"
+                                             : "“\(session.client)” wants to use \(Store.name)")
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(Palette.ink)
                     Text(detail)
@@ -227,7 +228,9 @@ private struct AgentQuestion: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            // Ticked only by a fresh click on it, as Allow is pressed.
+            // Ticked only by a fresh click on it, as Allow is pressed. With
+            // full control there is nothing to tick: every tab is in it.
+            if !AgentControl.fullOn {
             Toggle("Let it see my open tabs", isOn: Binding(
                 get: { session.wantsTabs },
                 set: { _ in AgentControl.shared.toggleTabs(event: NSApp.currentEvent) }))
@@ -236,6 +239,7 @@ private struct AgentQuestion: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.ink)
                 .padding(.leading, 23)
+            }
             // Offered only for a program its signature names (AgentTrust);
             // otherwise, why not.
             if let why = session.noAlways {
@@ -295,6 +299,11 @@ private struct AgentQuestion: View {
     /// The name is the program's own word for itself; this is macOS's.
     private var detail: String {
         let from = session.program.isEmpty ? "" : "From \(session.program) on this Mac. "
+        if AgentControl.fullOn {
+            return from + "It can use all of \(Store.name) as you can: your tabs and sign-ins, windows, spaces, "
+                + "bookmarks, history, settings and every menu command, until you press Stop. "
+                + "It never sees passwords, card numbers, one-time codes or private tabs."
+        }
         return from + "It works in tabs of its own while you watch, until you press Stop. "
             + "It never sees passwords, card numbers, private tabs or Settings."
     }

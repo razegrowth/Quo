@@ -149,7 +149,7 @@ enum SettingsIndex {
         // Keyboard & Mouse
         "links.peek.stays", "links.optionSplit", "autoscroll", "scroll.smoothWheel", "pages.bounce", "swipe.history",
         // About
-        "bench", "agents",
+        "bench", "agents", "agents.full",
     ]
 
     // MARK: - rows
@@ -616,10 +616,15 @@ enum SettingsIndex {
               more: "Its tabs open beside yours with a flask on them. See ./bench.",
               keys: ["bench"], words: ["automation", "script", "developer"]),
         .init(id: "agents", group: "developer", icon: "cursorarrow.rays",
-              title: "Let coding agents use \(Store.name)", detail: "Claude Code or Codex can ask to browse in tabs of its own, while you watch",
-              more: "Each time one connects, the window asks you first, unless you ticked “Always allow” for it — offered only for Claude Code's own `claude`, signed by Anthropic; kept 30 days at most and 7 after its last use, never with your tabs, and asked again after you press Stop; forget it here. Nothing is drawn over the page: the tab it works in wears a small dot, and Stop is on the column's foot (or the tab strip) and in File › Stop Agent (⌃⌥⌘.) until it goes. It works in tabs of its own; your tabs it can read only if you tick “Let it see my open tabs”, and never uses. It never sees passwords, card numbers, one-time codes, private tabs, cookies or Settings, and can't download or choose files. It connects through a file on this Mac only, never the network: claude mcp add search -- /path/to/\(Store.name)/search-mcp.",
+              title: "Let coding agents use \(Store.name)", detail: "Claude Code, Codex or another agent on this Mac can ask to use \(Store.name) over MCP",
+              more: "Each time one connects, the window asks you first, unless you ticked “Always allow” for it — offered only for Claude Code's own `claude`, signed by Anthropic; kept 30 days at most and 7 after its last use, and asked again after you press Stop; forget it here. Nothing is drawn over the page: the tab it works in wears a small dot, and Stop is on the column's foot (or the tab strip) and in File › Stop Agent (⌃⌥⌘.) until it goes. Without full control it works in tabs of its own; your tabs it can read only if you tick “Let it see my open tabs”, and never uses. It never sees passwords, card numbers, one-time codes or private tabs. It connects through a file on this Mac only, never the network, with \(Store.name)'s own MCP server: Add to Claude Code below, or copy the command for another agent.",
               keys: ["agents"],
               words: ["agent", "ai", "claude", "claude code", "codex", "mcp", "automation", "computer use", "developer"]),
+        .init(id: "agents.full", group: "developer", icon: "macwindow.and.cursorarrow",
+              title: "Give agents full control", detail: "Every tab, window, space, bookmark, setting and menu command, as you use them",
+              more: "An agent you allow can then do anything you can do in \(Store.name): use your tabs with your sign-ins, run scripts in pages, open, close, move, pin, group and split tabs, make and change spaces and windows, read and change bookmarks, history and settings, download files and run any menu command. It still never sees saved passwords, card numbers or one-time codes, can't change this setting or the agents you always allow, and asks you before clearing your history or data or closing several tabs at once. Turning it on or off forgets the agents you always allowed.",
+              keys: [Preferences.agentsFullKey],
+              words: ["agent", "mcp", "full control", "automation", "computer use", "claude", "codex"], parent: "agents"),
 
         // Moved to a menu, or always on: only the find field says so.
         .init(id: "autocorrect", group: "pages", icon: "textformat.abc.dottedunderline",
@@ -721,6 +726,7 @@ enum SettingsIndex {
         case "newtab.recent": return prefs.floatingNewTab
         case "links.little.tabs": return prefs.littleLinks
         case "mail.default": return prefs.webmail != .none
+        case "agents.full": return prefs.agents
         case "links.peek.stays": return prefs.peeksLinks || prefs.pinsPeek
         case "pins.links": return prefs.pinsKeepSite
         case "launcher.key": return prefs.launcher

@@ -230,6 +230,21 @@ final class Preferences: ObservableObject {
     static let agentsMark = SwitchMark(service: "\(Store.home).agents")
     /// Found on at launch without the mark, and put back to off.
     private(set) var agentsRefused = false
+    /// Full control: an agent you allow may use the whole browser as you
+    /// can — every tab, window, space, group, pin, bookmark, setting and
+    /// menu command (AgentFull). Off, it works in tabs of its own, as
+    /// before. Under the switch above, with a mark of its own, so no other
+    /// program can turn it on behind your back; changed, nobody is
+    /// remembered, so an agent let in for one level is asked again at the other.
+    @Published var agentsFull: Bool {
+        didSet {
+            store.set(agentsFull, forKey: Self.agentsFullKey)
+            agentsFull ? Preferences.agentsFullMark.grant() : Preferences.agentsFullMark.revoke()
+            if agentsFull != oldValue { AgentTrust.shared.forgetAll() }
+        }
+    }
+    static let agentsFullKey = "agents.full"
+    static let agentsFullMark = SwitchMark(service: "\(Store.home).agents.full")
     /// Light, dark, or the Mac's own.
     @Published var look: Look {
         didSet {
@@ -1103,6 +1118,10 @@ final class Preferences: ObservableObject {
             agentsRefused = true
             store.set(false, forKey: "agents")
         }
+        let fullAsked = store.bool(forKey: Self.agentsFullKey)
+        let fullAllowed = fullAsked && (Store.testing || Preferences.agentsFullMark.given)
+        agentsFull = fullAllowed
+        if fullAsked, !fullAllowed { store.set(false, forKey: Self.agentsFullKey) }
         let chosen = store.string(forKey: "look").flatMap(Look.init) ?? .system
         look = chosen
         // Before the first window, and not deferred: the window that is about

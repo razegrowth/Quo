@@ -317,6 +317,67 @@ enum PageScripts {
 
     """#
 
+    /// Run first in the world an agent's own scripts run in (AgentFull's
+    /// `script`), once per page: what a secret field holds — a password, a
+    /// card's number or code, a one-time code, by the same test as above —
+    /// reads as empty there, by its value, its attribute or a FormData of
+    /// its form; such a field can't be made another type to be read, nor its
+    /// form sent somewhere else; and copy and cut are refused, so nothing
+    /// leaves by the pasteboard. The page's own scripts live in their own
+    /// world and are untouched.
+    static var scriptGuard: String {
+        "(function () { if (globalThis.__quoGuard) return; globalThis.__quoGuard = true;\n" + helpers + #"""
+        function keep(proto, prop) {
+          var d = Object.getOwnPropertyDescriptor(proto, prop);
+          Object.defineProperty(proto, prop, { configurable: false, enumerable: d.enumerable,
+            get: function () { return secret(this) ? '' : d.get.call(this); },
+            set: function (v) { d.set.call(this, v); } });
+        }
+        keep(HTMLInputElement.prototype, 'value');
+        keep(HTMLTextAreaElement.prototype, 'value');
+        keep(HTMLInputElement.prototype, 'defaultValue');
+        var type = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'type');
+        Object.defineProperty(HTMLInputElement.prototype, 'type', { configurable: false, enumerable: type.enumerable,
+          get: function () { return type.get.call(this); },
+          set: function (v) { if (secret(this)) throw new Error('Quo keeps a secret field as it is'); type.set.call(this, v); } });
+        function guarded(form) {
+          return !!form && !!form.elements && Array.prototype.some.call(form.elements, function (el) { return secret(el); });
+        }
+        var action = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action');
+        Object.defineProperty(HTMLFormElement.prototype, 'action', { configurable: false, enumerable: action.enumerable,
+          get: function () { return action.get.call(this); },
+          set: function (v) { if (guarded(this)) throw new Error('Quo keeps a form with a secret in it going where it goes'); action.set.call(this, v); } });
+        var getAttr = Element.prototype.getAttribute, setAttr = Element.prototype.setAttribute;
+        Element.prototype.getAttribute = function (n) {
+          if (String(n).toLowerCase() === 'value' && secret(this)) return null;
+          return getAttr.apply(this, arguments);
+        };
+        Element.prototype.setAttribute = function (n) {
+          var what = String(n).toLowerCase();
+          if (what === 'type' && secret(this)) throw new Error('Quo keeps a secret field as it is');
+          if ((what === 'action' && guarded(this)) || (what === 'formaction' && guarded(this.form)))
+            throw new Error('Quo keeps a form with a secret in it going where it goes');
+          return setAttr.apply(this, arguments);
+        };
+        var FD = FormData;
+        globalThis.FormData = function (form, submitter) {
+          var made = submitter === undefined ? new FD(form) : new FD(form, submitter);
+          if (form && form.elements) Array.prototype.forEach.call(form.elements, function (el) {
+            if (el.name && secret(el)) made.delete(el.name);
+          });
+          return made;
+        };
+        globalThis.FormData.prototype = FD.prototype;
+        var exec = Document.prototype.execCommand;
+        Document.prototype.execCommand = function (c) {
+          if (/^(copy|cut)$/i.test(String(c))) return false;
+          return exec.apply(this, arguments);
+        };
+        Array.prototype.forEach.call(document.querySelectorAll('input,textarea'), function (el) { secret(el); });
+        })();
+        """#
+    }
+
     /// Where a picture must be blacked out, in CSS pixels of the viewport.
     static var secrets: String {
         helpers + maskedHelper
