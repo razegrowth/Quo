@@ -10,7 +10,7 @@ enum Panel: Equatable {
 }
 
 enum SheetKind: String, Identifiable {
-    case site, settings, spaces, reader, downloads, archive, closed
+    case site, settings, spaces, reader, downloads, archive, closed, ask
     var id: String { rawValue }
 }
 
@@ -293,6 +293,10 @@ struct BrowserView: View {
             case .downloads: NavigationStack { DownloadsView() }
             case .archive: NavigationStack { ArchiveView() }
             case .closed: NavigationStack { ClosedTabsView() }
+            case .ask:
+                if let tab = tabs.current {
+                    AskPageSheet(tab: tab).presentationDetents([.medium, .large]).presentationCornerRadius(28)
+                }
             }
         }
         .quickLookPreview($browser.previewing)

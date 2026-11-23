@@ -195,8 +195,18 @@ struct ToolbarPanel: View {
         let send = tab.url != nil && !tab.incognito && !targets.isEmpty
         let save = tab.url != nil && tab.isDocument
         let coming = downloads.active
-        if send || tab.hasVideo || save || !coming.isEmpty {
+        let askable = tab.url != nil && OnDevice.available
+        if send || tab.hasVideo || save || !coming.isEmpty || askable {
             VStack(spacing: 0) {
+                if askable {
+                    Button {
+                        dismiss()
+                        browser.sheet = .ask
+                    } label: { Row(symbol: "apple.intelligence", title: "Ask this page") }
+                        .buttonStyle(RowButton())
+                        .accessibilityIdentifier("toolbar.ask")
+                    if send || tab.hasVideo || save || !coming.isEmpty { Divider().overlay(Q.hairline).padding(.leading, 52) }
+                }
                 if save, let url = tab.url {
                     Button {
                         dismiss()
