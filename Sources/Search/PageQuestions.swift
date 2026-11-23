@@ -8,61 +8,44 @@ struct CaptureQuestion: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) { question; actions }.fixedSize()
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 question
                 ViewThatFits(in: .horizontal) {
                     actions.fixedSize()
-                    VStack(alignment: .leading, spacing: 10) { buttons }
+                    VStack(alignment: .leading, spacing: 6) { buttons }
                 }
+                .padding(.leading, 42)
             }
         }
-        .font(.system(size: 12))
-        .buttonStyle(PressStyle())
-        .padding(.leading, 16)
-        .padding(.trailing, 10)
-        .padding(.vertical, 9)
-        .background(Palette.ground, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Palette.hairline, lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 20, y: 6)
+        .noticeCard()
     }
 
     private var question: some View {
         HStack(spacing: 12) {
-            Image(systemName: ask.wants == "location" ? "location" : ask.wants == "microphone" ? "mic" : ask.wants == "notifications" ? "bell"
+            NoticeIcon(symbol: ask.wants == "location" ? "location" : ask.wants == "microphone" ? "mic" : ask.wants == "notifications" ? "bell"
                   : ask.wants == "cookies" ? "person.crop.circle" : "video")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Palette.muted)
-            Text(ask.wants == "location" ? "\(ask.host) wants to know your location"
+            NoticeText(ask.wants == "location" ? "\(ask.host) wants to know your location"
                  : ask.wants == "notifications" ? "\(ask.host) wants to send you notifications"
                  // Safari's question, in fewer words: a yes lets the framed
                  // site know you were on this one.
                  : ask.wants == "cookies" ? "\(ask.host) wants to use its cookies and website data on \(ask.under), which also lets it see you were there"
                  : "\(ask.host) wants to use your \(ask.wants)")
-                .font(.system(size: 12.5))
-                .foregroundStyle(Palette.ink)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var actions: some View {
-        HStack(spacing: 12) { buttons }
+        HStack(spacing: 4) { buttons }
     }
 
     @ViewBuilder
     private var buttons: some View {
-        Button { ask.once ? browser.allowCaptureOnce() : browser.allowCapture() } label: {
-            Text(ask.once ? "Allow once" : "Allow")
-                .foregroundStyle(Palette.ground)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
-                .background(Palette.ink, in: Capsule())
-        }
+        NoticeButton("Don't allow") { browser.denyCapture() }
         if ask.once, ask.keeps {
-            Button("Always allow") { browser.allowCapture() }
-                .foregroundStyle(Palette.ink)
+            NoticeButton("Always allow") { browser.allowCapture() }
         }
-        Button("Don't allow") { browser.denyCapture() }
-            .foregroundStyle(Palette.muted)
+        NoticeButton(ask.once ? "Allow once" : "Allow", filled: true) {
+            ask.once ? browser.allowCaptureOnce() : browser.allowCapture()
+        }
     }
 }
 
@@ -124,6 +107,8 @@ struct ScreenQuestion: View {
 }
 
 /// A password offer remains readable in the popup that submitted the form.
+/// In the notice card (Notices.swift), with a key beside it: as a small
+/// grey capsule it went by unseen.
 struct PasswordOffer: View {
     @ObservedObject var browser: Browser
     let offer: Browser.Offer
@@ -131,50 +116,38 @@ struct PasswordOffer: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) { question; actions }.fixedSize()
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 question
                 ViewThatFits(in: .horizontal) {
                     actions.fixedSize()
-                    VStack(alignment: .leading, spacing: 10) { buttons }
+                    VStack(alignment: .leading, spacing: 6) { buttons }
                 }
+                .padding(.leading, 42)
             }
         }
-        .font(.system(size: 12))
-        .buttonStyle(PressStyle())
-        .padding(.leading, 16)
-        .padding(.trailing, 12)
-        .padding(.vertical, 9)
-        .background(Palette.ground, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Palette.hairline, lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 20, y: 6)
+        .noticeCard()
     }
 
     private var question: some View {
         let login = offer.login
-        return Text(offer.changed
-             ? "Update the password for \(login.user) on \(login.host)?"
-             : (login.user.isEmpty
-                ? "Save this password for \(login.host)?"
-                : "Save the password for \(login.user) on \(login.host)?"))
-            .font(.system(size: 12.5))
-            .foregroundStyle(Palette.ink)
-            .fixedSize(horizontal: false, vertical: true)
+        return HStack(spacing: 12) {
+            NoticeIcon(symbol: "key")
+            NoticeText(offer.changed
+                ? "Update the password for \(login.user) on \(login.host)?"
+                : (login.user.isEmpty
+                    ? "Save this password for \(login.host)?"
+                    : "Save the password for \(login.user) on \(login.host)?"))
+        }
     }
 
-    private var actions: some View { HStack(spacing: 12) { buttons } }
+    private var actions: some View { HStack(spacing: 4) { buttons } }
 
     @ViewBuilder
     private var buttons: some View {
-        Button(offer.changed ? "Update" : "Save") { browser.keepOffer() }
-            .foregroundStyle(Palette.ground)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
-            .background(Palette.ink, in: Capsule())
-        Button("Not now") { browser.dropOffer() }
-            .foregroundStyle(Palette.muted)
         if !offer.changed {
-            Button("Never here") { browser.neverOffer() }
-                .foregroundStyle(Palette.muted)
+            NoticeButton("Never here") { browser.neverOffer() }
         }
+        NoticeButton("Not now") { browser.dropOffer() }
+        NoticeButton(offer.changed ? "Update" : "Save", filled: true) { browser.keepOffer() }
     }
 }

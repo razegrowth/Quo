@@ -2322,6 +2322,60 @@ final class Bench {
             }
             answer(reply)
 
+        case "notices":
+            // What rises from the window's foot (Notices.swift), every kind
+            // drawn off screen over a busy grey page to a PNG at `path`; and
+            // `restart`: an update line announced as the updater does, to
+            // read back that it carries Restart. Test runs only.
+            guard Store.testing else { answer(["error": "notices only works on a --test run"]); return }
+            if request["restart"] as? Bool == true {
+                browser.announce("Quo 9.9.9 is ready. Restart to use it", symbol: "arrow.down.circle",
+                                 action: Browser.AnnouncedAction(title: "Restart") {})
+                answer(["said": browser.announcement ?? "", "action": browser.announcedAction?.title ?? "",
+                        "symbol": browser.announcedSymbol])
+                return
+            }
+            guard let path = request["path"] as? String else { answer(["error": "notices PATH"]); return }
+            let login = Login(host: "github.com", user: "ed@example.com", password: "x", used: nil, clear: false)
+            let page = VStack(spacing: 14) {
+                AnnouncementLine(browser: browser, text: "Quo 0.8.3 is ready. Restart to use it",
+                                 symbol: "arrow.down.circle", action: Browser.AnnouncedAction(title: "Restart") {})
+                AnnouncementLine(browser: browser, text: "Password saved for github.com", symbol: Browser.symbol(for: "Password saved", file: nil))
+                AnnouncementLine(browser: browser, text: "Saved report.pdf", symbol: Browser.symbol(for: "Saved report.pdf", file: nil),
+                                 file: URL(fileURLWithPath: "/tmp/report.pdf"))
+                PasswordOffer(browser: browser, offer: Browser.Offer(login: login, changed: false))
+                CaptureQuestion(browser: browser, ask: Browser.CaptureAsk(host: "meet.google.com", wants: "camera"))
+            }
+            .padding(30)
+            .frame(width: 900)
+            .background {
+                // A page behind, with words on it, as there always is.
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(0..<30) { _ in
+                        Text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.")
+                            .font(.system(size: 14)).foregroundStyle(Palette.ink.opacity(0.7))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(20)
+                .background(Palette.wash)
+                .clipped()
+            }
+            let host = NSHostingView(rootView: page)
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.appearance = NSApp.effectiveAppearance
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                if let picture = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: picture)
+                    try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                }
+                window.contentView = nil
+                answer(["saved": path])
+            }
+
         case "sync":
             // Sync with your other Macs: how it stands, and `action` off,
             // now, icloud or folder (with `path`) to work it as Settings does.

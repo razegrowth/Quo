@@ -183,8 +183,9 @@ Hover glows fade in on `smooth` at 0.45 s and out at 0.55 s, never with a bounce
 - **Damping 1 by default.** Overshoot only where the hand carried momentum into it (the swipe between spaces, a thrown window). A menu, a highlight or a card the app moved lands without passing its place.
 - **Nothing eases in.** Entrances and exits alike go on `out`, the exit a little shorter. An ease-in holds still for the first frames, the very ones being watched.
 - **Nothing grows from nothing.** A transition starts at 0.9 scale or more, with a fade. Below that it looks like it came from nowhere.
-- **The keyboard is never animated.** ⌘T and ⌘L open and close at once; the arrow keys light their row at once. Only the pointer's own hover travels.
+- **The keyboard barely animates.** ⌘T, ⌘L and ⌘K's field comes in over 90 ms, a fade from 98% so it doesn't pop, and goes at once; the arrow keys light their row at once. Only the pointer's own hover travels.
 - **Every press answers.** Buttons use `PressStyle`; tabs and pins give on `Give`.
+- **Every control is a Tab stop.** A drawn control (a `Switch`, `Segmented`, a pill, a menu) takes `.keyStop` or `.keyChoice` (KeyStops.swift), so Tab reaches it with the Mac's Keyboard Navigation off, as it is out of the box. The ring is the accent colour, 2 pt, just outside the control, and only when focus came by a key; a click never leaves one.
 - **Under 300 ms** for anything in the interface. Cards, sheets and the new-space card may take up to 0.45 s; the first-run opening is the one long moment.
 
 **Reduce Motion:** every move becomes an instant change or a 0.15–0.2 s fade. Nothing floats, spins or rises.

@@ -114,10 +114,70 @@ struct Omnibox: View {
                     Cover()
                         .ignoresSafeArea(.all, edges: fitted ? [] : .all)
                         .onTapGesture { browser.dismiss() }
-                        .transition(.opacity)
-                }
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
 
-                field
+                    // Over a page, a command bar: high in the window, the
+                    // field and its list one panel growing down from there.
+                    GeometryReader { room in
+                        VStack(spacing: 0) {
+                            panel(width: width)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Self.top(in: room.size.height))
+                    }
+                    .transition(.asymmetric(insertion: .scale(scale: 0.98, anchor: .top).combined(with: .opacity), removal: .identity))
+                    .animation(Motion.quick, value: listShown)
+                    .animation(Motion.settle, value: refused)
+                } else {
+                    alone(width: width)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(arrives, value: browser.fieldShowing)
+    }
+
+    /// Where the panel's top sits over a page: in the upper fifth of the
+    /// window, as a command bar does, never under the strip at the top.
+    static func top(in height: CGFloat) -> CGFloat {
+        max(48, (height * 0.18).rounded())
+    }
+
+    private var listShown: Bool {
+        !browser.offers.isEmpty || browser.siteOffer != nil || browser.switcherNote != nil
+    }
+
+    /// The field and what it thinks you mean as one panel, raised over the
+    /// dimmed page: a lighter ground than the page in Dark, a clear edge and
+    /// a deeper shadow in both, the list under a hairline.
+    private func panel(width: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            field(alone: false)
+            if listShown {
+                Rectangle().fill(Palette.hairline).frame(height: 1)
+                list(alone: false)
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: width)
+        .background(PanelGround(corner: m.corner))
+        .clipShape(RoundedRectangle(cornerRadius: m.corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: m.corner, style: .continuous)
+                .strokeBorder(refused ? Color.red.opacity(0.45) : Palette.ink.opacity(0.16), lineWidth: 1)
+                .allowsHitTesting(false)
+        )
+        .shadow(color: .black.opacity(0.28), radius: 40, y: 18)
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .modifier(Shake(travel: shake))
+    }
+
+    /// The field on an empty tab, alone in the middle with the space's home
+    /// around it, its list a card of its own below.
+    @ViewBuilder
+    private func alone(width: CGFloat) -> some View {
+                field(alone: true)
                     .frame(width: width)
                 // On an empty tab, the space's home hangs from the field too:
                 // its icon and a greeting above, the sites you visit most and
@@ -145,8 +205,8 @@ struct Omnibox: View {
                     // Present or gone, not always-on-and-hidden: the list keeps
                     // the appear and disappear it had, and the overlay is what
                     // keeps that from moving the field.
-                    if !browser.offers.isEmpty || browser.siteOffer != nil || browser.switcherNote != nil {
-                        list
+                    if listShown {
+                        list(alone: true)
                             .frame(width: width)
                             .offset(y: m.height + 8)
                     }
@@ -155,20 +215,29 @@ struct Omnibox: View {
                 // because the strip at the top isn't part of what the eye is
                 // measuring.
                 .padding(.bottom, 60)
-                .transition(.scale(scale: 0.97).combined(with: .opacity))
+                // In from a hair smaller and fainter, gone at once (see `arrives`).
+                .transition(.asymmetric(insertion: .scale(scale: 0.98).combined(with: .opacity), removal: .identity))
                 // The list's arrival and its leaving are animated from here,
                 // briefly: nothing that changes the suggestions does it inside
                 // an animation of its own. Its rows follow what was typed or
                 // pasted at once — sliding into place on a spring between
                 // keystrokes, they trailed behind the field.
-                .animation(Motion.quick, value: browser.offers.isEmpty && browser.siteOffer == nil && browser.switcherNote == nil)
+                .animation(Motion.quick, value: listShown)
                 .animation(Motion.settle, value: refused)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var field: some View {
+    /// ⌘T, ⌘L and ⌘K's field comes in over 90 ms, short enough to be there
+    /// as the hand comes off the keys and long enough not to pop; it goes at
+    /// once, so Return and Escape never wait on it. With Reduce Motion, or
+    /// Settings' instant motion, it simply appears.
+    private var arrives: Animation? {
+        guard browser.fieldShowing, !Motion.reduced else { return nil }
+        return .easeOut(duration: 0.09)
+    }
+
+    /// The field. `alone`, on an empty tab: a card of its own, breathing.
+    /// In the panel over a page, the panel is its card.
+    private func field(alone: Bool) -> some View {
         HStack(spacing: 8) {
             if let site = browser.siteChip {
                 SiteChip(site: site)
@@ -180,28 +249,7 @@ struct Omnibox: View {
             .frame(height: m.line)
             .padding(.horizontal, m.side)
             .padding(.vertical, m.air)
-            .background {
-                ZStack {
-                    // A slow, almost invisible breath under the field. It is
-                    // the only thing on an empty tab, and a thing that never
-                    // moves at all reads as a picture of an app rather than
-                    // an app.
-                    Breath()
-
-                    RoundedRectangle(cornerRadius: m.corner, style: .continuous)
-                        .fill(Palette.ground)
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: m.corner, style: .continuous)
-                    .strokeBorder(
-                        refused ? Color.red.opacity(0.35) : Palette.hairline,
-                        lineWidth: 1
-                    )
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: .black.opacity(0.06), radius: 24, y: 8)
-            .modifier(Shake(travel: shake))
+            .modifier(FieldCard(alone: alone, corner: m.corner, refused: refused, shake: shake))
             .onAppear {
                 shake = 0
                 refused = false
@@ -223,7 +271,25 @@ struct Omnibox: View {
     /// It lives below the field, in an overlay, so arriving or leaving never
     /// moves the field — and the transition that carried it in and out before
     /// is kept, only anchored to its own top edge.
-    private var list: some View {
+    @ViewBuilder
+    private func list(alone: Bool) -> some View {
+        if alone {
+            rows
+                .background(Palette.ground, in: RoundedRectangle(cornerRadius: m.corner, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: m.corner, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.07), radius: 20, y: 6)
+                // The arrow keys' ground is on its row at once: only the keys move
+                // it, and a slide trails them. The pointer's own still travels.
+                .transition(.scale(scale: 0.98, anchor: .top).combined(with: .opacity))
+        } else {
+            rows
+        }
+    }
+
+    private var rows: some View {
         VStack(spacing: 0) {
             if let site = browser.siteOffer {
                 SiteOfferRow(site: site)
@@ -248,15 +314,54 @@ struct Omnibox: View {
             }
         }
         .padding(m.listAir)
-        .background(Palette.ground, in: RoundedRectangle(cornerRadius: m.corner, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: m.corner, style: .continuous)
-                .strokeBorder(Palette.hairline, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.07), radius: 20, y: 6)
-        // The arrow keys' ground is on its row at once: only the keys move
-        // it, and a slide trails them. The pointer's own still travels.
-        .transition(.scale(scale: 0.98, anchor: .top).combined(with: .opacity))
+    }
+
+    /// The field's own card on an empty tab: a ground with a breath under
+    /// it, a hairline edge and a soft shadow, and the shake of a refusal.
+    /// In the panel over a page, nothing: the panel is the card.
+    private struct FieldCard: ViewModifier {
+        let alone: Bool
+        let corner: CGFloat
+        let refused: Bool
+        let shake: CGFloat
+
+        func body(content: Content) -> some View {
+            if alone {
+                content
+                    .background {
+                        ZStack {
+                            // A slow, almost invisible breath under the field. It is
+                            // the only thing on an empty tab, and a thing that never
+                            // moves at all reads as a picture of an app rather than
+                            // an app.
+                            Breath()
+                            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                                .fill(Palette.ground)
+                        }
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                            .strokeBorder(refused ? Color.red.opacity(0.35) : Palette.hairline, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    )
+                    .shadow(color: .black.opacity(0.06), radius: 24, y: 8)
+                    .modifier(Shake(travel: shake))
+            } else {
+                content
+            }
+        }
+    }
+
+    /// The panel's ground over a page: the window's own in Light, a step up
+    /// from it in Dark, so it stands clear of the page dimmed behind it.
+    private struct PanelGround: View {
+        let corner: CGFloat
+        @Environment(\.colorScheme) private var scheme
+
+        var body: some View {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(scheme == .dark ? Color(white: 0.165) : Palette.ground)
+        }
     }
 
     /// One row of a list of places, here and under the field in the tab.
@@ -929,8 +1034,10 @@ private struct Cover: View {
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .opacity(0.3)
+            // Set clearly back, so the panel over it is what the eye finds:
+            // a quarter in Light, half in Dark (UX audit, QUO-001).
             Rectangle()
-                .fill(Color.black.opacity(scheme == .dark ? 0.3 : 0.14))
+                .fill(Color.black.opacity(scheme == .dark ? 0.5 : 0.26))
         }
         .contentShape(Rectangle())
     }

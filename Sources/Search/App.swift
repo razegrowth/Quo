@@ -1130,26 +1130,9 @@ struct ContentView: View {
     @ViewBuilder
     private var announcement: some View {
         if let text = browser.announcement {
-            HStack(spacing: 8) {
-                Text(text)
-                    .foregroundStyle(Palette.ink)
-                // A file just saved: the line shows it in the Finder.
-                if browser.announcedFile != nil {
-                    Text("Show in Finder")
-                        .foregroundStyle(Palette.muted)
-                }
-            }
-                .font(.system(size: 12))
-                .contentShape(Capsule())
-                .onTapGesture {
-                    if let file = browser.announcedFile { NSWorkspace.shared.activateFileViewerSelecting([file]) }
-                }
-                .padding(.horizontal, 15)
-                .padding(.vertical, 9)
-                .background(Palette.ground, in: Capsule())
-                .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
-                .shadow(color: .black.opacity(0.10), radius: 18, y: 6)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            AnnouncementLine(browser: browser, text: text, symbol: browser.announcedSymbol,
+                             file: browser.announcedFile, action: browser.announcedAction)
+                .transition(NoticeCard.arrival)
                 .animation(Motion.settle, value: browser.announcement)
         }
     }

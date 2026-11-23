@@ -36,6 +36,9 @@ struct SettingsPanel: View {
     /// What is typed in Find a setting.
     @State private var query = ""
     @FocusState private var finding: Bool
+    /// The section in the rail that has focus, if one does.
+    @FocusState private var railFocus: Page?
+    @State private var railKeyed = false
     /// A row gone to from a result, lit for a moment.
     @State private var lit: String?
     /// The sections whose Advanced fold is open, kept between visits.
@@ -127,9 +130,12 @@ struct SettingsPanel: View {
     /// the rest.
     private var tabbed: some View {
         HStack(spacing: 0) {
-            pages
+            // Two sections for Tab: the rail all the way down first, then
+            // the page, rather than across both a line at a time.
+            pages.focusSection()
             Rectangle().fill(Palette.hairline).frame(width: 1)
             content
+                .focusSection()
                 .padding(.top, roomy ? 34 : 26)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -149,9 +155,9 @@ struct SettingsPanel: View {
 
     private var card: some View {
         HStack(spacing: 0) {
-            pages
+            pages.focusSection()
             Rectangle().fill(Palette.hairline).frame(width: 1)
-            content
+            content.focusSection()
         }
         .frame(width: SettingsPanel.width, height: SettingsPanel.height)
         .background(Palette.ground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -187,13 +193,37 @@ struct SettingsPanel: View {
                 }
                 ForEach(block) { item in
                     PageRow(page: item, on: !searching && page == item,
-                            count: searching ? counts[item] ?? 0 : nil) {
+                            count: searching ? counts[item] ?? 0 : nil,
+                            ringed: railKeyed && railFocus == item) {
                         query = ""
                         page = item
+                    }
+                    // Each section a stop for Tab, whatever Keyboard
+                    // Navigation is set to; Space or Return opens it.
+                    .focusable()
+                    .focused($railFocus, equals: item)
+                    .focusEffectDisabled()
+                    .onKeyPress(keys: [.space, .return]) { _ in
+                        query = ""
+                        page = item
+                        return .handled
                     }
                 }
             }
             Spacer(minLength: 0)
+        }
+        // Up and Down go from section to section, opening each, as the
+        // sidebar of System Settings does.
+        .onMoveCommand { direction in
+            guard direction == .up || direction == .down, let from = railFocus,
+                  let to = Page.blocks.flatMap({ $0 }).step(from: from, direction) else { return }
+            query = ""
+            page = to
+            railFocus = to
+            railKeyed = true
+        }
+        .onChange(of: railFocus) { _, item in
+            railKeyed = item != nil && KeyStop.fromKeys
         }
         .padding(roomy ? 10 : 8)
         .frame(width: rail, alignment: .leading)
@@ -249,6 +279,8 @@ struct SettingsPanel: View {
         let on: Bool
         /// While searching: how many rows of this section match.
         let count: Int?
+        /// It has focus, by a key: the ring.
+        var ringed = false
         let act: () -> Void
         @State private var hovering = false
         @Environment(\.roomySettings) private var roomy
@@ -283,6 +315,9 @@ struct SettingsPanel: View {
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(PressStyle())
+            .focusable(false)
+            .overlay { KeyRing(on: ringed, corner: 8) }
+            .accessibilityAddTraits(on ? .isSelected : [])
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
         }
@@ -314,7 +349,7 @@ struct SettingsPanel: View {
 
             ScrollViewReader { reader in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: roomy ? 32 : 22) {
+                    VStack(alignment: .leading, spacing: roomy ? 36 : 28) {
                         if searching { results } else { section(page) }
                     }
                     .environment(\.ruleInset, 0)
@@ -379,7 +414,7 @@ struct SettingsPanel: View {
             let open = unfolded.contains(page.rawValue)
             AdvancedFold(open: open, count: rest.filter(shown).count) { fold(page, open: !open) }
             if open {
-                VStack(alignment: .leading, spacing: roomy ? 32 : 22) {
+                VStack(alignment: .leading, spacing: roomy ? 36 : 28) {
                     groupBlocks(of: page, advanced: true)
                     more()
                 }
@@ -447,17 +482,7 @@ struct SettingsPanel: View {
         let byGroup = Dictionary(grouping: found, by: \.group)
         ForEach(SettingsIndex.groups.filter { byGroup[$0.id] != nil }) { group in
             VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    let first = byGroup[group.id]?.first
-                    query = ""
-                    page = group.page
-                    if first?.advanced == true, !unfolded.contains(group.page.rawValue) {
-                        unfolded.insert(group.page.rawValue)
-                        Store.settings.set(Array(unfolded).sorted(), forKey: "settings.advanced")
-                    }
-                    lit = first?.findOnly == false ? first?.id : nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation(Motion.quick) { lit = nil } }
-                } label: {
+                Button { go(to: group, at: byGroup[group.id]?.first) } label: {
                     HStack(spacing: 6) {
                         Image(systemName: group.icon).font(.system(size: 10.5, weight: .medium))
                         Text("\(group.page.title)  ›  \(group.title)".uppercased())
@@ -470,10 +495,25 @@ struct SettingsPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
+                .focusable(false)
+                .keyStop(corner: 4) { go(to: group, at: byGroup[group.id]?.first) }
                 .help("Open \(group.page.title) at \(group.title)")
                 Card { rows(byGroup[group.id] ?? [], searched: true) }
             }
         }
+    }
+
+    /// A found group's heading pressed: its section, opened where the
+    /// first thing found is, that row lit a moment.
+    private func go(to group: SettingsGroup, at first: SettingsItem?) {
+        query = ""
+        page = group.page
+        if first?.advanced == true, !unfolded.contains(group.page.rawValue) {
+            unfolded.insert(group.page.rawValue)
+            Store.settings.set(Array(unfolded).sorted(), forKey: "settings.advanced")
+        }
+        lit = first?.findOnly == false ? first?.id : nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation(Motion.quick) { lit = nil } }
     }
 
     // MARK: - words that change
@@ -588,6 +628,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.webmail, among: Array(Webmail.allCases))
         case "mail.default":
             if mailDefault {
                 Image(systemName: "checkmark")
@@ -628,6 +669,15 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            // The arrows go between Off and iCloud only: Folder opens a
+            // panel to choose one, not something an arrow should do.
+            .keyChoice(Binding(get: { sync.way }, set: { way in
+                switch way {
+                case .off: sync.turnOff()
+                case .icloud: sync.turnOnCloud()
+                case .folder: break
+                }
+            }), among: SyncCloud.available || sync.cloud ? [Sync.Way.off, .icloud] : [.off])
             }
         case "quit.confirm": Switch(on: $prefs.confirmsQuit)
         case "downloads.folder": Pill("Change…") { chooseFolder() }
@@ -640,6 +690,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.downloadsOpening, among: Array(DownloadsOpening.allCases))
         default: EmptyView()
         }
     }
@@ -711,6 +762,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.newTabPlace, among: [NewTabPlace.next, .top, .end])
         case "tabs.newAfterLast": Switch(on: $prefs.newTabAfterLast)
         case "tabs.closeGoesBack": Switch(on: $prefs.closeGoesBack)
         case "tabs.undoReopens": Switch(on: $prefs.undoReopensTab)
@@ -737,6 +789,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.tabLife, among: Array(TabLife.allCases))
         case "tabs.shortcuts": Switch(on: $prefs.showsTabShortcuts)
         case "tabs.address":
             Switch(on: Binding(
@@ -761,6 +814,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.engine, among: Array(Engine.allCases))
         case "search.shift":
             Picker("", selection: $prefs.shiftEngine) {
                 Text("Off").tag(Engine?.none)
@@ -772,6 +826,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.shiftEngine, among: [nil] + Engine.allCases.map { Optional($0) })
         case "search.suggest": Switch(on: $prefs.engineSuggests)
         case "search.keywords":
             if draft == nil {
@@ -914,6 +969,7 @@ struct SettingsPanel: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+            .keyChoice($prefs.peekChoice, among: Array(PeekChoice.allCases))
         case "links.peek.stays": Switch(on: $prefs.peekStays)
         case "links.optionSplit": Switch(on: $prefs.optionClickSplits)
         case "autoscroll": Switch(on: $prefs.autoScroll)
@@ -1322,7 +1378,18 @@ private struct RoomySettingsKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct SettingTitleKey: EnvironmentKey {
+    static let defaultValue = ""
+}
+
 extension EnvironmentValues {
+    /// The title of the row a control is in, for its name to VoiceOver
+    /// and to the test bench.
+    var settingTitle: String {
+        get { self[SettingTitleKey.self] }
+        set { self[SettingTitleKey.self] = newValue }
+    }
+
     /// Appearance › Size is Roomy: Settings' rows taller, its words larger
     /// and its sections further apart.
     var roomySettings: Bool {
@@ -1364,6 +1431,8 @@ struct AdvancedFold: View {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(PressStyle(scale: 0.99))
+        .focusable(false)
+        .keyStop(corner: 10, act: act)
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
         .animation(Motion.settle, value: open)
@@ -1378,16 +1447,23 @@ struct GroupBlock<Content: View>: View {
     @Environment(\.roomySettings) private var roomy
 
     var body: some View {
-        VStack(alignment: .leading, spacing: roomy ? 11 : 8) {
-            HStack(spacing: 6) {
+        // Three levels the eye can tell apart at a glance: this heading,
+        // larger and heavier than a row's title, which is in turn darker
+        // than the line under it. It was small grey capitals, the same
+        // weight as the words around it, and a page read as one long list.
+        VStack(alignment: .leading, spacing: roomy ? 12 : 9) {
+            HStack(spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: roomy ? 11.5 : 10.5, weight: .semibold))
-                Text(title.uppercased())
-                    .font(.system(size: roomy ? 11.5 : 10.5, weight: .semibold))
-                    .tracking(0.5)
+                    .font(.system(size: roomy ? 13.5 : 12, weight: .semibold))
+                    .foregroundStyle(Palette.muted)
+                    .frame(width: roomy ? 18 : 16)
+                Text(title)
+                    .font(.system(size: roomy ? 16 : 14.5, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
             }
-            .foregroundStyle(Palette.ink.opacity(0.62))
             .padding(.leading, 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
             content()
         }
     }
@@ -1407,6 +1483,7 @@ struct SettingRow<Control: View>: View {
     @ViewBuilder let control: () -> Control
 
     @State private var open = false
+    @State private var explaining = false
     /// Roomy: taller, with larger words, its text where it was across
     /// (SettingsPanel.textInset), so what goes under it still lines up.
     @Environment(\.roomySettings) private var roomy
@@ -1422,14 +1499,19 @@ struct SettingRow<Control: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                         if more != nil {
                             Button { withAnimation(Motion.quick) { open.toggle() } } label: {
-                                Image(systemName: open ? "info.circle.fill" : "info.circle")
+                                Image(systemName: open || explaining ? "info.circle.fill" : "info.circle")
                                     .font(.system(size: 10.5))
                                     .foregroundStyle(Palette.muted.opacity(0.8))
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(PressStyle())
+                            .focusable(false)
+                            .keyStop(corner: 4,
+                                     act: { withAnimation(Motion.quick) { open.toggle() } },
+                                     focus: { on in withAnimation(Motion.quick) { explaining = on } })
                             .help(more ?? "")
                             .accessibilityLabel("More about \(title)")
+                            .accessibilityValue(open ? "Showing" : "")
                         }
                     }
                     if !detail.isEmpty {
@@ -1439,7 +1521,9 @@ struct SettingRow<Control: View>: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if open, let more {
+                    // What the (i) says shows under the words while it
+                    // has focus, as its tooltip would under the pointer.
+                    if open || explaining, let more {
                         Text(more)
                             .font(.system(size: roomy ? 12.5 : 11.5))
                             .foregroundStyle(Palette.muted)
@@ -1449,10 +1533,10 @@ struct SettingRow<Control: View>: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if !wide { control() }
+                if !wide { control().environment(\.settingTitle, title) }
             }
             if wide {
-                control()
+                control().environment(\.settingTitle, title)
             }
         }
         .padding(.leading, SettingsPanel.textInset)
@@ -1480,6 +1564,7 @@ struct Always: View {
 struct Pictures<Option: Hashable>: View {
     let options: [(Option, String, AnyView)]
     @Binding var selection: Option
+    @Environment(\.settingTitle) private var title
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -1506,9 +1591,21 @@ struct Pictures<Option: Hashable>: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
-                .accessibilityLabel(title)
-                .accessibilityAddTraits(on ? .isSelected : [])
+                .focusable(false)
             }
+        }
+        .padding(2)
+        .keyStop(corner: 10, move: { direction in
+            if let to = options.map(\.0).step(from: selection, direction) {
+                withAnimation(Motion.settle) { selection = to }
+            }
+        })
+        .padding(-2)
+        .accessibilityRepresentation {
+            Picker(title, selection: $selection) {
+                ForEach(options, id: \.0) { option, name, _ in Text(name).tag(option) }
+            }
+            .pickerStyle(.radioGroup)
         }
     }
 }
@@ -1677,6 +1774,7 @@ struct Segmented<Option: Hashable>: View {
     private var big: Bool { large || roomy }
 
     @Namespace private var slide
+    @Environment(\.settingTitle) private var title
 
     var body: some View {
         HStack(spacing: 2) {
@@ -1706,12 +1804,25 @@ struct Segmented<Option: Hashable>: View {
         .padding(2)
         .background(Palette.wash, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .animation(Motion.settle, value: selection)
+        // One stop for the row; the arrows choose, as in macOS's own.
+        .keyStop(corner: 9, move: { direction in
+            if let to = options.map(\.0).step(from: selection, direction) {
+                withAnimation(Motion.settle) { selection = to }
+            }
+        })
+        .accessibilityRepresentation {
+            Picker(title, selection: $selection) {
+                ForEach(options, id: \.0) { option, name in Text(name).tag(option) }
+            }
+            .pickerStyle(.segmented)
+        }
     }
 }
 
 /// On or off, in ink rather than in blue.
 struct Switch: View {
     @Binding var on: Bool
+    @Environment(\.settingTitle) private var title
     /// A size up in Roomy, as the rows are.
     @Environment(\.roomySettings) private var roomy
 
@@ -1728,6 +1839,8 @@ struct Switch: View {
             .contentShape(Capsule())
             .onTapGesture { withAnimation(Motion.settle) { on.toggle() } }
             .animation(Motion.settle, value: on)
+            .keyStop(corner: nil) { withAnimation(Motion.settle) { on.toggle() } }
+            .accessibilityRepresentation { Toggle(title, isOn: $on).toggleStyle(.switch) }
     }
 }
 
@@ -1756,6 +1869,7 @@ struct Steps: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
+            .focusable(false)
             .help("Back to \(label(home))")
             Step(icon: "plus", to: above) { value = $0 }
         }
@@ -1763,9 +1877,24 @@ struct Steps: View {
         .frame(height: roomy ? 30 : 24)
         .background(Palette.ground, in: Capsule())
         .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
+        // One stop: the arrows step it, Return takes it home.
+        .keyStop(corner: nil, act: { value = home }, move: { direction in
+            if let to = direction == .left || direction == .down ? below : above { value = to }
+        })
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(label(value))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: if let above { value = above }
+            case .decrement: if let below { value = below }
+            @unknown default: break
+            }
+        }
     }
 
     @Environment(\.roomySettings) private var roomy
+    @Environment(\.settingTitle) private var title
 
     private struct Step: View {
         let icon: String
@@ -1784,6 +1913,7 @@ struct Steps: View {
                     .contentShape(Circle())
             }
             .buttonStyle(PressStyle())
+            .focusable(false)
             .disabled(to == nil)
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
@@ -1827,6 +1957,8 @@ struct Pill: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(PressStyle())
+        .focusable(false)
+        .keyStop(corner: nil, act: action)
         .onHover { hovering = $0 }
         .animation(Motion.quick, value: hovering)
     }

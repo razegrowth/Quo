@@ -2621,6 +2621,17 @@ final class Browser: NSObject, ObservableObject {
     /// The file a "Saved …" line is about: clicked, the line shows it in
     /// the Finder, and it stays long enough to be clicked.
     @Published private(set) var announcedFile: URL?
+    /// The icon beside the line: what kind of thing it says.
+    @Published private(set) var announcedSymbol = "checkmark.circle"
+    /// A button on the line, for the one thing it offers (Restart, for an
+    /// update that's ready). A line with one stays until it's answered or
+    /// a good while has gone by.
+    @Published private(set) var announcedAction: AnnouncedAction?
+
+    struct AnnouncedAction {
+        let title: String
+        let run: () -> Void
+    }
     /// Downloads while they happen (see Fetching.swift).
     let fetches = Shared.fetches
 
@@ -2659,16 +2670,44 @@ final class Browser: NSObject, ObservableObject {
         return "[\(text)](\(url.absoluteString))"
     }
 
-    func announce(_ text: String, file: URL? = nil, lasting: Double? = nil) {
+    func announce(_ text: String, file: URL? = nil, lasting: Double? = nil,
+                  symbol: String? = nil, action: AnnouncedAction? = nil) {
         announcement = text
         announcedFile = file
+        announcedAction = action
+        announcedSymbol = symbol ?? Browser.symbol(for: text, file: file)
+        hushAnnouncement(after: lasting ?? (action != nil ? 20 : file != nil ? 5 : 2.8))
+    }
+
+    /// The pointer on the line holds it up; off it, it goes a moment later.
+    func holdAnnouncement(_ held: Bool) {
+        guard announcement != nil else { return }
+        if held { hush?.cancel() } else { hushAnnouncement(after: announcedAction != nil ? 6 : 1.6) }
+    }
+
+    func dismissAnnouncement() { hushAnnouncement(after: 0) }
+
+    private func hushAnnouncement(after seconds: Double) {
         hush?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.announcement = nil
             self?.announcedFile = nil
+            self?.announcedAction = nil
         }
         hush = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (lasting ?? (file == nil ? 1.7 : 4)), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    /// The icon for a line that didn't name one, from what it says.
+    static func symbol(for text: String, file: URL?) -> String {
+        let said = text.lowercased()
+        if said.contains("couldn't") || said.contains("didn't") || said.contains("can't") || said.contains("failed") {
+            return "exclamationmark.circle"
+        }
+        if file != nil || said.hasPrefix("saved ") { return "arrow.down.circle" }
+        if said.contains("password") || said.contains("passkey") { return "key" }
+        if said.contains("copied") { return "doc.on.doc" }
+        return "checkmark.circle"
     }
 
     /// The names extensions asked their downloads to be saved under.
@@ -2942,7 +2981,13 @@ final class Browser: NSObject, ObservableObject {
             welcoming = !prefs.welcomed
             newsShowing = WhatsNew.due(prefs: prefs, welcoming: welcoming)
             // Once a day, quietly: is there a newer one?
-            Updater.shared.checkIfDue { [weak self] line in self?.announce(line) }
+            // An update that's in place gets Restart on its line, as most
+            // apps that update themselves offer.
+            Updater.shared.checkIfDue { [weak self] line in
+                self?.announce(line, symbol: "arrow.down.circle",
+                               action: Updater.shared.isReady
+                                   ? AnnouncedAction(title: "Restart") { Updater.shared.relaunch() } : nil)
+            }
             // With your other Macs, if that is on (see Sync.swift).
             Sync.shared.start()
             // An icon that arrives is looked for again by every tab showing
@@ -4956,7 +5001,11 @@ final class Browser: NSObject, ObservableObject {
         let besideGroups = tabs.contains { $0.id != tab.id && $0.pin == nil && self.group(of: $0) != nil }
         let onlyPins = prefs.newTabAfterLast && !tabs.contains { $0.id != tab.id && $0.pin == nil }
         let onlyKept = besideGroups && !kept(tab) && !tabs.contains { $0.id != tab.id && !kept($0) }
-        if activeID == tab.id, onlyPins || onlyKept {
+        // A tab a pin opened, closed, goes back to that pin, as in Arc, the
+        // last tab beside the pins or not: never to an empty tab, nor to
+        // whichever pin is its neighbour.
+        let fromPin = tab.opener.flatMap { id in tabs.first { $0.id == id && $0.id != tab.id && $0.pin != nil } }
+        if activeID == tab.id, fromPin == nil, onlyPins || onlyKept {
             if tab.isBlank {
                 if besideGroups {
                     typed = ""
@@ -5002,7 +5051,7 @@ final class Browser: NSObject, ObservableObject {
             let back = tabBefore(tab)
             let before = prefs.closeGoesBack || tab.page != nil ? back
                 : back.flatMap { $0.id == tab.opener ? $0 : nil }
-            select(partner ?? before ?? tabs[min(index, tabs.count - 1)])
+            select(partner ?? fromPin ?? before ?? tabs[min(index, tabs.count - 1)])
         }
         rememberSession()
     }
@@ -6212,6 +6261,9 @@ final class Browser: NSObject, ObservableObject {
             Tab(configuration: page ?? Web.configuration(space: spaceID))
         }
         prepare(tab)
+        // A link's tab knows the page it came from: closed, it goes back
+        // there (see close), as Arc's tabs go back to the pin they left.
+        if link, let source, source.id != tab.id { tab.opener = source.id }
         // A link opened from a grouped tab joins its group, only while groups
         // are on: turned off, they sleep, and nothing new goes into one.
         // `loose`: the floating new tab or ⌘K's, which is ⌘T's tab and came

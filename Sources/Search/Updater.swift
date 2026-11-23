@@ -100,6 +100,8 @@ final class Updater: ObservableObject {
     }
 
     @Published private(set) var stage: Stage = .none
+    /// A newer build is in place and only wants a restart.
+    var isReady: Bool { if case .ready = stage { return true } else { return false } }
     /// True while the file is being fetched.
     @Published private(set) var checking = false
     /// When the file was last read, for the line in Settings.
@@ -189,7 +191,7 @@ final class Updater: ObservableObject {
         }
         switch stage {
         case .ready(let next):
-            say?("\(Store.name) \(next.version) is ready — relaunch to use it")
+            say?("\(Store.name) \(next.version) is ready. Restart to use it")
             return
         case .fetching(let next):
             say?("\(Store.name) \(next.version) is downloading…")
@@ -311,7 +313,7 @@ final class Updater: ObservableObject {
         guard case .fetching(let fetching) = stage, fetching == release else { return }
         stage = worked ? .ready(release) : .offered(release)
         say?(worked
-            ? "\(Store.name) \(release.version) is ready — it's there the next time you open it"
+            ? "\(Store.name) \(release.version) is ready. Restart to use it"
             : "\(Store.name) \(release.version) is out — choose Download Update in the \(Store.name) menu")
     }
 
