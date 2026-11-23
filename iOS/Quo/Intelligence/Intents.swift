@@ -11,7 +11,7 @@ import Foundation
 /// without your cookies, as a link's preview is. Apple Intelligence only.
 struct SummarisePageIntent: AppIntent {
     static let title: LocalizedStringResource = "Summarise This Page"
-    static let description = IntentDescription("Says what the page in front of Quo is about, using Apple Intelligence on this iPhone.")
+    static let description = IntentDescription("Says what the page in front of Quo is about, worked out on this device.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
@@ -56,7 +56,7 @@ struct ReadAloudIntent: AppIntent {
 /// Send to Mac does one at a time.
 struct SendTabsToMacIntent: AppIntent {
     static let title: LocalizedStringResource = "Send My Tabs to My Mac"
-    static let description = IntentDescription("Opens the tabs you have open in Quo on your iPhone in Quo on your Mac.")
+    static let description = IntentDescription("Opens the tabs you have open here in Quo on your computer.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
