@@ -34,6 +34,9 @@ final class PageSlot: UIView {
     var sides: (left: CGFloat, right: CGFloat) = (0, 0) {
         didSet { if sides != oldValue { setNeedsLayout() } }
     }
+    /// Room the bar takes at the page's foot: none while it's a rail down
+    /// the side instead.
+    var barRoom: CGFloat = 64 { didSet { if barRoom != oldValue { setNeedsLayout() } } }
 
     init(tab: Tab) {
         self.tab = tab
@@ -215,13 +218,13 @@ final class PageSlot: UIView {
         let page = self.page
         if web?.frame != page {
             web?.frame = page
-            // Room under the page for the bar, so its foot can be scrolled
-            // to, and the home indicator's strip.
-            let bottom = 64 + (window?.safeAreaInsets.bottom ?? safeAreaInsets.bottom)
-            if let scroll = web?.scrollView, scroll.contentInset.bottom != bottom {
-                scroll.contentInset.bottom = bottom
-                scroll.verticalScrollIndicatorInsets.bottom = bottom
-            }
+        }
+        // Room under the page for the bar, so its foot can be scrolled to,
+        // and the home indicator's strip.
+        let bottom = barRoom + (window?.safeAreaInsets.bottom ?? safeAreaInsets.bottom)
+        if let scroll = web?.scrollView, scroll.contentInset.bottom != bottom {
+            scroll.contentInset.bottom = bottom
+            scroll.verticalScrollIndicatorInsets.bottom = bottom
         }
         cover.frame = page
         failure?.view.frame = page

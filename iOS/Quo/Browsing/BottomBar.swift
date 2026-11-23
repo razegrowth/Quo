@@ -35,7 +35,11 @@ struct ChromeContent: View {
     @ViewBuilder private var current: some View {
         switch shown {
         case .bar:
-            bar.transition(ChromeContent.swap)
+            if state.rail {
+                rail.transition(ChromeContent.swap)
+            } else {
+                bar.transition(ChromeContent.swap)
+            }
         case .search:
             Group {
                 if case let .search(prefill, _) = browser.panel {
@@ -82,6 +86,57 @@ struct ChromeContent: View {
         row(sides: 1, measured: true)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measure(\.barHeight, $0) }
+    }
+
+    /// The bar stood on its side, as a rail down the screen's edge: the bar
+    /// turned a quarter, so the tabs (its left end) are at the foot and the
+    /// ^ (its right end) at the top, the + between.
+    private var rail: some View {
+        VStack(spacing: 14) {
+            Button { if tabs.current != nil { browser.panel = .toolbar } else { browser.sheet = .settings } } label: {
+                Image(systemName: tabs.current != nil ? "chevron.up" : "gearshape")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Q.ink)
+                    .frame(width: 46, height: 46)
+                    .background(Q.tile, in: Circle())
+                    .overlay(Circle().strokeBorder(Q.hairline))
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel(tabs.current != nil ? "Toolbar" : "Settings")
+            .accessibilityIdentifier("bar.toolbar")
+
+            Button { browser.newSearch() } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Q.ink)
+                    .frame(width: 46, height: 72)
+                    .background {
+                        Capsule().fill(Q.tile)
+                            .overlay(Capsule().strokeBorder(Q.hairline))
+                            .matchedGeometryEffect(id: "plus", in: morph)
+                    }
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("New search")
+            .accessibilityIdentifier("bar.new")
+            .contextMenu { ClosedMenu() }
+
+            Button { browser.showSwitcher() } label: {
+                TabStack(tab: tabs.previous ?? tabs.current, count: tabs.all.count, hidingFront: browser.hopping)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Tabs")
+            .accessibilityIdentifier("bar.tabs")
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { state.tabButton = $0 }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measure(\.railHeight, $0) }
     }
 
     private func row(sides: Double, measured: Bool = false) -> some View {

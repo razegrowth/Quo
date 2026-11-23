@@ -18,6 +18,11 @@ final class ChromeState: ObservableObject {
     var toolbarHeight: CGFloat = 430
     /// The tab button, in the window: a drag that starts on it hops tabs.
     var tabButton: CGRect = .zero
+    /// The bar stands as a rail down one side, as the system's own bars do
+    /// on an iPhone Duo's outer screen and its inner one held sideways.
+    @Published var rail = false
+    /// The rail's buttons, top to bottom, as tall as they come out.
+    var railHeight: CGFloat = 190
     /// Told when one of the faces changes height.
     var measured: (() -> Void)?
 }
@@ -130,6 +135,11 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitAccessibilityContrast.self]) { (self: Self, _: UITraitCollection) in
             self.paintGround()
         }
+        // Whether the bar is a rail follows the size classes (the Duo
+        // opening and closing, Split View); the layout reads it afresh.
+        registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { (self: Self, _: UITraitCollection) in
+            self.view.setNeedsLayout()
+        }
         paintGround()
 
         state.measured = { [weak self] in self?.measured() }
@@ -148,10 +158,13 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         dim.frame = view.bounds
         start?.view.frame = view.bounds
         switcher?.view.frame = view.bounds
+        let rail = railSide != nil
+        if state.rail != rail { state.rail = rail }
         for slot in slots.values where slot.transform == .identity {
             slot.frame = view.bounds
             slot.strip = view.safeAreaInsets.top
-            slot.sides = sides
+            slot.sides = pageSides
+            slot.barRoom = rail ? 0 : 64
         }
         if spaces?.view.transform == .identity { spaces?.view.frame = view.bounds }
         if pull == nil, hop == nil { layoutChrome() }
@@ -162,6 +175,59 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
     /// stay inside (an iPhone Duo's outer screen has a column down one side).
     private var sides: (left: CGFloat, right: CGFloat) { (view.safeAreaInsets.left, view.safeAreaInsets.right) }
     private var H: CGFloat { view.bounds.height }
+
+    // MARK: - the rail
+
+    private enum Side { case left, right }
+
+    /// Where the bar stands as a rail, if it does: wherever the system would
+    /// put its own vertical bar (an iPhone Duo's outer screen, its inner one
+    /// held sideways, the outer side in Split View). The bar keeps to the
+    /// hardware, so the side is the one with the column, the larger inset.
+    private var railSide: Side? {
+        if #available(iOS 27.1, *) {
+            guard traitCollection.verticalBarEdge != .unspecified else { return nil }
+        } else {
+            return nil
+        }
+        return sides.left > sides.right ? .left : .right
+    }
+
+    /// The rail's width: the column the system leaves on its side, at least
+    /// as wide as its buttons need.
+    private var railWidth: CGFloat {
+        guard let side = railSide else { return 0 }
+        return max(side == .right ? sides.right : sides.left, 64)
+    }
+
+    /// The sides the pages keep: the window's, and the rail's on its side.
+    private var pageSides: (left: CGFloat, right: CGFloat) {
+        switch railSide {
+        case .left?: return (max(sides.left, railWidth), sides.right)
+        case .right?: return (sides.left, max(sides.right, railWidth))
+        case nil: return sides
+        }
+    }
+
+    /// The top of the rail's buttons: down at the foot, under the thumb, and
+    /// clear of the clock and camera at the top of the column.
+    private var railTop: CGFloat { H - safeBottom - 8 - state.railHeight }
+
+    /// The menu and search as a card beside the rail, rather than across a
+    /// wide screen.
+    private var cardWidth: CGFloat {
+        let other = railSide == .left ? sides.right : sides.left
+        return max(0, min(440, W - railWidth - 16 - other))
+    }
+
+    /// How far a finger has gone in from the rail, towards the page.
+    private func inward(_ t: CGPoint) -> CGFloat {
+        switch railSide {
+        case .right?: return -t.x
+        case .left?: return t.x
+        case nil: return -t.y
+        }
+    }
 
     // MARK: - the pages
 
@@ -206,7 +272,8 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         if slot.superview == nil {
             slot.frame = view.bounds
             slot.strip = view.safeAreaInsets.top
-            slot.sides = sides
+            slot.sides = pageSides
+            slot.barRoom = railSide == nil ? 64 : 0
             if let front { view.insertSubview(slot, belowSubview: front) } else { view.insertSubview(slot, belowSubview: dim) }
             let fresh = slot.web == nil
             slot.wake { [weak self] delta, dragging, tab in self?.browser.scrolled(delta, dragging: dragging, tab: tab) }
@@ -326,10 +393,12 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     private func layoutChrome() {
+        if let side = railSide { return layoutRail(side) }
         let top = chromeTop
         let height = H - top + 200
         chrome.bounds = CGRect(x: 0, y: 0, width: W, height: height)
         chrome.center = CGPoint(x: W / 2, y: top + height / 2)
+        ground.alpha = 1
         ground.frame = chrome.bounds
         tint.frame = ground.bounds
         let inside = CGRect(x: sides.left, y: 0, width: max(0, W - sides.left - sides.right), height: H)
@@ -344,6 +413,41 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         let hidden = browser.chromeHidden || (browser.barCollapsed && mode == .bar && tabs.current != nil && pull == nil)
         chrome.transform = hidden ? CGAffineTransform(translationX: 0, y: 150) : .identity
         chrome.isUserInteractionEnabled = !hidden
+    }
+
+    /// The bar as a rail: its buttons stand clear in the column, no surface
+    /// behind them, as the system's vertical bars do; the menu and search
+    /// rise as a card beside it.
+    private func layoutRail(_ side: Side) {
+        let top: CGFloat, width: CGFloat, x: CGFloat
+        if mode == .bar {
+            top = railTop
+            width = railWidth
+            x = side == .right ? W - width : 0
+            ground.alpha = 0
+        } else {
+            top = chromeTop
+            width = cardWidth
+            x = side == .right ? W - railWidth - 8 - width : railWidth + 8
+            ground.alpha = 1
+        }
+        let height = H - top + 200
+        chrome.bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        chrome.center = CGPoint(x: x + width / 2, y: top + height / 2)
+        ground.frame = chrome.bounds
+        tint.frame = ground.bounds
+        let inside = CGRect(x: 0, y: 0, width: width, height: H)
+        if content.view.frame != inside { content.view.frame = inside }
+        let g = grown
+        ground.layer.cornerRadius = 28 * g
+        tint.alpha = browser.searchIncognito && mode == .search ? 1 : 0.55 * g
+        dim.backgroundColor = UIColor.black.withAlphaComponent(0.14 * toolbarOpen)
+        dim.isUserInteractionEnabled = browser.panel.isSheet
+        // Out of the way sideways while the switcher has the screen; a page
+        // scrolling doesn't put it away, as it's not over the page.
+        let away: CGFloat = side == .right ? railWidth + 40 : -(railWidth + 40)
+        chrome.transform = browser.chromeHidden ? CGAffineTransform(translationX: away, y: 0) : .identity
+        chrome.isUserInteractionEnabled = !browser.chromeHidden
     }
 
     private func paintGround() {
@@ -466,7 +570,7 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
 
     // MARK: - a finger on the bar
 
-    private enum Hold { case drawing, closing, hopping }
+    private enum Hold { case drawing, closing, hopping, railing }
     private var hold: Hold?
 
     /// Where the finger on the bar came down.
@@ -484,6 +588,12 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         let started = touchDown
         switch mode {
         case .bar:
+            // On the rail, the drags that go up from the bar go in from the
+            // side instead.
+            if let side = railSide {
+                let inward = side == .right ? -v.x : v.x
+                return inward > abs(v.y)
+            }
             if canHop, grabArea.contains(started), v.y < 80 { return true }
             return -v.y > abs(v.x)
         case .search, .toolbar:
@@ -512,7 +622,17 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         let v = g.velocity(in: view)
         switch g.state {
         case .began:
-            if mode == .bar, canHop, grabArea.contains(touchDown) {
+            if mode == .bar, railSide != nil {
+                if canHop, state.tabButton.insetBy(dx: -14, dy: -20).contains(touchDown) {
+                    hold = .hopping
+                    hopBegan()
+                    hopFollow(t)
+                } else {
+                    // A swipe in off the rail opens a search, as one up off
+                    // the bar draws one.
+                    hold = .railing
+                }
+            } else if mode == .bar, canHop, grabArea.contains(touchDown) {
                 hold = .hopping
                 hopBegan()
                 hopFollow(t)
@@ -527,7 +647,7 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
                 drag(t)
             }
         case .changed:
-            if hold == .hopping { hopFollow(t) } else { drag(t) }
+            if hold == .hopping { hopFollow(t) } else if hold != .railing { drag(t) }
         case .ended:
             let was = hold
             hold = nil
@@ -535,12 +655,18 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
             case .hopping: hopEnded(t, velocity: v)
             case .drawing: drawEnded(t, velocity: v)
             case .closing: closeEnded(t, velocity: v)
+            case .railing:
+                let landing = inward(CGPoint(x: t.x + Fling.project(v.x), y: t.y + Fling.project(v.y)))
+                if inward(t) > 40 || (inward(t) > 12 && landing > 120) {
+                    Haptics.settle()
+                    browser.newSearch()
+                }
             case nil: break
             }
         default:
             let was = hold
             hold = nil
-            if was == .hopping { hopBack() } else if was != nil { settleBack() }
+            if was == .hopping { hopBack() } else if was != nil, was != .railing { settleBack() }
         }
     }
 
@@ -738,12 +864,20 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
 
     private func hopFollow(_ t: CGPoint) {
         guard let hop else { return }
-        let p = min(1, max(0, -t.y) / Self.reach)
+        let p = min(1, max(0, inward(t)) / Self.reach)
         // Grows from the button's card to two fifths of the screen as it
         // rises, exactly under the finger and held near its foot, so it
-        // rises above the thumb.
+        // rises above the thumb. Out of the rail, it comes in from the side,
+        // held ahead of the thumb and lifted off the screen's foot.
         let tall = (W * 4 / 3 + (H - W * 4 / 3) * p) * (30 + (W * 0.4 - 30) * p) / W
-        let center = CGPoint(x: hop.from.midX + t.x, y: hop.from.midY + t.y - tall * 0.3 * p)
+        let center: CGPoint
+        if let side = railSide {
+            let wide = 30 + (W * 0.4 - 30) * p
+            let ahead: CGFloat = side == .right ? -1 : 1
+            center = CGPoint(x: hop.from.midX + t.x + ahead * wide * 0.35 * p, y: hop.from.midY + t.y - tall * 0.4 * p)
+        } else {
+            center = CGPoint(x: hop.from.midX + t.x, y: hop.from.midY + t.y - tall * 0.3 * p)
+        }
         let card = pose(p, center: center, tilt: 6 * (1 - p))
         let back = 1 - 0.08 * p
         Motion.still {
@@ -757,8 +891,8 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     private func hopEnded(_ t: CGPoint, velocity v: CGPoint) {
-        let up = -t.y, landing = -(t.y + Fling.project(v.y))
-        if up > 150 || (up > 30 && landing > 280) { hopLand(velocity: v.y) } else { hopBack(velocity: v) }
+        let up = inward(t), landing = inward(CGPoint(x: t.x + Fling.project(v.x), y: t.y + Fling.project(v.y)))
+        if up > 150 || (up > 30 && landing > 280) { hopLand(velocity: railSide == nil ? v.y : 0) } else { hopBack(velocity: v) }
     }
 
     /// Let go high, or flung: the card is the page.
