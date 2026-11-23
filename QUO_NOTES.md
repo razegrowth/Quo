@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.0 · 23 November 2026
+
+AI agents on your Mac can now control Quo for you, over MCP.
+
+Turn on Settings › About › Developer › Let coding agents use Quo, then Give agents full control. Claude Code, Codex or any other agent you allow can then do what you do in Quo: open, close, pin, group and split tabs, make and switch spaces and windows, run any menu command, look through your bookmarks, history and downloads, change settings, and use pages themselves with your sign-ins. Add to Claude Code in the same place sets it up in one click, and the first run offers the switch too, off.
+
+Each agent asks you in the window first and stops when you press Stop. It never sees saved passwords, card numbers, one-time codes or private tabs, and it asks you before clearing your history, deleting a space or closing a bunch of tabs at once.
+
 ## 0.7.0 · 23 November 2026
 
 A Library past your first space, Apple Intelligence on your tabs and links, strong passwords and cards at checkout, and your tabs and history on all your devices.
