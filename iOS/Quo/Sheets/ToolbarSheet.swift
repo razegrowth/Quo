@@ -9,7 +9,6 @@ struct ToolbarPanel: View {
     @ObservedObject var tab: Tab
     @ObservedObject private var sync = MacSync.shared
     @ObservedObject private var downloads = Downloads.shared
-    @ObservedObject private var listener = Listener.shared
     /// Display options, open or closed as you last left them; closed at first.
     @AppStorage("toolbar.displayOpen") private var displayOpen = false
     @State private var copied = false
@@ -205,16 +204,15 @@ struct ToolbarPanel: View {
         }
     }
 
-    private enum HandOn: Hashable { case ask, listen, download, downloads, send, pip }
+    private enum HandOn: Hashable { case ask, download, downloads, send, pip }
 
-    /// Ask This Page where Apple Intelligence is; Listen to Page; Download
+    /// Ask This Page where Apple Intelligence is; Download
     /// for a PDF or other file shown as it is; what's downloading; Send to
     /// Mac once a Mac is there; Picture in Picture while there's a video.
     private var handOnRows: [HandOn] {
         var rows: [HandOn] = []
         let targets = sync.on ? sync.targets : []
         if tab.url != nil, OnDevice.available { rows.append(.ask) }
-        if tab.url != nil, !tab.isDocument { rows.append(.listen) }
         if tab.url != nil, tab.isDocument { rows.append(.download) }
         if !downloads.active.isEmpty { rows.append(.downloads) }
         if tab.url != nil, !tab.incognito, !targets.isEmpty { rows.append(.send) }
@@ -232,14 +230,6 @@ struct ToolbarPanel: View {
             } label: { Row(symbol: "apple.intelligence", title: "Ask this page") }
                 .buttonStyle(RowButton())
                 .accessibilityIdentifier("toolbar.ask")
-        case .listen:
-            let reading = listener.reading(tab)
-            Button {
-                dismiss()
-                listener.toggle(tab)
-            } label: { Row(symbol: reading ? "stop.circle" : "headphones", title: reading ? "Stop reading" : "Listen to page") }
-                .buttonStyle(RowButton())
-                .accessibilityIdentifier("toolbar.listen")
         case .download:
             Button {
                 dismiss()

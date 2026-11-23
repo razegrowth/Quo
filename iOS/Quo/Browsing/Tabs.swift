@@ -150,7 +150,6 @@ final class Tabs: ObservableObject {
             }
             saveClosed()
         }
-        Listener.shared.left(tab, closing: true)
         tab.close()
         all.remove(at: index)
         if current?.id == tab.id {

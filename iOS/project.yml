@@ -12,7 +12,7 @@ settings:
     DEVELOPMENT_TEAM: 8B6VFDJHA2
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.6.0"
-    CURRENT_PROJECT_VERSION: "7"
+    CURRENT_PROJECT_VERSION: "8"
     # YES where the build carries the iCloud entitlement (a device build
     # signed for the team); a simulator build without signing says NO and
     # reads a stand-in folder instead.
@@ -23,7 +23,6 @@ targets:
     platform: iOS
     sources:
       - path: Quo
-      - path: Shared
       # The Mac app's own sync format and helpers, built here as they are
       # there, so the two can't drift (see Quo/Sync/MacTypes.swift).
       - path: ../Sources/Search/SyncMerge.swift
@@ -38,9 +37,6 @@ targets:
         group: Shared
       - path: ../Sources/Search/Engine.swift
         group: Shared
-    dependencies:
-      - target: QuoWidgets
-        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.edinabazi.quo.ios
@@ -59,20 +55,3 @@ targets:
         Debug:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           SWIFT_COMPILATION_MODE: wholemodule
-  # Listen to Page's Live Activity, on the Lock Screen and in the Dynamic
-  # Island (Shared/ListenActivity.swift is built into both).
-  QuoWidgets:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "18.0"
-    sources:
-      - path: QuoWidgets
-      - path: Shared
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.edinabazi.quo.ios.widgets
-        PRODUCT_NAME: QuoWidgets
-        TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_FILE: QuoWidgets/Info.plist
-        GENERATE_INFOPLIST_FILE: NO
-        SKIP_INSTALL: YES

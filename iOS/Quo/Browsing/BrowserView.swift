@@ -234,14 +234,6 @@ struct BrowserView: View {
             BrowserScreen()
                 .ignoresSafeArea()
 
-            // Listen to Page's bar, just over the bottom bar.
-            if browser.panel == .none {
-                ListenBar()
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 92)
-                    .zIndex(4)
-            }
-
             // An incognito page while Incognito's locked, or Quo's leaving.
             if lock.hiding, tabs.current?.incognito == true, browser.panel != .switcher {
                 IncognitoLockCover(browser: browser)
