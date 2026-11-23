@@ -216,7 +216,7 @@ struct SearchPanel: View {
             if rows.count >= 4 { break }
         }
         if !incognito {
-            for visit in History.shared.matches(typed, limit: 4) {
+            for visit in History.shared.matchesWithMeaning(typed, limit: 4) {
                 guard let url = URL(string: visit.url) else { continue }
                 add(Suggestion(id: "visit" + visit.url, kind: .page(url), title: visit.title.isEmpty ? Address.shown(url) : visit.title,
                                note: Address.shown(url), host: url.host()), key: visit.url)

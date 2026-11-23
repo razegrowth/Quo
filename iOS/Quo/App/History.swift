@@ -25,6 +25,10 @@ final class History: ObservableObject {
     private init() {
         visits = Store.read([Visit].self, "history.json") ?? []
         forgets = Store.read(HistoryForgets.self, "history-forgets.json") ?? HistoryForgets()
+        // History's places in meaning, once launch has settled (Meaning).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            MainActor.assumeIsolated { if let self { Meaning.shared.build(self.visits) } }
+        }
     }
 
     func record(_ url: URL, title: String?) {
@@ -72,7 +76,21 @@ final class History: ObservableObject {
             .map(\.0)
     }
 
+    /// Word matches first, then pages near in meaning to fill what's left
+    /// (Meaning), never one twice.
+    func matchesWithMeaning(_ typed: String, limit: Int = 4) -> [Visit] {
+        var found = matches(typed, limit: limit)
+        guard found.count < limit else { return found }
+        let have = Set(found.map(\.url))
+        for visit in Meaning.shared.nearest(typed, in: visits, limit: limit) where !have.contains(visit.url) {
+            found.append(visit)
+            if found.count >= limit { break }
+        }
+        return found
+    }
+
     func clear() {
+        Meaning.shared.forget()
         visits = []
         Store.remove("history.json")
         forget(HistoryForgets(all: Date().timeIntervalSince1970))
@@ -149,6 +167,7 @@ final class History: ObservableObject {
     }
 
     private func save() {
+        Meaning.shared.build(visits)
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { if let self { Store.write(self.visits, "history.json") } }
