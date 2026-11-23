@@ -87,10 +87,14 @@ final class LinkPreview: UIViewController {
     private let url: URL
     private let store: WKWebsiteDataStore
     private var summary: PageSummary?
+    /// The room the held page has: its window, so the preview is sized to
+    /// where Quo is shown, not the whole display.
+    private let room: CGSize
 
-    init(url: URL, store: WKWebsiteDataStore, desktop: Bool) {
+    init(url: URL, store: WKWebsiteDataStore, desktop: Bool, room: CGSize) {
         self.url = url
         self.store = store
+        self.room = room
         let config = WKWebViewConfiguration()
         config.websiteDataStore = store
         config.allowsInlineMediaPlayback = true
@@ -107,7 +111,7 @@ final class LinkPreview: UIViewController {
     override func loadView() {
         web.backgroundColor = .systemBackground
         web.isOpaque = false
-        let bounds = UIScreen.main.bounds
+        let bounds = room
         guard AppSettings.shared.linkSummaries, OnDevice.available else {
             view = web
             preferredContentSize = CGSize(width: bounds.width, height: bounds.height * 0.48)

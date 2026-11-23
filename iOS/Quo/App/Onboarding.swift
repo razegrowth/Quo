@@ -13,6 +13,8 @@ struct OnboardingView: View {
     @State private var page: Int? = 0
     @State private var leaving = false
     @State private var reveal: CGFloat = 0
+    /// The window's safe area, read from outside the part that ignores it.
+    @State private var windowInsets = EdgeInsets()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Scene: Identifiable {
@@ -36,8 +38,9 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
-            let window = Screen.insets
-            let insets = EdgeInsets(top: window.top, leading: 0, bottom: window.bottom, trailing: 0)
+            // All four sides: an iPhone Duo's outer screen keeps its camera
+            // and status in a column down one side.
+            let insets = windowInsets
             let button = CGPoint(x: size.width / 2, y: size.height - insets.bottom - 40)
             ZStack {
                 Backdrop(lit: stage != .dark, page: current)
@@ -80,6 +83,7 @@ struct OnboardingView: View {
             }
         }
         .ignoresSafeArea()
+        .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { windowInsets = $0 }
         .preferredColorScheme(.dark)
         .presentationBackground(.clear)
         .sensoryFeedback(.selection, trigger: current)
@@ -146,6 +150,8 @@ struct OnboardingView: View {
                     .accessibilityIdentifier("onboarding.skip")
             }
             .padding(.top, insets.top + 2)
+            .padding(.leading, insets.leading)
+            .padding(.trailing, insets.trailing)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
@@ -183,6 +189,8 @@ struct OnboardingView: View {
             }
             .buttonStyle(PressStyle())
             .padding(.horizontal, 24)
+            .padding(.leading, insets.leading)
+            .padding(.trailing, insets.trailing)
             .padding(.bottom, insets.bottom + 12)
             .accessibilityIdentifier("onboarding.next")
             .rising(stage == .open, delay: 0.6)

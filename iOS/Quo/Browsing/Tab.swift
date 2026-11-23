@@ -469,8 +469,9 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
         guard web else { return nil }
         let store = webView.configuration.websiteDataStore
         let desktop = tab.desktop
+        let room = webView.window?.bounds.size ?? webView.bounds.size
         return UIContextMenuConfiguration(identifier: nil, previewProvider: {
-            MainActor.assumeIsolated { LinkPreview(url: url, store: store, desktop: desktop) }
+            MainActor.assumeIsolated { LinkPreview(url: url, store: store, desktop: desktop, room: room) }
         }) { [weak tab] suggested in
             MainActor.assumeIsolated {
                 guard let tab else { return UIMenu(children: suggested) }

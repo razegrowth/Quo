@@ -28,6 +28,12 @@ final class PageSlot: UIView {
 
     /// The status bar's height: the page starts under it.
     var strip: CGFloat = 0 { didSet { if strip != oldValue { setNeedsLayout() } } }
+    /// The window's side insets: an iPhone Duo's outer screen keeps its
+    /// camera and status in a column down one side, and the page stays
+    /// out from under it (as from under the island, in landscape).
+    var sides: (left: CGFloat, right: CGFloat) = (0, 0) {
+        didSet { if sides != oldValue { setNeedsLayout() } }
+    }
 
     init(tab: Tab) {
         self.tab = tab
@@ -200,7 +206,9 @@ final class PageSlot: UIView {
         }
     }
 
-    private var page: CGRect { CGRect(x: 0, y: strip, width: bounds.width, height: max(0, bounds.height - strip)) }
+    private var page: CGRect {
+        CGRect(x: sides.left, y: strip, width: max(0, bounds.width - sides.left - sides.right), height: max(0, bounds.height - strip))
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -209,7 +217,7 @@ final class PageSlot: UIView {
             web?.frame = page
             // Room under the page for the bar, so its foot can be scrolled
             // to, and the home indicator's strip.
-            let bottom = 64 + (window?.safeAreaInsets.bottom ?? 34)
+            let bottom = 64 + (window?.safeAreaInsets.bottom ?? safeAreaInsets.bottom)
             if let scroll = web?.scrollView, scroll.contentInset.bottom != bottom {
                 scroll.contentInset.bottom = bottom
                 scroll.verticalScrollIndicatorInsets.bottom = bottom

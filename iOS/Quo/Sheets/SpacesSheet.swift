@@ -11,6 +11,11 @@ struct SpacesSheet: View {
     @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.3, dampingFraction: 0.9))) private var drag: CGFloat = 0
     /// Where it was let go, held as it goes down and away.
     @State private var released: CGFloat = 0
+    /// The spaces strip's own width, so a few spaces sit centred in it.
+    @State private var stripWidth: CGFloat = 0
+    /// The home indicator's strip under the sheet, from the sheet's own
+    /// geometry, so it follows the window as it changes.
+    @State private var footInset: CGFloat = 0
 
     private func dismiss() { browser.spacesOpen = false }
 
@@ -50,12 +55,13 @@ struct SpacesSheet: View {
 
             foot
         }
-        .padding(.bottom, Screen.insets.bottom)
+        .padding(.bottom, footInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { ground }
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30, style: .continuous))
         .padding(.top, 10)
         .ignoresSafeArea(edges: .bottom)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { footInset = $0 }
         .environment(\.colorScheme, .dark)
         .offset(y: max(drag, released))
         // Anywhere on it, measured on the screen so it follows the finger.
@@ -114,8 +120,9 @@ struct SpacesSheet: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .frame(minWidth: UIScreen.main.bounds.width)
+                .frame(minWidth: stripWidth)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stripWidth = $0 }
             .padding(.vertical, 10)
             if !sync.on || sync.macs.isEmpty {
                 Text(sync.on ? "Turn on iCloud sync in Quo on your Mac to see its spaces here." : "Sync with your Mac is off in Settings.")

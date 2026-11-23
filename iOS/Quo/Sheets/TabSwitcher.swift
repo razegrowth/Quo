@@ -34,6 +34,9 @@ struct TabSwitcher: View {
     @State private var peek: PageSummary?
     @State private var holding: DispatchWorkItem?
     @State private var pressAt: CGPoint?
+    /// The window's safe area, read from outside the part that ignores it
+    /// (inside, it reads as nothing), so it follows the window as it changes.
+    @State private var windowInsets = EdgeInsets()
 
     /// How long things take: about a quarter of a second, no bounce.
     static let move = Animation.spring(response: 0.3, dampingFraction: 0.9)
@@ -43,7 +46,7 @@ struct TabSwitcher: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let g = Deck(size: proxy.size, insets: Screen.insets)
+            let g = Deck(size: proxy.size, insets: windowInsets)
             let cards = deck
             ZStack(alignment: .topLeading) {
                 // Dark until the chosen card covers the screen.
@@ -69,6 +72,7 @@ struct TabSwitcher: View {
             .overlay { peekView }
         }
         .ignoresSafeArea()
+        .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { windowInsets = $0 }
         .environment(\.colorScheme, .dark)
         .onAppear(perform: arrive)
         .onChange(of: tabs.all.map(\.id)) { _, ids in takeIn(ids) }
@@ -448,7 +452,7 @@ private struct Deck {
     let top: CGFloat
     let bottom: CGFloat
 
-    init(size: CGSize, insets: UIEdgeInsets) {
+    init(size: CGSize, insets: EdgeInsets) {
         W = size.width
         H = size.height
         top = insets.top
@@ -583,10 +587,3 @@ private struct DeckHeader: View {
     }
 }
 
-/// The window's safe area, for views laid out across the whole screen.
-enum Screen {
-    @MainActor static var insets: UIEdgeInsets {
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        return scene?.keyWindow?.safeAreaInsets ?? scene?.windows.first?.safeAreaInsets ?? .zero
-    }
-}

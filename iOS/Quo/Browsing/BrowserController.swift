@@ -151,12 +151,16 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         for slot in slots.values where slot.transform == .identity {
             slot.frame = view.bounds
             slot.strip = view.safeAreaInsets.top
+            slot.sides = sides
         }
         if spaces?.view.transform == .identity { spaces?.view.frame = view.bounds }
         if pull == nil, hop == nil { layoutChrome() }
     }
 
     private var W: CGFloat { view.bounds.width }
+    /// The window's side insets, which the pages and the bar's contents
+    /// stay inside (an iPhone Duo's outer screen has a column down one side).
+    private var sides: (left: CGFloat, right: CGFloat) { (view.safeAreaInsets.left, view.safeAreaInsets.right) }
     private var H: CGFloat { view.bounds.height }
 
     // MARK: - the pages
@@ -202,6 +206,7 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         if slot.superview == nil {
             slot.frame = view.bounds
             slot.strip = view.safeAreaInsets.top
+            slot.sides = sides
             if let front { view.insertSubview(slot, belowSubview: front) } else { view.insertSubview(slot, belowSubview: dim) }
             let fresh = slot.web == nil
             slot.wake { [weak self] delta, dragging, tab in self?.browser.scrolled(delta, dragging: dragging, tab: tab) }
@@ -327,8 +332,9 @@ final class BrowserController: UIViewController, UIGestureRecognizerDelegate {
         chrome.center = CGPoint(x: W / 2, y: top + height / 2)
         ground.frame = chrome.bounds
         tint.frame = ground.bounds
-        if content.view.frame.size != CGSize(width: W, height: H) {
-            content.view.frame = CGRect(x: 0, y: 0, width: W, height: H)
+        let inside = CGRect(x: sides.left, y: 0, width: max(0, W - sides.left - sides.right), height: H)
+        if content.view.frame != inside {
+            content.view.frame = inside
         }
         let g = grown
         ground.layer.cornerRadius = 28 * g
