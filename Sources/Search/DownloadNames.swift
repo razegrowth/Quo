@@ -14,7 +14,7 @@ import FoundationModels
 // Settings › AI & Agents › Suggest names for downloads.
 enum DownloadNames {
     static let key = "downloads.names"
-    nonisolated(unsafe) static var on = true
+    nonisolated(unsafe) static var on = false
 
     /// A name that says nothing about what the file is.
     static func unclear(_ name: String) -> Bool {

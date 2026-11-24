@@ -92,7 +92,7 @@ enum Meaning {
     }
 
     /// Settings › AI & Agents › Find history by what it was about.
-    nonisolated(unsafe) static var on = true
+    nonisolated(unsafe) static var on = false
 
     /// The traces closest in meaning to `query`, best first, those already
     /// listed left out. Worked out away from the window's thread. None with

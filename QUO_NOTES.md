@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.7 · 24 November 2026
+
+Apple Intelligence is yours to turn on, and no more dark box on your desktop.
+
+On a new install, link summaries, shorter tab names, group and download names, Writing Tools and history by meaning all start off. The welcome offers them as one switch, and each still has its own in Settings › AI & Agents. If you already had Quo, nothing changes for you.
+
+And if you'd connected an agent, you might have seen a dark rectangle sitting on your desktop behind every window. That was the hidden window agents use for background tabs, and it stays hidden now.
+
 ## 0.8.6 · 24 November 2026
 
 Unpin a tab right from its row.

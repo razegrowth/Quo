@@ -87,13 +87,7 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate, NSPopo
         // nothing it thinks nobody sees: told to paint regardless, the page
         // is drawn by the time it reaches the popover.
         ExtensionPopup.paintsUnseen(web, true)
-        let backstage = NSWindow(contentRect: NSRect(x: -20000, y: -22000, width: 800, height: 600),
-                                 styleMask: .borderless, backing: .buffered, defer: false)
-        backstage.isReleasedWhenClosed = false
-        backstage.hasShadow = false
-        backstage.canHide = false
-        backstage.isExcludedFromWindowsMenu = true
-        backstage.collectionBehavior = [.transient, .ignoresCycle]
+        let backstage = OffscreenWindow(size: NSSize(width: 800, height: 600), at: NSPoint(x: -20000, y: -22000))
         backstage.contentView?.addSubview(web)
         backstage.orderBack(nil)
         self.backstage = backstage

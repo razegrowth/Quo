@@ -539,6 +539,49 @@ enum PageHands {
 
 // MARK: - a room off every screen
 
+/// A window kept off every screen, for a page that needs one to be laid out
+/// and nobody to see it. macOS pulls a window back onto a screen when the
+/// screens change (a display plugged in, woken or rearranged) and when it is
+/// ordered again: this one won't be constrained, goes back off as the
+/// screens change, and is clear and deaf to the pointer besides, so one that
+/// did end up on a screen would show nothing and catch nothing. Search's sat
+/// on the desktop as a dark 1280 by 800 slab behind everything, once an
+/// agent's tab had needed it.
+final class OffscreenWindow: NSWindow {
+    private let away: NSPoint
+    private var watching: NSObjectProtocol?
+
+    init(size: NSSize, at away: NSPoint = NSPoint(x: -20000, y: -20000)) {
+        self.away = away
+        super.init(contentRect: NSRect(origin: away, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
+        isExcludedFromWindowsMenu = true
+        hasShadow = false
+        canHide = false
+        alphaValue = 0
+        ignoresMouseEvents = true
+        collectionBehavior = [.transient, .ignoresCycle, .stationary]
+        watching = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.goAway() }
+        }
+    }
+
+    deinit {
+        if let watching { NotificationCenter.default.removeObserver(watching) }
+    }
+
+    /// Back off every screen, wherever it was put.
+    func goAway() {
+        if frame.origin != away { setFrameOrigin(away) }
+    }
+
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
 /// A page nobody is looking at has to be somewhere to be laid out at all:
 /// WebKit lays out and paints a page only when it has a size and a window.
 /// The stage takes it back the moment you pick its tab, and it comes here
@@ -553,17 +596,8 @@ final class PageRoom {
         if let window { return window }
         // Off every screen, and never key or main: it exists so that a web
         // view has a window, and for nothing else.
-        let window = NSWindow(
-            contentRect: NSRect(x: -20000, y: -20000, width: 1280, height: 800),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.isExcludedFromWindowsMenu = true
-        window.collectionBehavior = [.transient, .ignoresCycle, .stationary]
+        let window = OffscreenWindow(size: NSSize(width: 1280, height: 800))
         window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
-        window.hasShadow = false
         window.orderBack(nil)
         self.window = window
         return window
@@ -575,6 +609,7 @@ final class PageRoom {
     func house(_ tab: Tab, anyway: Bool = false) {
         guard tab.bench || anyway, tab.web.window == nil else { return }
         let window = made()
+        (window as? OffscreenWindow)?.goAway()
         tab.web.frame = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         tab.web.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(tab.web)

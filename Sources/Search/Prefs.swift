@@ -167,6 +167,25 @@ enum SidebarDefault {
         }
     }
 
+    /// Apple Intelligence off for a fresh install of Quo, offered once by the
+    /// welcome instead (one switch for all of it), so nothing runs a model
+    /// you didn't ask for: link summaries, download and group names, Writing
+    /// Tools in text boxes and history found by meaning. An install that ran
+    /// before, with no line for one, had it on and keeps it on; so does a
+    /// test world, whose suites were written against them on.
+    static let offWhenFresh = ["links.summaries", "downloads.names", "groups.autoName",
+                               "pages.writingTools", "history.meaning"]
+
+    static func settleOffFresh(_ key: String, _ store: UserDefaults, testing: Bool, ranBefore: Bool) {
+        let settled = key + ".settled"
+        guard !store.bool(forKey: settled) else { return }
+        store.set(true, forKey: settled)
+        guard store.object(forKey: key) == nil else { return }
+        if !fresh(testing: testing) || ranBefore || traces.contains(where: { store.object(forKey: $0) != nil }) {
+            store.set(true, forKey: key)
+        }
+    }
+
     /// What such a setting reads as: its line, or on for a fresh install.
     static func onWhenFresh(_ key: String, _ store: UserDefaults, testing: Bool) -> Bool {
         store.object(forKey: key) as? Bool ?? fresh(testing: testing)
@@ -520,8 +539,8 @@ final class Preferences: ObservableObject {
         }
     }
     /// The card for a link held with Shift summarised by Apple's model; off,
-    /// it shows the page's own description (Intelligence.swift). On unless
-    /// turned off.
+    /// it shows the page's own description (Intelligence.swift). Off for a
+    /// fresh install until turned on (SidebarDefault.offWhenFresh).
     @Published var summarizesLinks: Bool {
         didSet {
             store.set(summarizesLinks, forKey: LinkPreview.summaryKey)
@@ -529,14 +548,14 @@ final class Preferences: ObservableObject {
         }
     }
     /// Apple's Writing Tools in a page's text boxes: first in the menu, and
-    /// rewriting in place (Tab.swift). On unless turned off; off, pages
-    /// opened from then on don't offer them at all.
+    /// rewriting in place (Tab.swift). Off for a fresh install until turned
+    /// on; off, pages opened from then on don't offer them at all.
     @Published var writingTools: Bool {
         didSet { store.set(writingTools, forKey: Self.writingToolsKey) }
     }
     static let writingToolsKey = "pages.writingTools"
     /// History also lists pages close in meaning to what you look for
-    /// (Meaning.swift, Recall.swift). On unless turned off.
+    /// (Meaning.swift, Recall.swift). Off for a fresh install until turned on.
     @Published var meaningSearch: Bool {
         didSet {
             store.set(meaningSearch, forKey: Self.meaningKey)
@@ -545,7 +564,7 @@ final class Preferences: ObservableObject {
     }
     static let meaningKey = "history.meaning"
     /// A group you make named from its tabs by Apple's model (GroupNames,
-    /// Intelligence.swift). On unless turned off.
+    /// Intelligence.swift). Off for a fresh install until turned on.
     @Published var namesGroups: Bool {
         didSet {
             store.set(namesGroups, forKey: GroupNames.key)
@@ -553,11 +572,25 @@ final class Preferences: ObservableObject {
         }
     }
     /// A clearer name offered for a download whose name says nothing
-    /// (DownloadNames). On unless turned off; never renamed on its own.
+    /// (DownloadNames). Off for a fresh install until turned on; never
+    /// renamed on its own.
     @Published var namesDownloads: Bool {
         didSet {
             store.set(namesDownloads, forKey: DownloadNames.key)
             DownloadNames.on = namesDownloads
+        }
+    }
+    /// Apple Intelligence as one switch, as the welcome offers it: on when
+    /// any part is, and turning it on or off turns every part with it.
+    var intelligenceOn: Bool {
+        get { shortTitles || summarizesLinks || namesGroups || namesDownloads || writingTools || meaningSearch }
+        set {
+            shortTitles = newValue
+            summarizesLinks = newValue
+            namesGroups = newValue
+            namesDownloads = newValue
+            writingTools = newValue
+            meaningSearch = newValue
         }
     }
     /// Hold Shift over a link to see what it says (Intelligence.swift). On
@@ -1129,6 +1162,9 @@ final class Preferences: ObservableObject {
         for key in SidebarDefault.onWhenFresh {
             SidebarDefault.settleFresh(key, store, testing: Store.testing, ranBefore: ranBefore)
         }
+        for key in SidebarDefault.offWhenFresh {
+            SidebarDefault.settleOffFresh(key, store, testing: Store.testing, ranBefore: ranBefore)
+        }
         navigationLeft = store.bool(forKey: "toolbar.left")
         addressBar = SidebarDefault.onWhenFresh("sidebar.addressBar", store, testing: Store.testing)
         compactStrip = store.bool(forKey: "tabs.compact")
@@ -1225,17 +1261,17 @@ final class Preferences: ObservableObject {
         let shortens = store.bool(forKey: TabTitles.key)
         shortTitles = shortens
         TabTitles.on = shortens
-        let summaries = store.object(forKey: LinkPreview.summaryKey) as? Bool ?? true
+        let summaries = store.object(forKey: LinkPreview.summaryKey) as? Bool ?? false
         summarizesLinks = summaries
         LinkPreview.summarizes = summaries
-        let downloadNames = store.object(forKey: DownloadNames.key) as? Bool ?? true
+        let downloadNames = store.object(forKey: DownloadNames.key) as? Bool ?? false
         namesDownloads = downloadNames
         DownloadNames.on = downloadNames
-        let names = store.object(forKey: GroupNames.key) as? Bool ?? true
+        let names = store.object(forKey: GroupNames.key) as? Bool ?? false
         namesGroups = names
         GroupNames.on = names
-        writingTools = store.object(forKey: Self.writingToolsKey) as? Bool ?? true
-        let meaning = store.object(forKey: Self.meaningKey) as? Bool ?? true
+        writingTools = store.object(forKey: Self.writingToolsKey) as? Bool ?? false
+        let meaning = store.object(forKey: Self.meaningKey) as? Bool ?? false
         meaningSearch = meaning
         Meaning.on = meaning
         let previews = store.object(forKey: LinkPreview.key) as? Bool ?? true

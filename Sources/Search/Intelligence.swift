@@ -151,7 +151,7 @@ struct Sorted {
 /// you give it a name of your own (Settings › AI & Agents › Name new groups).
 enum GroupNames {
     static let key = "groups.autoName"
-    nonisolated(unsafe) static var on = true
+    nonisolated(unsafe) static var on = false
 
     /// The name a group gets before anyone names it.
     static func isDefault(_ name: String) -> Bool {
@@ -303,7 +303,7 @@ final class LinkPreview: ObservableObject {
     static var on = true
     /// Summarised by Apple's model, or the page's own description.
     static let summaryKey = "links.summaries"
-    static var summarizes = true
+    static var summarizes = false
 
     /// The link under the pointer, as the address bubble has it, and the
     /// page it's on.
