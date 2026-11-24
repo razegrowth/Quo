@@ -1,8 +1,35 @@
-# Quo
+<p align="center">
+  <img src=".github/readme/icon.png" width="112" height="112" alt="Quo's icon">
+</p>
 
-A tiny Mac browser that feels and works like Arc. Safari's speed, Chrome's extensions, fully agentic, completely free and open source.
+<h1 align="center">Quo</h1>
 
-**[Download Quo →](https://github.com/razegrowth/Quo/releases/latest)** · macOS 14 or later · Apple silicon · free · [quobrowser.com](https://quobrowser.com)
+<p align="center">
+  <b>A tiny Mac browser that feels and works like Arc.</b><br>
+  Safari's speed, Chrome's extensions, fully agentic, completely free and open source.
+</p>
+
+<p align="center">
+  <a href="https://github.com/razegrowth/Quo/releases/latest"><img src="https://img.shields.io/github/v/release/razegrowth/Quo?label=version&color=1e1e1e" alt="Latest version"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-1e1e1e?logo=apple&logoColor=white" alt="macOS 14 or later">
+  <img src="https://img.shields.io/badge/Apple%20silicon-9%20MB-1e1e1e" alt="Apple silicon, about 9 MB">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1e1e1e" alt="MIT licence"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/razegrowth/Quo/releases/latest"><b>Download for Mac</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://quobrowser.com">quobrowser.com</a>
+  &nbsp;·&nbsp;
+  <a href="#quo-for-iphone">iPhone beta</a>
+</p>
+
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/new-tab-dark.png">
+  <img src=".github/readme/new-tab-light.png" alt="Quo's window: pinned Gmail, Calendar and Spotify above tabs down the side, the address bar over the page, and a new tab with the time, a search field, your most visited sites, the next meeting with Join, and the tabs you closed last.">
+</picture>
 
 ---
 
