@@ -1609,8 +1609,9 @@ private struct SideRow: View, Equatable {
         live && !editing && !browser.addressBarUp ? AtRest.said(tab.restAddress, always: prefs.showsAddress) : nil
     }
     private var atRest: Bool { rest != nil }
-    /// A pin already put down has nothing left to put down: no minus (#1050).
-    private var closable: Bool { tab.pin == nil || !tab.asleep }
+    /// A pinned row's minus unpins it, open or put down, sending it down
+    /// to the tabs under the pins; ⌘W and a middle click still put it down.
+    private var unpins: Bool { tab.pin != nil }
     /// A grouped tab holding no page — put away with its minus (Browser.putAway),
     /// put to sleep, or not opened since launch: the row stays, dimmed as a
     /// pin put down is, so the minus is seen to have done something.
@@ -1711,7 +1712,7 @@ private struct SideRow: View, Equatable {
         // doesn't jump on each row the pointer passes.
         .mask {
             ZStack {
-                Rectangle().opacity(hovering && closable && !editing && !status ? 0 : 1)
+                Rectangle().opacity(hovering && !editing && !status ? 0 : 1)
                 HStack(spacing: 0) {
                     Rectangle()
                     LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
@@ -1726,11 +1727,11 @@ private struct SideRow: View, Equatable {
                 // square, glyph and wash, deeper under the pointer.
                 let box: CGFloat = prefs.roomyTabs ? 20 : 18
                 ZStack {
-                    if hovering && closable {
-                        // A pinned row is put down, not closed (see
-                        // Browser.close), and says so, as Arc's does; so is
-                        // a grouped tab's page while it is open (closeTab).
-                        Image(systemName: tab.pin != nil || (putsAway && !tab.asleep) ? "minus" : "xmark")
+                    if hovering {
+                        // A pinned row is unpinned, not closed, and says so
+                        // with a minus; so is a grouped tab's page put away
+                        // while it is open (closeTab).
+                        Image(systemName: unpins || (putsAway && !tab.asleep) ? "minus" : "xmark")
                             .font(.system(size: prefs.roomyTabs ? 10.5 : 9, weight: .semibold))
                             .foregroundStyle(onCross ? Palette.ink : Palette.muted)
                             .frame(width: box, height: box)
@@ -1746,7 +1747,15 @@ private struct SideRow: View, Equatable {
                         .frame(width: 30, height: prefs.sideRow)
                         .contentShape(Rectangle())
                         .onHover { onCross = $0 }
-                        .onTapGesture { if hovering && closable { close() } }
+                        .onTapGesture {
+                            guard hovering else { return }
+                            if unpins {
+                                withAnimation(Motion.glide) { browser.unpin(tab) }
+                            } else {
+                                close()
+                            }
+                        }
+                        .help(unpins ? "Unpin" : putsAway && !tab.asleep ? "Put Away" : "Close Tab")
                 }
                 .padding(.trailing, 6)
             }

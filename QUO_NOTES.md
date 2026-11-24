@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.6 · 24 November 2026
+
+Unpin a tab right from its row.
+
+Hover a tab pinned as a row and there's a minus at its end, whether the pin is open or not. Press it and the tab unpins and drops down to your other tabs, no right-click needed. ⌘W still puts an open pin away like before.
+
+The buttons at the end of a tab's row say what they do when you hover them too: Close Tab, Unpin or Put Away.
+
 ## 0.8.5 · 24 November 2026
 
 A new tab that shows you today.
