@@ -21,6 +21,7 @@ It runs on WebKit, the engine already inside your Mac, so there's no Chromium to
 - **About a 9 MB download**, 14 MB on disk. Arc is 892 MB, Dia 1.2 GB, Chrome 1.4 GB.
 - **Tabs sleep.** The ones you're not using let go on their own and come back where you left them.
 - **Ads and trackers blocked** before the page loads, inside the engine, so pages come in faster.
+- **Netflix plays**, signed in, through Apple's FairPlay, the same as in Safari.
 - **Synced through your own iCloud.** History and open tabs between your Macs and iPhone, end-to-end encrypted.
 - **Passwords and cards.** Strong passwords made for you, cards filled in at checkout, all in your keychain.
 - **Handoff** for the page you're on.
