@@ -76,8 +76,11 @@ if [ "${1:-}" = "release" ]; then
     || { echo "release: QUO_NOTES.md has no \"## $SEARCH_VERSION\" — say what's new in it first" >&2; exit 1; }
   [ -z "$(git status --porcelain)" ] || { echo "release: commit first — a release is built from what's committed" >&2; exit 1; }
   git fetch -q origin
-  git merge-base --is-ancestor HEAD "origin/$(git rev-parse --abbrev-ref HEAD)" \
-    || { echo "release: push first — the release's tag goes on this commit" >&2; exit 1; }
+  # Pushed to what this branch follows (main, for a worktree's branch that
+  # pushes straight there), or else its namesake on origin.
+  PUSHED="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "origin/$(git rev-parse --abbrev-ref HEAD)")"
+  git merge-base --is-ancestor HEAD "$PUSHED" \
+    || { echo "release: push first — the release's tag goes on this commit ($PUSHED)" >&2; exit 1; }
   SEARCH_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG" ./build.sh release ship
   # The signed feed has to hold up before it goes out: a broken one stops
   # every Quo's updates without a word.
