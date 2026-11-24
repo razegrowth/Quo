@@ -2361,6 +2361,75 @@ final class Bench {
                 answer(["saved": path])
             }
 
+        case "home":
+            // An empty tab's home (SpaceHome), in the state `state` names
+            // (full, noevent, norecents, live, sitesonly, early, fresh), on
+            // the space's ground at 1200 by 780, Light or `dark`, to a PNG
+            // at `path`. Test runs only.
+            guard Store.testing, let path = request["path"] as? String else { answer(["error": "home PATH, on a --test run"]); return }
+            let state = request["state"] as? String ?? "full"
+            let now = Date()
+            func site(_ host: String, _ title: String) -> History.Site {
+                History.Site(host: host, url: URL(string: "https://\(host)/")!, title: title)
+            }
+            func ghost(_ url: String, _ title: String, _ ago: TimeInterval) -> Browser.Ghost {
+                Browser.Ghost(url: URL(string: url)!, title: title, index: 0, groupID: nil, at: now.addingTimeInterval(-ago))
+            }
+            let sites = [site("mail.google.com", "Inbox - Gmail"), site("linear.app", "Linear"), site("figma.com", "Figma"),
+                         site("github.com", "GitHub"), site("notion.so", "Notion"), site("vercel.com", "Vercel"),
+                         site("news.ycombinator.com", "Hacker News"), site("x.com", "Home / X")]
+            let closed = [ghost("https://stripe.com/docs/billing", "Billing | Stripe Documentation", 12 * 60),
+                          ghost("https://developer.apple.com/documentation/swiftui", "SwiftUI | Apple Developer Documentation", 3 * 3600),
+                          ghost("https://www.figma.com/file/quo", "Quo new tab", 26 * 3600)]
+            let soon = Meetings.Meeting(id: "a", title: "Design review with Raze", start: now.addingTimeInterval(12 * 60),
+                                        end: now.addingTimeInterval(42 * 60), join: URL(string: "https://meet.google.com/abc"), colour: nil)
+            let live = Meetings.Meeting(id: "b", title: "Weekly sync", start: now.addingTimeInterval(-10 * 60),
+                                        end: now.addingTimeInterval(20 * 60), join: URL(string: "https://meet.google.com/abc"), colour: nil)
+            var sample = SpaceHomeBelow.Sample(sites: Array(sites.prefix(6)), closed: closed, meeting: soon, now: now)
+            switch state {
+            case "noevent": sample.meeting = nil
+            case "norecents": sample.closed = []
+            case "live": sample.meeting = live; sample.closed = Array(closed.prefix(2))
+            case "sitesonly": sample = .init(sites: sites, now: now)
+            case "early": sample = .init(sites: Array(sites.prefix(2)), closed: Array(closed.prefix(1)), now: now)
+            case "fresh": sample = .init(now: now)
+            default: break
+            }
+            let m = FieldMeasures(roomy: browser.prefs.roomyTabs)
+            let wide: CGFloat = min(browser.prefs.roomyTabs ? 880 : 840, 1200 - 96)
+            let lift: CGFloat = max(60, 780 * 0.4 - 60)
+            let picture = ZStack {
+                SpaceHomeGround(browser: browser)
+                Text("Search or enter address")
+                    .font(.system(size: m.text)).foregroundStyle(Palette.muted)
+                    .frame(width: wide - m.side * 2, height: m.line, alignment: .leading)
+                    .padding(.horizontal, m.side).padding(.vertical, m.air)
+                    .background(Palette.ground, in: RoundedRectangle(cornerRadius: m.corner, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: m.corner, style: .continuous).strokeBorder(Palette.ink.opacity(0.1)))
+                    .overlay(alignment: .bottom) {
+                        SpaceHomeHeader(browser: browser, width: wide).fixedSize().offset(y: -(m.height + 24))
+                    }
+                    .overlay(alignment: .top) {
+                        SpaceHomeBelow(browser: browser, width: wide, sample: sample).fixedSize().offset(y: m.height + 24)
+                    }
+                    .padding(.bottom, lift)
+            }
+            .frame(width: 1200, height: 780)
+            let host = NSHostingView(rootView: picture)
+            host.frame = NSRect(x: 0, y: 0, width: 1200, height: 780)
+            let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.appearance = NSAppearance(named: request["dark"] as? Bool == true ? .darkAqua : .aqua)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if let picture = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: picture)
+                    try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                }
+                window.contentView = nil
+                answer(["saved": path])
+            }
+
         case "notices":
             // What rises from the window's foot (Notices.swift), every kind
             // drawn off screen over a busy grey page to a PNG at `path`; and

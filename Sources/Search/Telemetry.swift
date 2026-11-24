@@ -18,7 +18,16 @@ import Foundation
 enum Telemetry {
     nonisolated static let appID = Bundle.main.object(forInfoDictionaryKey: "SearchTelemetryApp") as? String ?? ""
     nonisolated static let namespace = Bundle.main.object(forInfoDictionaryKey: "SearchTelemetryNamespace") as? String ?? ""
-    nonisolated static let test = (Bundle.main.object(forInfoDictionaryKey: "SearchTelemetryTest") as? String) == "1"
+    /// A test once, a test for good on this Mac: a build that isn't a
+    /// release leaves a mark, and a release that finds it (the one the
+    /// updater put in its place, say) goes on sending as a test, so the
+    /// Mac it is built on is never counted as a user.
+    nonisolated static let test: Bool = {
+        let built = (Bundle.main.object(forInfoDictionaryKey: "SearchTelemetryTest") as? String) == "1"
+        if built { Store.settings.set(true, forKey: testKey) }
+        return built || Store.settings.bool(forKey: testKey)
+    }()
+    nonisolated private static let testKey = "telemetry.test"
 
     /// Whether this build counts at all, so Settings has a row for it.
     nonisolated static var configured: Bool { !appID.isEmpty }

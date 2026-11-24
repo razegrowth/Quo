@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 0.8.5 · 24 November 2026
+
+A new tab that shows you today.
+
+An empty tab has the time big at the top, the date under it, and the field wider and a bit higher. Under it, in cards: the sites you visit most, your next meeting today with a Join button (if you've shared your calendar for a pinned calendar's meetings), and the tabs you closed last, with how long ago. Cards with nothing to show stay out of the way, and a brand new space just says so, with Bring Your Things.
+
+A space's icon stays the window's own grey now, whatever colour the space is.
+
 ## 0.8.4 · 23 November 2026
 
 You can see when an agent is driving now.

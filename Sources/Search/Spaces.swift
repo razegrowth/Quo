@@ -779,15 +779,16 @@ struct SpaceDot: View {
 
     private var symbol: String { browser.makingSpace ? "plus" : browser.space.symbol }
     private var key: String { browser.makingSpace ? "new" : "\(browser.spaceID.uuidString)-\(browser.space.symbol)" }
-    /// The space's colour, if it has one; none while a new one is being made.
-    private var tint: Color? { browser.makingSpace ? nil : browser.space.tint }
 
     var body: some View {
         Button { SpaceMenu.show(for: browser) } label: {
             ZStack {
                 Image(systemName: shown?.symbol ?? symbol)
                     .font(.system(size: 12 * footDoor / 26, weight: .medium))
-                    .foregroundStyle(tint ?? (hovering ? Palette.ink : Palette.muted))
+                    // In ink whatever the space's colour: the page behind already
+                    // wears it, and a pink or green glyph on top was one
+                    // colour too many.
+                    .foregroundStyle(hovering ? Palette.ink : Palette.muted)
                     .id(shown?.key ?? key)
                     // The way the tabs go: sideways in the column; in the bar
                     // across the top, up for the next space, down going back.
@@ -798,10 +799,8 @@ struct SpaceDot: View {
             .frame(width: footDoor, height: footDoor)
             .clipped()
             .background(
-                // A coloured space's dot sits on a wash of its colour, enough
-                // to tell spaces apart at the edge of the eye.
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(tint.map { $0.opacity(hovering ? 0.24 : 0.14) } ?? (hovering ? Palette.hover : .clear))
+                    .fill(hovering ? Palette.hover : .clear)
             )
             .contentShape(Rectangle())
         }
@@ -878,12 +877,12 @@ struct SpaceRow: View {
                 } label: {
                     Image(systemName: space.symbol)
                         .font(.system(size: 12.5 * side / 26, weight: on ? .semibold : .medium))
-                        .foregroundStyle(on ? (space.tint ?? Palette.ink) : over ? Palette.ink.opacity(0.75) : Palette.muted.opacity(0.8))
+                        .foregroundStyle(on ? Palette.ink : over ? Palette.ink.opacity(0.75) : Palette.muted.opacity(0.8))
                         .frame(width: SpaceRow.slot(side), height: side)
                         .background {
                             if on {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill((space.tint ?? Palette.ink).opacity(space.tint == nil ? 0.08 : 0.16))
+                                    .fill(Palette.ink.opacity(0.08))
                                     .matchedGeometryEffect(id: "lit", in: lit)
                             } else if over {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.hover)

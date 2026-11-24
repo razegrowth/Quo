@@ -11,15 +11,26 @@ import UIKit
 /// address, a search or a tab. The user is a random UUID made here the first
 /// time, hashed before it leaves; TelemetryDeck hashes it again and never
 /// looks at the IP for these. Off in Settings, and the UUID goes with it. A
-/// debug build marks what it sends as a test, kept out of the real numbers.
+/// debug build, or one installed from TestFlight, marks what it sends as a
+/// test, kept out of the real numbers: only App Store installs count.
 enum Telemetry {
     static let appID = "AA491615-7111-480E-8F62-9CF27ED5EB91"
     static let namespace = "com.razegrowth"
-    #if DEBUG
-    static let test = true
-    #else
-    static let test = false
-    #endif
+    /// And once a test, a test for good on this iPhone: the App Store's
+    /// build, put over a TestFlight one, keeps its settings and goes on
+    /// sending as a test, so a tester's phone is never counted as a user.
+    static let test: Bool = {
+        #if DEBUG
+        let built = true
+        #else
+        // From TestFlight: its receipt is the sandbox's. (AppTransaction
+        // says the same, but only asynchronously, and this is read as a
+        // signal is made; the receipt's name is there at once.)
+        let built = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        #endif
+        if built { UserDefaults.standard.set(true, forKey: "telemetry.test") }
+        return built || UserDefaults.standard.bool(forKey: "telemetry.test")
+    }()
 
     static let key = "privacy.telemetry"
     private static let userKey = "telemetry.user"

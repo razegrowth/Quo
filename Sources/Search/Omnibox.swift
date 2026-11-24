@@ -129,6 +129,16 @@ struct Omnibox: View {
                     .transition(.asymmetric(insertion: .scale(scale: 0.98, anchor: .top).combined(with: .opacity), removal: .identity))
                     .animation(Motion.quick, value: listShown)
                     .animation(Motion.settle, value: refused)
+                } else if home {
+                    // The space's home takes more of the window than the
+                    // field alone would, its cards side by side, and sits
+                    // higher, so the time has the top and the cards the room
+                    // below.
+                    GeometryReader { room in
+                        alone(width: max(width, min(browser.prefs.roomyTabs ? 880 : 840, room.size.width - 96)),
+                              lift: max(60, room.size.height * 0.4 - 60))
+                            .frame(width: room.size.width, height: room.size.height)
+                    }
                 } else {
                     alone(width: width)
                 }
@@ -176,12 +186,11 @@ struct Omnibox: View {
     /// The field on an empty tab, alone in the middle with the space's home
     /// around it, its list a card of its own below.
     @ViewBuilder
-    private func alone(width: CGFloat) -> some View {
+    private func alone(width: CGFloat, lift: CGFloat = 60) -> some View {
                 field(alone: true)
                     .frame(width: width)
                 // On an empty tab, the space's home hangs from the field too:
-                // its icon and a greeting above, the sites you visit most and
-                // the tabs you closed below, until there's something typed
+                // the time and the space above, its cards below, until there's something typed
                 // for the list to take that room (SpaceHome.swift).
                 .overlay(alignment: .bottom) {
                     if home {
@@ -213,8 +222,8 @@ struct Omnibox: View {
                 }
                 // Lifted a little above centre: dead centre reads as low,
                 // because the strip at the top isn't part of what the eye is
-                // measuring.
-                .padding(.bottom, 60)
+                // measuring. With the home round it, higher still.
+                .padding(.bottom, lift)
                 // In from a hair smaller and fainter, gone at once (see `arrives`).
                 .transition(.asymmetric(insertion: .scale(scale: 0.98).combined(with: .opacity), removal: .identity))
                 // The list's arrival and its leaving are animated from here,
