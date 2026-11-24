@@ -61,6 +61,18 @@ struct SplitStage: View {
                             .offset(x: frame.minX, y: frame.minY)
                     }
                 }
+                // ⌘T and ⌘K with two or more up: over the whole stage, as
+                // over one page. Neither is about the page in front: ⌘T's
+                // page opens as a tab of its own, out of the split, and ⌘K
+                // goes to any tab. ⌘L stays over the page it will change.
+                if shown.count > 1, browser.fieldOverStage {
+                    let whole = shown.compactMap { frames[$0.id] }.reduce(CGRect.null) { $0.union($1) }
+                    if !whole.isNull {
+                        Omnibox(browser: browser, over: true, fitted: true)
+                            .frame(width: whole.width, height: whole.height)
+                            .offset(x: whole.minX, y: whole.minY)
+                    }
+                }
                 // Over a page it could split, before the hand is at an edge
                 // or has stopped: where letting go would split it. Gone once
                 // the split itself is shown.
@@ -165,7 +177,8 @@ private struct PaneLayers: View {
                     .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
             }
 
-            if focused {
+            // In a split, ⌘T's and ⌘K's field is the stage's (SplitStage).
+            if focused, !(paired && browser.fieldOverStage) {
                 Omnibox(browser: browser, over: !tab.isBlank, fitted: true, tab: tab.id, homed: !paired)
             }
 

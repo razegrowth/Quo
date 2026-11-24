@@ -103,6 +103,9 @@ struct GroupHeading: View {
 
     private var editing: Bool { browser.editingGroupID == group.id }
 
+    /// How far in a group inside another sits, each level down.
+    static let indent: CGFloat = 12
+
     /// Its height in the column, a little under a tab's; with Roomy's taller
     /// tabs, taller too, so a heading doesn't look squeezed between them.
     static func height(_ prefs: Preferences) -> CGFloat { prefs.roomyTabs ? 32 : 24 }
@@ -161,7 +164,7 @@ struct GroupHeading: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .onTapGesture { browser.toggleTabGroup(group.id) }
-        .modifier(GroupHeadingShared(browser: browser, group: group, dragSpace: dragSpace, dropping: $dropping))
+        .modifier(GroupHeadingShared(browser: browser, group: group, dragSpace: dragSpace, horizontal: horizontal, dropping: $dropping))
         .onHover { hovering = $0 }
         .help(group.collapsed ? "\(group.name) — folded" : group.name)
         .accessibilityLabel(group.name)
@@ -242,7 +245,7 @@ struct GroupHeading: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .onTapGesture { if !editing { browser.toggleTabGroup(group.id) } }
-        .modifier(GroupHeadingShared(browser: browser, group: group, dragSpace: dragSpace, dropping: $dropping))
+        .modifier(GroupHeadingShared(browser: browser, group: group, dragSpace: dragSpace, horizontal: horizontal, dropping: $dropping))
         .onHover { hovering = $0 }
         .onChange(of: editing) { _, now in
             if now {
@@ -275,7 +278,9 @@ private struct GroupHeadingShared: ViewModifier {
     @ObservedObject var browser: Browser
     let group: TabGroup
     let dragSpace: String?
+    var horizontal = false
     @Binding var dropping: Bool
+    @State private var size: CGSize = .zero
 
     func body(content: Content) -> some View {
         content
@@ -287,15 +292,24 @@ private struct GroupHeadingShared: ViewModifier {
                     }
                 }
             }
-            .onDrop(of: [.text], isTargeted: $dropping) { providers in
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size = $0 }
+            // A group let go on another's name goes inside it, as in Dia;
+            // on the leading edge of the name (its top in the column, its
+            // left in the strip), in front of it instead, at its level.
+            .onDrop(of: [.text], isTargeted: $dropping) { providers, location in
                 guard let provider = providers.first(where: { $0.canLoadObject(ofClass: String.self) }) else { return false }
+                let along = horizontal ? location.x / max(size.width, 1) : location.y / max(size.height, 1)
+                let before = along < 0.35
                 _ = provider.loadObject(ofClass: String.self) { value, _ in
                     guard let value else { return }
                     DispatchQueue.main.async {
-                        if value.hasPrefix("search-group:"),
-                           let id = UUID(uuidString: String(value.dropFirst("search-group:".count))),
-                           let index = browser.tabGroups.firstIndex(where: { $0.id == group.id }) {
-                            browser.moveTabGroup(id, to: index)
+                        guard value.hasPrefix("search-group:"),
+                              let id = UUID(uuidString: String(value.dropFirst("search-group:".count))),
+                              id != group.id else { return }
+                        // Already inside it: let go on its name, it stays.
+                        if !before, browser.tabGroups.group(id)?.parent == group.id { return }
+                        if before || !browser.nest(id, into: group.id) {
+                            browser.place(id, before: group.id)
                         }
                     }
                 }
@@ -305,6 +319,15 @@ private struct GroupHeadingShared: ViewModifier {
             .contextMenu {
                 Button("Rename Group") { browser.editingGroupID = group.id }
                 Button(group.collapsed ? "Expand Group" : "Collapse Group") { browser.toggleTabGroup(group.id) }
+                // Groups in groups, as in Dia: a new one inside this one,
+                // with an empty tab in it, and out again a level.
+                if group.agent == nil {
+                    Button("New Group Inside") { browser.newGroup(inside: group.id) }
+                        .disabled(!browser.canNest(into: group.id, height: 1))
+                }
+                if let parent = group.parent {
+                    Button("Move Out of Group") { browser.nest(group.id, into: browser.tabGroups.group(parent)?.parent) }
+                }
                 // The whole group into another space, still a group there: Arc's
                 // folders came in wherever Arc had them.
                 if browser.prefs.usesSpaces, browser.spaces.count > 1 {

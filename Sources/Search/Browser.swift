@@ -503,6 +503,10 @@ final class Browser: NSObject, ObservableObject {
         case switcher
     }
 
+    /// ⌘T's and ⌘K's field, which with a split up stands over the whole
+    /// stage rather than the page in front: neither is about that page.
+    var fieldOverStage: Bool { fieldMode == .newTab || fieldMode == .switcher }
+
     var fieldMode: FieldMode {
         if summoning { return .switcher }
         if launching { return .newTab }
@@ -3182,9 +3186,11 @@ final class Browser: NSObject, ObservableObject {
     /// space has them too, before an empty tab.
     func restoreSession() {
         let saved = twinned(readRow(spaceID), space: spaceID)
-        tabGroups = (saved.groups ?? []).filter { group in
-            saved.tabs.contains { $0.groupID == group.id }
-        }
+        let savedGroups = saved.groups ?? []
+        let held = Set(saved.tabs.compactMap(\.groupID))
+        tabGroups = savedGroups.filter { group in
+            savedGroups.subtree(of: group.id).contains(where: held.contains)
+        }.treeOrdered()
         let restored = restoreRow(saved, space: spaceID, groups: tabGroups)
         splits = restored.splits
         tabs += restored.tabs
@@ -4794,9 +4800,7 @@ final class Browser: NSObject, ObservableObject {
         }
         // A folded group opens for the tab you go to in it. With groups off,
         // they are kept as they were and nothing about them is saved.
-        if unfoldGroup, prefs.usesTabGroups, let id = tab.groupID,
-           let index = tabGroups.firstIndex(where: { $0.id == id }), tabGroups[index].collapsed {
-            tabGroups[index].collapsed = false
+        if unfoldGroup, prefs.usesTabGroups, let id = tab.groupID, unfold(id) {
             writeSession(now: true)
         }
         // A peek is over the tab it was opened from; another tab puts it
@@ -5317,10 +5321,8 @@ final class Browser: NSObject, ObservableObject {
     private func regroup(_ ghost: Ghost) -> (id: UUID?, back: Bool) {
         var back = false
         if prefs.usesTabGroups, let id = ghost.groupID, !tabGroups.contains(where: { $0.id == id }),
-           let closed = closedGroups.removeValue(forKey: id) {
-            var group = closed.group
-            group.collapsed = false
-            tabGroups.insert(group, at: min(closed.at, tabGroups.count))
+           closedGroups[id] != nil {
+            reopenGroup(id)
             back = true
         }
         let id = prefs.usesTabGroups && tabGroups.contains(where: { $0.id == ghost.groupID }) ? ghost.groupID : nil
@@ -5356,7 +5358,27 @@ final class Browser: NSObject, ObservableObject {
         if count > 12, let oldest = ghosts.first {
             if let batch = oldest.batch { ghosts.removeAll { $0.batch == batch } } else { ghosts.removeFirst() }
         }
-        closedGroups = closedGroups.filter { id, _ in ghosts.contains { $0.groupID == id } }
+        var needed = Set<UUID>()
+        for ghost in ghosts {
+            var at = ghost.groupID
+            while let id = at, !needed.contains(id) {
+                needed.insert(id)
+                at = closedGroups[id]?.group.parent
+            }
+        }
+        // And the groups inside one, whose tabs may still be on their way
+        // out: Close Group closes the outer group's tabs as well as theirs.
+        func inside(_ id: UUID) -> Bool {
+            var at = closedGroups[id]?.group.parent
+            var steps = 0
+            while let parent = at, steps < TabGroup.deepest {
+                if needed.contains(parent) { return true }
+                at = closedGroups[parent]?.group.parent
+                steps += 1
+            }
+            return false
+        }
+        closedGroups = closedGroups.filter { id, _ in needed.contains(id) || inside(id) }
     }
 
     /// Dragged from one place in the row to another.
@@ -5414,13 +5436,17 @@ final class Browser: NSObject, ObservableObject {
               let destination = spaces.first(where: { $0.id == target }),
               let group = tabGroups.first(where: { $0.id == id })
         else { return }
-        let members = tabs.filter { $0.groupID == id && $0.pin == nil && !$0.bench
+        // With the groups inside it, still inside it there.
+        let inside = Set(tabGroups.subtree(of: id))
+        let members = tabs.filter { ($0.groupID.map(inside.contains) ?? false) && $0.pin == nil && !$0.bench
             && $0.address.flatMap({ Browser.extensionHost(of: $0) }) == nil }
         guard !members.isEmpty else { return }
+        var carried = tabGroups.filter { inside.contains($0.id) }
+        if let top = carried.firstIndex(where: { $0.id == id }) { carried[top].parent = nil }
         let from = spaceID
         let complete: () -> Void = { [weak self] in
             guard let self, self.spaceID == from else { return }
-            self.finishGroupMove(group, members.filter { tab in self.tabs.contains { $0.id == tab.id } }, to: destination)
+            self.finishGroupMove(group, carried: carried, members.filter { tab in self.tabs.contains { $0.id == tab.id } }, to: destination)
         }
         let store = Spaces.store(for: target)
         guard members.contains(where: { !$0.shy && $0.store !== store }) else { return complete() }
@@ -5442,7 +5468,7 @@ final class Browser: NSObject, ObservableObject {
         }
     }
 
-    private func finishGroupMove(_ group: TabGroup, _ members: [Tab], to destination: Space) {
+    private func finishGroupMove(_ group: TabGroup, carried: [TabGroup], _ members: [Tab], to destination: Space) {
         guard !members.isEmpty else { return }
         // The tab on screen goes with the group: the one after the group
         // comes to the front instead, or the one before it, not each of the
@@ -5454,14 +5480,17 @@ final class Browser: NSObject, ObservableObject {
             let before = tabs[..<at].last { !ids.contains($0.id) && standsInRow($0) }
             if let next = after ?? before { select(next, floatPrevious: false) }
         }
-        for tab in members { finishMove(tab, toSpace: destination.id, group: group, quietly: true) }
+        for tab in members {
+            let own = carried.first { $0.id == tab.groupID } ?? group
+            finishMove(tab, toSpace: destination.id, group: own, carried: carried, quietly: true)
+        }
         writeSession(now: true)
         if let row = parked[destination.id] { writeSession(now: true, space: destination.id, row: row) }
         announce("Moved \(group.name) to \(destination.name)")
     }
 
     @discardableResult
-    private func finishMove(_ tab: Tab, toSpace id: UUID, group: TabGroup? = nil, quietly: Bool = false) -> Bool {
+    private func finishMove(_ tab: Tab, toSpace id: UUID, group: TabGroup? = nil, carried: [TabGroup] = [], quietly: Bool = false) -> Bool {
         guard prefs.usesSpaces, id != spaceID,
               let destination = spaces.first(where: { $0.id == id }),
               let index = tabs.firstIndex(where: { $0.id == tab.id })
@@ -5494,8 +5523,10 @@ final class Browser: NSObject, ObservableObject {
         var row = parked[id] ?? loadRow(id)
         if let group {
             var groups = row.groups ?? readRow(id).groups ?? []
-            if !groups.contains(where: { $0.id == group.id }) { groups.append(group) }
-            row.groups = groups
+            // The groups it's inside first, so it lands inside them there.
+            let chain = carried.isEmpty ? [group] : carried.filter { $0.id == group.id || carried.subtree(of: $0.id).contains(group.id) }
+            for each in chain where !groups.contains(where: { $0.id == each.id }) { groups.append(each) }
+            row.groups = groups.treeOrdered()
         }
         // A pin is that space's pin from now on, in pins.json too: kept only
         // in its row, the next look at the space's pins (another window's
@@ -5618,9 +5649,11 @@ final class Browser: NSObject, ObservableObject {
 
     /// A section can be made empty, then filled from a tab's menu.
     @discardableResult
-    func addTabGroup(containing tab: Tab) -> UUID {
+    func addTabGroup(containing tab: Tab, inside parent: UUID? = nil) -> UUID {
         let id = UUID()
-        tabGroups.append(TabGroup(id: id, name: "Group \(tabGroups.count + 1)", collapsed: false))
+        let parent = parent.flatMap { canNest(into: $0, height: 1) ? $0 : nil }
+        tabGroups.append(TabGroup(id: id, name: "Group \(tabGroups.count + 1)", collapsed: false, parent: parent))
+        if parent != nil { tabGroups = tabGroups.treeOrdered() }
         editingGroupID = id
         move(tab, toGroup: id)
         // A tab that can't be in a group (a pin, a private one) leaves none behind.
@@ -5772,9 +5805,12 @@ final class Browser: NSObject, ObservableObject {
     var canUnfoldAllGroups: Bool { prefs.usesTabGroups && tabGroups.contains { $0.collapsed } }
 
     func removeTabGroup(_ id: UUID) {
-        guard tabGroups.contains(where: { $0.id == id }) else { return }
-        for tab in tabs where tab.groupID == id { tab.groupID = nil }
+        guard let removed = tabGroups.group(id) else { return }
+        // What it held goes to the group it was in, or loose at the top.
+        for tab in tabs where tab.groupID == id { tab.groupID = removed.parent }
+        for index in tabGroups.indices where tabGroups[index].parent == id { tabGroups[index].parent = removed.parent }
         tabGroups.removeAll { $0.id == id }
+        tabGroups = tabGroups.treeOrdered()
         arrangeGroupedTabs()
         if editingGroupID == id { editingGroupID = nil }
         writeSession(now: true)
@@ -5785,15 +5821,114 @@ final class Browser: NSObject, ObservableObject {
     /// the group back whole (see closedGroups, reopen(batch:)). The page on screen goes last, as
     /// with Clear, so no neighbour wakes only to be closed.
     func closeTabGroup(_ id: UUID) {
-        guard let at = tabGroups.firstIndex(where: { $0.id == id }) else { return }
-        closedGroups[id] = (tabGroups[at], at)
-        let going = tabs.filter { $0.groupID == id }
+        guard let closing = tabGroups.group(id) else { return }
+        // The groups inside it go with it, and come back with it.
+        let inside = tabGroups.subtree(of: id)
+        for each in inside {
+            if let at = tabGroups.firstIndex(where: { $0.id == each }) { closedGroups[each] = (tabGroups[at], at) }
+        }
+        let going = tabs.filter { $0.groupID.map(inside.contains) ?? false }
         closingTogether(.group) { _ in
             for tab in going where !visibleTabIDs.contains(tab.id) { close(tab) }
             for tab in going where visibleTabIDs.contains(tab.id) { close(tab) }
         }
-        // The group goes with its last tab; an empty one goes here.
-        if tabGroups.contains(where: { $0.id == id }) { removeTabGroup(id) }
+        // The groups go with their last tabs; any left empty go here.
+        tabGroups.removeAll { inside.contains($0.id) }
+        if editingGroupID.map(inside.contains) == true { editingGroupID = nil }
+        removeEmptyGroup(closing.parent)
+        arrangeGroupedTabs()
+        writeSession(now: true)
+    }
+
+    /// A group Close Group took, back: inside the group it was in, which
+    /// comes back first if it went too, at its place, opened.
+    private func reopenGroup(_ id: UUID) {
+        guard let closed = closedGroups.removeValue(forKey: id) else { return }
+        var group = closed.group
+        group.collapsed = false
+        if let parent = group.parent, !tabGroups.contains(where: { $0.id == parent }) {
+            if closedGroups[parent] != nil { reopenGroup(parent) } else { group.parent = nil }
+        }
+        tabGroups.insert(group, at: min(closed.at, tabGroups.count))
+        tabGroups = tabGroups.treeOrdered()
+        unfold(id)
+    }
+
+    /// A group opened, and every group it is inside, so it can be seen.
+    /// Whether anything was folded.
+    @discardableResult
+    func unfold(_ id: UUID) -> Bool {
+        var changed = false
+        for each in [id] + tabGroups.ancestors(of: id) {
+            if let index = tabGroups.firstIndex(where: { $0.id == each }), tabGroups[index].collapsed {
+                tabGroups[index].collapsed = false
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /// Whether a group as many levels deep as `height` can go inside
+    /// `target`: Dia's eight levels at most, and never an agent's group.
+    func canNest(into target: UUID, height: Int) -> Bool {
+        guard prefs.usesTabGroups, let group = tabGroups.group(target), group.agent == nil else { return false }
+        return tabGroups.depth(of: target) + 1 + height <= TabGroup.deepest
+    }
+
+    /// A group put inside another (`into`), at the end of what's inside it;
+    /// or, with `into` nil, back at the top. Never into itself or a group
+    /// inside it, and never an agent's group.
+    @discardableResult
+    func nest(_ id: UUID, into target: UUID?) -> Bool {
+        guard prefs.usesTabGroups, let index = tabGroups.firstIndex(where: { $0.id == id }),
+              tabGroups[index].agent == nil, tabGroups[index].parent != target else { return false }
+        if let target {
+            guard !tabGroups.subtree(of: id).contains(target),
+                  canNest(into: target, height: tabGroups.height(of: id)) else { return false }
+        }
+        var moving = tabGroups[index]
+        moving.parent = target
+        tabGroups.remove(at: index)
+        // At the end of its new level: after everything already in there.
+        let last = target.flatMap { t in tabGroups.lastIndex { tabGroups.subtree(of: t).contains($0.id) } }
+        tabGroups.insert(moving, at: last.map { $0 + 1 } ?? tabGroups.count)
+        tabGroups = tabGroups.treeOrdered()
+        if let target { unfold(target) }
+        arrangeGroupedTabs()
+        writeSession(now: true)
+        return true
+    }
+
+    /// A group let go on another's place: beside it, at its level, in front.
+    func place(_ id: UUID, before other: UUID) {
+        guard prefs.usesTabGroups, id != other, let index = tabGroups.firstIndex(where: { $0.id == id }),
+              let target = tabGroups.group(other), !tabGroups.subtree(of: id).contains(other) else { return }
+        if let parent = target.parent, !canNest(into: parent, height: tabGroups.height(of: id)) { return }
+        var moving = tabGroups[index]
+        moving.parent = target.parent
+        tabGroups.remove(at: index)
+        let at = tabGroups.firstIndex { $0.id == other } ?? tabGroups.count
+        tabGroups.insert(moving, at: at)
+        tabGroups = tabGroups.treeOrdered()
+        arrangeGroupedTabs()
+        writeSession(now: true)
+    }
+
+    /// New Group, in a group's menu: an empty tab in a group of its own
+    /// inside it, named Group n, the name up to be typed, as Dia does.
+    func newGroup(inside parent: UUID) {
+        guard canNest(into: parent, height: 1) else { return }
+        let tab = Tab(configuration: Web.configuration(space: spaceID))
+        prepare(tab)
+        tabs.append(tab)
+        let id = UUID()
+        tabGroups.append(TabGroup(id: id, name: "Group \(tabGroups.count + 1)", collapsed: false, parent: parent))
+        tabGroups = tabGroups.treeOrdered()
+        tab.groupID = id
+        unfold(id)
+        arrangeGroupedTabs()
+        select(tab)
+        editingGroupID = id
         writeSession(now: true)
     }
 
@@ -5810,9 +5945,7 @@ final class Browser: NSObject, ObservableObject {
         for partner in partners { partner.groupID = id }
         removeEmptyGroup(previousGroup)
         arrangeGroupedTabs()
-        if let id, let index = tabGroups.firstIndex(where: { $0.id == id }) {
-            tabGroups[index].collapsed = false
-        }
+        if let id { unfold(id) }
         writeSession(now: true)
         if let id { nameGroupSoon(id) }
         if let previousGroup { nameGroupSoon(previousGroup) }
@@ -5850,6 +5983,7 @@ final class Browser: NSObject, ObservableObject {
         for member in moving { member.groupID = target.group }
         row.insert(contentsOf: moving, at: insertion)
         tabGroups[groupIndex].collapsed = false
+        unfold(target.group)
         tabs = row
         for id in previous where id != target.group { removeEmptyGroup(id) }
         writeSession(now: true)
@@ -5891,7 +6025,16 @@ final class Browser: NSObject, ObservableObject {
     func moveTabGroup(_ id: UUID, to index: Int) {
         guard let from = tabGroups.firstIndex(where: { $0.id == id }),
               tabGroups.indices.contains(index), from != index else { return }
-        tabGroups.move(fromOffsets: IndexSet(integer: from), toOffset: index > from ? index + 1 : index)
+        let target = tabGroups[index]
+        guard !tabGroups.subtree(of: id).contains(target.id) else { return }
+        if index < from { return place(id, before: target.id) }
+        // Moving down: after the target and what's inside it, at its level.
+        var moving = tabGroups[from]
+        moving.parent = target.parent
+        tabGroups.remove(at: from)
+        let end = tabGroups.lastIndex { tabGroups.subtree(of: target.id).contains($0.id) } ?? (tabGroups.count - 1)
+        tabGroups.insert(moving, at: end + 1)
+        tabGroups = tabGroups.treeOrdered()
         arrangeGroupedTabs()
         writeSession(now: true)
     }
@@ -5902,6 +6045,8 @@ final class Browser: NSObject, ObservableObject {
     /// Nothing while groups are off: the row stays as you left it.
     private func arrangeGroupedTabs(_ on: Bool? = nil) {
         guard on ?? prefs.usesTabGroups else { return }
+        let ordered = tabGroups.treeOrdered()
+        if ordered != tabGroups { tabGroups = ordered }
         let representatives = displayedTabs
         let pins = representatives.filter { $0.pin != nil }
         let buckets = grouping(representatives)
@@ -5924,6 +6069,10 @@ final class Browser: NSObject, ObservableObject {
         guard tab.pin == nil, let id = tab.groupID, tabGroups.contains(where: { $0.id == id }) else { return nil }
         return id
     }
+
+    /// The groups drawn, in the order drawn, each with how deep it is:
+    /// the ones folded away inside a folded group left out.
+    var shownGroups: [(group: TabGroup, depth: Int)] { tabGroups.shown() }
 
     func tabs(in group: UUID?) -> [Tab] {
         grouping(tabs)[group] ?? []
@@ -5948,15 +6097,27 @@ final class Browser: NSObject, ObservableObject {
     }
 
     private func visible(_ group: TabGroup, among members: [Tab], off: Set<Tab.ID>) -> [Tab] {
+        // Inside a folded group: nothing of it drawn.
+        if group.parent != nil, tabGroups.hiddenByFold(group.id) { return [] }
         let shown = members.filter { !off.contains($0.id) }
-        return group.collapsed ? shown.filter { $0.id == (activeSplit?.left ?? activeID) } : shown
+        guard group.collapsed else { return shown }
+        // Folded, it still shows the tab in front, from a group inside it too.
+        let front = activeSplit?.left ?? activeID
+        if let own = shown.first(where: { $0.id == front }) { return [own] }
+        guard let front, !off.contains(front), let tab = tabs.first(where: { $0.id == front }),
+              let inner = self.group(of: tab), inner != group.id,
+              tabGroups.subtree(of: group.id).contains(inner) else { return [] }
+        return [tab]
     }
 
     /// A group lasts as long as its tabs: the last one gone, it goes too.
     private func removeEmptyGroup(_ id: UUID?) {
-        guard let id, !tabs.contains(where: { $0.groupID == id }) else { return }
+        guard let id, !tabs.contains(where: { $0.groupID == id }),
+              !tabGroups.contains(where: { $0.parent == id }) else { return }
+        let parent = tabGroups.group(id)?.parent
         tabGroups.removeAll { $0.id == id }
         if editingGroupID == id { editingGroupID = nil }
+        removeEmptyGroup(parent)
     }
 
     /// The tabs as they are on screen: with groups on, the ones folded away
@@ -5986,11 +6147,14 @@ final class Browser: NSObject, ObservableObject {
         // passed over like those tabs when none of its tabs does (#1186).
         let here = activeID
         let groups = tabGroups.flatMap { group -> [(id: UUID, tab: Tab)] in
-            let members = (buckets[group.id] ?? []).filter { !off.contains($0.id) }
+            if group.parent != nil, tabGroups.hiddenByFold(group.id) { return [] }
             guard group.collapsed else {
+                let members = (buckets[group.id] ?? []).filter { !off.contains($0.id) }
                 return members.filter { !$0.asleep || $0.id == here }.map { ($0.id, $0) }
             }
-            let current = active.flatMap { self.group(of: $0) == group.id ? $0 : nil }
+            let inside = Set(tabGroups.subtree(of: group.id))
+            let members = inside.flatMap { buckets[$0] ?? [] }.filter { !off.contains($0.id) }
+            let current = active.flatMap { self.group(of: $0).map(inside.contains) == true ? $0 : nil }
             guard current != nil || members.contains(where: { !$0.asleep }),
                   let tab = current ?? members.max(by: { $0.touched < $1.touched }) else { return [] }
             return [(group.id, tab)]
@@ -8602,9 +8766,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             // of the group.
             if prefs.usesTabGroups, !tab.shy, !tab.bench, destination === self, let group = group(of: opener) {
                 tab.groupID = group
-                if let index = tabGroups.firstIndex(where: { $0.id == group }), tabGroups[index].collapsed {
-                    tabGroups[index].collapsed = false
-                }
+                unfold(group)
             }
             destination.tabs.insert(tab, at: destination.placeForFront())
             if clicked, let run = destination.linkRun { destination.runBeforeScript = (tab.id, run) }

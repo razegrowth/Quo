@@ -117,8 +117,11 @@ extension AgentControl {
                 "front": browser === Browsers.front,
                 "tabs": shown.map { AgentFull.describe($0, in: browser, session, control: self) },
                 "groups": browser.tabGroups.map { group -> [String: Any] in
-                    ["group": AgentFull.short(group.id), "name": group.name, "folded": group.collapsed,
-                     "tabs": browser.tabs(in: group.id).filter { !$0.shy }.map { session.handle(for: $0) }]
+                    var row: [String: Any] = ["group": AgentFull.short(group.id), "name": group.name, "folded": group.collapsed,
+                                              "tabs": browser.tabs(in: group.id).filter { !$0.shy }.map { session.handle(for: $0) }]
+                    // A group inside another: which one.
+                    if let parent = group.parent { row["inside"] = AgentFull.short(parent) }
+                    return row
                 },
             ]
             if browser.prefs.usesSpaces {

@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// A split's one place in the row. In the column its pages are lines, one
-/// under the other — two, three or four — joined by hairlines: halves side
-/// by side in 232 points would cut most titles to a dozen letters. Across the top they sit side by
-/// side, with a single cross at the end for the half under the pointer — two
-/// crosses next to each other are two chances to close the wrong page.
+/// A split's one place in the row: its pages side by side, two, three or
+/// four, as Arc had them, in the column as across the top. In the column
+/// each half has its own cross at its end under the pointer, and three or
+/// four show their marks alone; across the top there is a single cross at
+/// the end for the half under the pointer — two crosses next to each other
+/// in a tab's height are two chances to close the wrong page.
 ///
 /// The page the keys go to wears the live grey, the same one that glides
 /// from tab to tab, so it glides from one half to the other too.
@@ -42,45 +43,25 @@ struct SplitTabItem: View {
 
     var body: some View {
         Group {
-            if stacked {
-                VStack(spacing: 0) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        half(at: index)
+            HStack(spacing: 0) {
+                ForEach(pages.indices, id: \.self) { index in
+                    if index > 0 {
+                        // A line between each two, gone while either is lit.
+                        Rectangle()
+                            .fill(Palette.hairline)
+                            .frame(width: 1)
+                            .padding(.vertical, inset + 6)
+                            .opacity(stacked && (lit(pages[index - 1]) || lit(pages[index])) ? 0 : 1)
                     }
+                    half(at: index)
                 }
-                .overlay(alignment: .top) {
-                    // A line between each two, gone while either is lit.
-                    ZStack(alignment: .top) {
-                        ForEach(1..<max(1, pages.count), id: \.self) { index in
-                            Rectangle()
-                                .fill(Palette.hairline)
-                                .frame(height: 1)
-                                .padding(.horizontal, 10)
-                                .offset(y: CGFloat(index) * height - 0.5)
-                                .opacity(lit(pages[index - 1]) || lit(pages[index]) ? 0 : 1)
-                        }
-                    }
-                    .allowsHitTesting(false)
-                }
-            } else {
-                HStack(spacing: 0) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Palette.hairline)
-                                .frame(width: 1)
-                                .padding(.vertical, inset + 6)
-                        }
-                        half(at: index)
-                    }
-                }
-                .frame(width: width, height: height)
-                .overlay(alignment: .trailing) { cross }
-                // The pointer over the cross is over the cross, not over
-                // either half, so a half losing it can't take the cross away
-                // under it: only leaving the whole item clears the half.
-                .onHover { if !$0 { hovered = nil } }
             }
+            .frame(width: width, height: height)
+            .overlay(alignment: .trailing) { if !stacked { cross } }
+            // The pointer over the cross is over the cross, not over
+            // either half, so a half losing it can't take the cross away
+            // under it: only leaving the whole item clears the half.
+            .onHover { if !$0 { hovered = nil } }
         }
         .background {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -120,12 +101,13 @@ struct SplitTabItem: View {
             joinedBefore: index > 0 && lit(pages[index - 1]),
             joinedAfter: index < pages.count - 1 && lit(pages[index + 1]),
             height: height,
-            narrow: width.map { ($0 - (count - 1)) / count < 64 } ?? false,
+            // In the column, three or four to a row leave room for marks.
+            narrow: width.map { ($0 - (count - 1)) / count < 64 } ?? (pages.count >= 3),
             interactive: interactive,
             pill: pill,
             hovered: $hovered
         )
-        .frame(maxWidth: .infinity, maxHeight: stacked ? height : .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(staying(tab) ? 0.35 : 1)
         .animation(Motion.quick, value: separation.leaving)
     }
@@ -245,7 +227,7 @@ private struct SplitTabHalf: View {
             }
             .background {
                 if interactive && browser.prefs.splitView {
-                    SplitDropZone(browser: browser, tab: tab, kind: .strip)
+                    SplitDropZone(browser: browser, tab: tab, kind: stacked ? .row : .strip)
                 }
             }
     }
@@ -269,9 +251,7 @@ private struct SplitTabHalf: View {
         // beside one that isn't.
         let before: CGFloat = !first && joinedBefore ? 0 : round
         let after: CGFloat = !last && joinedAfter ? 0 : round
-        let radii: RectangleCornerRadii = stacked
-            ? .init(topLeading: before, bottomLeading: after, bottomTrailing: after, topTrailing: before)
-            : .init(topLeading: before, bottomLeading: before, bottomTrailing: after, topTrailing: after)
+        let radii = RectangleCornerRadii(topLeading: before, bottomLeading: before, bottomTrailing: after, topTrailing: after)
         return UnevenRoundedRectangle(cornerRadii: radii, style: .continuous)
     }
 
@@ -377,5 +357,62 @@ private struct SplitTabHalf: View {
                 CloseClick(armed: hovering) { browser.closeTab(tab) }
                     .frame(width: 26, height: height)
             }
+    }
+}
+
+/// A row about to be split by a tab let go on its right half: drawn as the
+/// split it would be, its own page on the left and the carried one on the
+/// right, while the hand rests there (TabDrag, RowSplit). The row itself
+/// stays where it is underneath, for the drop to find.
+struct RowSplitPreview: ViewModifier {
+    @ObservedObject private var split = RowSplit.shared
+    @Environment(\.greys) private var greys
+    let browser: Browser
+    let tab: Tab
+    let height: CGFloat
+    let size: CGFloat
+
+    private var source: Tab? {
+        guard split.target == tab.id, let id = split.source else { return nil }
+        return browser.tabs.first { $0.id == id }
+    }
+
+    func body(content: Content) -> some View {
+        let source = self.source
+        return content
+            .opacity(source == nil ? 1 : 0)
+            .overlay {
+                if let source {
+                    HStack(spacing: 0) {
+                        page(tab, lit: false)
+                        Rectangle().fill(Palette.hairline).frame(width: 1).padding(.vertical, 6)
+                        page(source, lit: true)
+                    }
+                    .frame(height: height)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(greys.tile))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 1))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+            }
+            .animation(Motion.quick, value: source?.id)
+    }
+
+    private func page(_ tab: Tab, lit: Bool) -> some View {
+        HStack(spacing: 8) {
+            Mark(icon: browser.prefs.glyph == .icons ? tab.icon : nil, letter: tab.monogram, size: 15, dim: false)
+                .frame(width: 15, height: 15)
+            Text(tab.rowLabel.isEmpty ? "New Tab" : tab.rowLabel)
+                .font(.system(size: size))
+                .foregroundStyle(lit ? Palette.ink : Palette.muted)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background {
+            if lit {
+                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(greys.washOnTile)
+            }
+        }
     }
 }

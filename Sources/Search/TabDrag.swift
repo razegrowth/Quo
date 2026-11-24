@@ -4,7 +4,9 @@ import SwiftUI
 /// A tab's existing drag gesture asks these passive markers what is under the
 /// pointer. They never receive a mouse event or create a second drag session.
 struct SplitDropZone: NSViewRepresentable {
-    enum Kind: Equatable { case stage, strip }
+    /// `row`: a tab's row in the column, whose right half splits it with a
+    /// tab let go there, as Arc's did; otherwise as `strip`.
+    enum Kind: Equatable { case stage, strip, row }
 
     let browser: Browser
     let tab: Tab?
@@ -52,6 +54,17 @@ final class PairSeparation: ObservableObject {
     private init() {}
 }
 
+/// The row a carried tab would split, once the hand rests on its right
+/// half: that row shows the split before it is made, the carried tab in
+/// its right half. Apart from TabDrag, so only the rows redraw for it.
+@MainActor
+final class RowSplit: ObservableObject {
+    static let shared = RowSplit()
+    @Published fileprivate(set) var target: Tab.ID?
+    @Published fileprivate(set) var source: Tab.ID?
+    private init() {}
+}
+
 /// Only the Stage observes `preview`; the browser's tab row stays still while
 /// the pointer moves across a page. A marker is weakly kept and checked in
 /// the source window before it can become a target.
@@ -72,6 +85,8 @@ final class TabDrag: ObservableObject {
     enum Drop {
         case stage(Tab, onLeft: Bool)
         case strip(Tab?)
+        /// Let go on the right half of `Tab`'s row: the two side by side.
+        case row(Tab)
         case outside
         case cancelled
     }
@@ -138,6 +153,15 @@ final class TabDrag: ObservableObject {
 
     private init() {}
 
+    /// Where a tab's row is in the column, in screen points, as the drop
+    /// reads it. Test runs only (Bench `rowsplit`).
+    func rowFrame(browser: Browser, tab: Tab) -> NSRect? {
+        guard Store.testing, let window = browser.window else { return nil }
+        markers = markers.filter { $0.value.view != nil }
+        return markers.values.compactMap(\.view).first { $0.kind == .row && $0.tab === tab && $0.window === window }
+            .map { window.convertToScreen($0.convert($0.bounds, to: nil)) }
+    }
+
     func register(_ view: SplitDropZone.Marker) {
         markers[ObjectIdentifier(view)] = WeakMarker(view)
     }
@@ -173,6 +197,26 @@ final class TabDrag: ObservableObject {
         if over != now { over = now }
         let matched = match(browser: browser, source: sourceTab, at: point)
         target = matched
+        if case .row(let row) = matched {
+            if preview != nil { preview = nil }
+            if separation != nil { showSeparation(nil) }
+            if RowSplit.shared.target == row.id { return true }
+            guard settled(at: point) else {
+                showRow(nil)
+                recheck?.cancel()
+                let work = DispatchWorkItem { [weak self, weak browser] in
+                    guard let self, let browser, self.sourceBrowser === browser else { return }
+                    self.look(browser: browser, at: self.pointer(in: browser))
+                }
+                recheck = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + TabDrag.still, execute: work)
+                return true
+            }
+            showRow((row.id, sourceTab.id))
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            return true
+        }
+        showRow(nil)
         if case .strip(let place) = matched {
             if preview != nil { preview = nil }
             separate(sourceTab, before: place, browser: browser, at: point)
@@ -229,6 +273,11 @@ final class TabDrag: ObservableObject {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
+    private func showRow(_ shown: (target: Tab.ID, source: Tab.ID)?) {
+        if RowSplit.shared.target != shown?.target { RowSplit.shared.target = shown?.target }
+        if RowSplit.shared.source != shown?.source { RowSplit.shared.source = shown?.source }
+    }
+
     private func showSeparation(_ shown: (leaving: Tab.ID, before: Tab.ID?)?) {
         separation = shown
         if PairSeparation.shared.leaving != shown?.leaving { PairSeparation.shared.leaving = shown?.leaving }
@@ -254,6 +303,10 @@ final class TabDrag: ObservableObject {
             // A split only where one was shown.
             if case .stage(let page, let onLeft) = result,
                preview != Preview(browserID: ObjectIdentifier(browser), targetID: page.id, side: onLeft ? .left : .right, sourceID: sourceTab?.id) {
+                result = .outside
+            }
+            // Side by side in a row only where that was shown.
+            if case .row(let row) = result, RowSplit.shared.target != row.id {
                 result = .outside
             }
             // A pair apart only where that was shown.
@@ -336,6 +389,7 @@ final class TabDrag: ObservableObject {
         preview = nil
         over = nil
         showSeparation(nil)
+        showRow(nil)
         target = .cancelled
         removeMonitor()
     }
@@ -364,6 +418,7 @@ final class TabDrag: ObservableObject {
         preview = nil
         over = nil
         showSeparation(nil)
+        showRow(nil)
         sourceBrowser = nil
         gestureTab = nil
         sourceTab = nil
@@ -409,17 +464,35 @@ final class TabDrag: ObservableObject {
             if point.x <= frame.minX + left { return .stage(page, onLeft: true) }
             if point.x >= frame.maxX - right { return .stage(page, onLeft: false) }
         }
-        guard browser.split(for: source) != nil else { return .outside }
         let pair = browser.split(for: source)
+        // A row's right half, in the column: the two side by side, as in
+        // Arc. Not a pin either way, nor a row of its own pair.
+        if source.pin == nil, let row = candidates.first(where: { view in
+            view.kind == .row && view.tab.map { other in
+                other.id != source.id && other.pin == nil && pair?.contains(other.id) != true
+                    && browser.canJoin(source, beside: other)
+            } == true
+        }), let page = row.tab {
+            let frame = window.convertToScreen(row.convert(row.bounds, to: nil))
+            // The row of a split: its whole line, not the half it's on.
+            let line = browser.split(for: page).flatMap { split in
+                candidates.filter { $0.kind == .row && $0.tab.map { split.contains($0.id) } == true }
+                    .map { window.convertToScreen($0.convert($0.bounds, to: nil)) }
+                    .reduce(CGRect.null) { $0.union($1) }
+            } ?? frame
+            let shown = RowSplit.shared.target == page.id
+            if point.x >= line.midX - (shown ? TabDrag.slack : 0) { return .row(page) }
+        }
+        guard pair != nil else { return .outside }
         if let stripTab = candidates.first(where: { view in
-            view.kind == .strip && view.tab.map { pair?.contains($0.id) == false } == true
+            view.kind != .stage && view.tab.map { pair?.contains($0.id) == false } == true
         }), let page = stripTab.tab {
             return .strip(page)
         }
         if candidates.contains(where: { view in
-            view.kind == .strip && view.tab.map { pair?.contains($0.id) == true } == true
+            view.kind != .stage && view.tab.map { pair?.contains($0.id) == true } == true
         }) { return .outside }
-        if candidates.contains(where: { $0.kind == .strip && $0.tab == nil }) { return .strip(nil) }
+        if candidates.contains(where: { $0.kind != .stage && $0.tab == nil }) { return .strip(nil) }
         return .outside
     }
 
@@ -427,7 +500,7 @@ final class TabDrag: ObservableObject {
         guard let pair = browser.split(for: gesture), let window = browser.window else { return gesture }
         markers = markers.filter { $0.value.view != nil }
         return markers.values.compactMap(\.view).first { view in
-            view.kind == .strip && view.browser === browser && view.window === window
+            view.kind != .stage && view.browser === browser && view.window === window
                 && view.tab.map({ pair.contains($0.id) }) == true
                 && window.convertToScreen(view.convert(view.bounds, to: nil)).contains(point)
         }?.tab ?? gesture

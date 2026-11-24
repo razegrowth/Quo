@@ -2,6 +2,18 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.0 · 24 November 2026
+
+Quo 1.0. Groups inside groups, and splitting tabs by dragging one onto another.
+
+Quo's out of beta. It started as Search with an address bar above the page, and four days of releases later it's its own browser: spaces, pins and folders, ⌘T for everything, a new tab that shows you today, Chrome extensions, iCloud sync with an iPhone app, Netflix, and agents that can drive it while you watch. All of it free, and about a 9 MB download.
+
+New in 1.0, tab groups can hold groups of their own, up to eight deep, like Dia just added. Drag a group onto another one's name, or right-click a group and choose New Group Inside. Folding, closing and ⇧⌘T all take the whole thing with them.
+
+Drag a tab onto the right half of another tab's row and the two open side by side, like Arc. A split is one row in the sidebar now, left and right, instead of stacked. And in a split, ⌘T and ⌘K come up across both pages, since they're not about the one in front.
+
+The tab's right-click menu is in five short sections now, so you can actually find things in it.
+
 ## 0.8.7 · 24 November 2026
 
 Apple Intelligence is yours to turn on, and no more dark box on your desktop.

@@ -75,6 +75,8 @@ final class Bench {
     /// since a row built anew can appear before the one it replaces has
     /// gone: the last to appear answers, until the last one goes.
     static var hoverRows: [Tab.ID: (Bool) -> Void] = [:]
+    /// Whether the last nest a probe asked for took.
+    static var lastNest = false
     private static var hoverRowsShown: [Tab.ID: Int] = [:]
     static func rowAppeared(_ id: Tab.ID, hover: @escaping (Bool) -> Void) {
         guard counting else { return }
@@ -3442,6 +3444,44 @@ final class Bench {
             browser.move(tab, to: to)
             answer(["at": browser.tabs.firstIndex { $0.id == tab.id } ?? -1])
 
+        case "rowsplit":
+            // A tab carried onto another's row in the column (TabDrag), with
+            // the hand put at `at` of the way across that row (0 its left,
+            // 1 its right): what the drop would be, the row's split shown or
+            // not, and with `drop`, let go there as a drag lets go. Test runs.
+            guard Store.testing,
+                  let sourceID = request["source"] as? String, let targetID = request["target"] as? String,
+                  let source = browser.tabs.first(where: { Bench.short($0) == sourceID }),
+                  let target = browser.tabs.first(where: { Bench.short($0) == targetID }) else {
+                answer(["error": "rowsplit source ID target ID, on a --test run"]); return
+            }
+            guard let frame = TabDrag.shared.rowFrame(browser: browser, tab: target) else {
+                answer(["error": "no row for “\(targetID)” in the column"]); return
+            }
+            let at = request["at"] as? Double ?? 0.75
+            TabDrag.testPointer = NSPoint(x: frame.minX + frame.width * at, y: frame.midY)
+            let showing = TabDrag.shared.update(browser: browser, tab: source, translation: .zero)
+            let shown = RowSplit.shared.target.map { id in browser.tabs.first { $0.id == id }.map(Bench.short) ?? "" } ?? ""
+            var out: [String: Any] = ["showing": showing, "shown": shown, "row": [frame.minX, frame.minY, frame.width, frame.height]]
+            // "hold": the hand stays there, the split shown, for a picture;
+            // the next rowsplit lets go.
+            if request["hold"] as? Bool == true { answer(out); return }
+            let finished = TabDrag.shared.finish(browser: browser, tab: source)
+            switch finished.drop {
+            case .row(let page):
+                out["drop"] = "row:" + Bench.short(page)
+                if request["drop"] as? Bool == true { browser.pair(finished.source, with: page, onLeft: false) }
+            case .stage: out["drop"] = "stage"
+            case .strip: out["drop"] = "strip"
+            case .outside: out["drop"] = "outside"
+            case .cancelled: out["drop"] = "cancelled"
+            }
+            TabDrag.testPointer = nil
+            out["splits"] = browser.splits.map { $0.tabs.compactMap { id in browser.tabs.first { $0.id == id }.map(Bench.short) } }
+            out["groupIDs"] = browser.tabs.map { $0.groupID?.uuidString ?? "" }
+            out["order"] = browser.tabs.map(Bench.short)
+            answer(out)
+
         case "group":
             // Tab groups, as their menus make and change them (TabGroups.swift):
             // a tab into a new group or an existing one, or out; a group
@@ -3458,7 +3498,10 @@ final class Bench {
             if let id = request["id"] as? String {
                 guard let tab = browser.tabs.first(where: { Bench.short($0) == id }) else { answer(["error": "no tab “\(id)” — see tabs"]); return }
                 if request["new"] as? Bool == true {
-                    let made = browser.addTabGroup(containing: tab)
+                    // "inside": a group by name to make it inside, as New
+                    // Group Inside from a tab's Move to Group.
+                    let inside = (request["inside"] as? String).flatMap { name in browser.tabGroups.first { $0.name == name }?.id }
+                    let made = browser.addTabGroup(containing: tab, inside: inside)
                     if !named.isEmpty { browser.renameTabGroup(made, to: named) }
                     browser.editingGroupID = nil
                 } else if named == "none" {
@@ -3468,6 +3511,25 @@ final class Bench {
                 } else {
                     answer(["error": "no group “\(named)”"]); return
                 }
+            } else if let into = request["nest"] as? String {
+                // Groups in groups: let go on another's name ("top" for out
+                // to the top), as a drag does; "nested" says whether it took.
+                guard let group else { answer(["error": "no group “\(named)”"]); return }
+                let target = into == "top" ? nil : browser.tabGroups.first { $0.name == into }?.id
+                if into != "top", target == nil { answer(["error": "no group “\(into)”"]); return }
+                Bench.lastNest = browser.nest(group.id, into: target)
+            } else if let before = request["before"] as? String {
+                guard let group, let other = browser.tabGroups.first(where: { $0.name == before }) else {
+                    answer(["error": "no group “\(named)” or “\(before)”"]); return
+                }
+                browser.place(group.id, before: other.id)
+            } else if request["newInside"] as? Bool == true {
+                guard let group else { answer(["error": "no group “\(named)”"]); return }
+                browser.newGroup(inside: group.id)
+                browser.editingGroupID = nil
+            } else if request["ungroup"] as? Bool == true {
+                guard let group else { answer(["error": "no group “\(named)”"]); return }
+                browser.removeTabGroup(group.id)
             } else if request["fold"] as? Bool == true {
                 guard let group else { answer(["error": "no group “\(named)”"]); return }
                 browser.toggleTabGroup(group.id)
@@ -3512,9 +3574,14 @@ final class Bench {
             answer(["viewItems": items(view), "spaceItems": items(SpaceMenu.menu(for: browser)), "brackets": brackets,
                     "on": browser.prefs.usesTabGroups, "groups": browser.tabGroups.map { group in
                 ["id": String(group.id.uuidString.prefix(8)).lowercased(), "name": group.name, "collapsed": group.collapsed,
+                 "parent": browser.tabGroups.group(group.parent)?.name ?? NSNull(),
+                 "depth": browser.tabGroups.depth(of: group.id),
+                 "drawn": browser.shownGroups.contains { $0.group.id == group.id },
+                 "visible": browser.visibleTabs(in: group).map(Bench.short),
                  "tabs": browser.tabs(in: group.id).map(Bench.short), "agent": group.agent ?? NSNull(),
                  "working": browser.tabs(in: group.id).contains { AgentActivity.shared.working.contains($0.id) }] as [String: Any]
-            }])
+            }, "nested": Bench.lastNest, "row": browser.tabs.map(Bench.short), "shown": browser.shownTabs.map(Bench.short),
+               "active": browser.activeID.map { id in browser.tabs.first { $0.id == id }.map(Bench.short) ?? "" } ?? ""])
 
         case "tospace":
             // Move to Space from a tab's menu, to the Nth space. Test runs only.

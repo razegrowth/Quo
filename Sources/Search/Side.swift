@@ -543,9 +543,11 @@ struct SideBar: View {
                 // Its groups, folded as they were left (see Parked.drawn).
                 ForEach(groups) { drawn in
                     GroupHeading(browser: browser, group: drawn.group, compact: icons)
+                        .padding(.leading, icons ? 0 : CGFloat(drawn.depth) * GroupHeading.indent)
                     ForEach(drawn.tabs) { tab in
                         rowItem(tab, tabs: row.tabs, splits: row.splits, activeID: row.active,
                                 interactive: false, pill: pill, close: {})
+                            .padding(.leading, icons ? 0 : 14 + CGFloat(drawn.depth) * GroupHeading.indent)
                     }
                 }
                 // Under the groups, as on screen.
@@ -580,13 +582,14 @@ struct SideBar: View {
         let ungrouped = displayed.filter { $0.pin == nil && (!prefs.usesTabGroups || browser.group(of: $0) == nil) }.count
         let listBlock = listedHeight(listed)
             + (showsLine(kept: keptCount, listed: listed, loose: ungrouped) ? KeepLine.height + SideBar.gap : 0)
-        let grouped = prefs.usesTabGroups ? browser.tabGroups.map { browser.visibleTabs(in: $0) } : []
+        let grouped = prefs.usesTabGroups ? browser.shownGroups.map { browser.visibleTabs(in: $0.group) } : []
         let rows = prefs.usesTabGroups
             ? displayed.filter { $0.pin == nil && browser.group(of: $0) == nil } + grouped.flatMap { $0 }
             : displayed.filter { $0.pin == nil }
         // A split is a line for each page (see SplitTabItem): the lines
         // past the first.
-        let pairs = rows.reduce(0) { $0 + max(0, (browser.split(for: $1)?.tabs.count ?? 1) - 1) }
+        // A split is one line, its pages side by side (SplitTabItem).
+        let pairs = 0
         let heading = icons ? GroupHeading.compactHeight : GroupHeading.height(prefs)
         // A folded group showing none of its tabs still has its empty stack
         // of them under its heading, and the gap after it.
@@ -643,16 +646,14 @@ struct SideBar: View {
             SideRow(browser: browser, prefs: prefs, tab: tab,
                     live: tab.id == activeID, pill: pill, close: close,
                     interactive: interactive)
+                .modifier(RowSplitPreview(browser: browser, tab: tab, height: rowHeight, size: prefs.sideTitle))
         }
     }
 
-    /// Each row's place down the column, the gap under it included: a pair
-    /// stands as two lines (see Carried). Worked out once for the list.
+    /// Each row's place down the column, the gap under it included: a
+    /// split is one line too, its pages side by side (see Carried).
     private func steps(_ rows: [Tab]) -> [CGFloat] {
-        let pairs = prefs.splitView
-            ? Dictionary(browser.splits.filter { $0.left != $0.right }.map { ($0.left, $0.tabs.count) }, uniquingKeysWith: { first, _ in first })
-            : [:]
-        return rows.map { rowHeight * CGFloat(pairs[$0.id] ?? 1) + SideBar.gap }
+        rows.map { _ in rowHeight + SideBar.gap }
     }
 
     // MARK: - the pinned squares
@@ -974,9 +975,10 @@ struct SideBar: View {
     private var loose: some View {
         VStack(spacing: SideBar.gap) {
             if prefs.usesTabGroups {
-                ForEach(browser.tabGroups) { group in
-                    GroupHeading(browser: browser, group: group, dragSpace: "rows", compact: icons)
-                    groupRows(group)
+                ForEach(browser.shownGroups, id: \.group.id) { shown in
+                    GroupHeading(browser: browser, group: shown.group, dragSpace: "rows", compact: icons)
+                        .padding(.leading, icons ? 0 : CGFloat(shown.depth) * GroupHeading.indent)
+                    groupRows(shown.group, depth: shown.depth)
                 }
             }
             // See the grid: the drag is measured in the column's space, not
@@ -1051,15 +1053,16 @@ struct SideBar: View {
                                        groups: browser.tabGroups, source: tab.id, vertical: true)
     }
 
-    private func groupRows(_ group: TabGroup) -> some View {
+    private func groupRows(_ group: TabGroup, depth: Int = 0) -> some View {
         let members = browser.visibleTabs(in: group)
+        let inset = icons ? 0 : 14 + CGFloat(depth) * GroupHeading.indent
         let memberSteps = steps(members)
         return VStack(spacing: SideBar.gap) {
             ForEach(Array(members.enumerated()), id: \.element.id) { index, tab in
                 rowItem(tab, tabs: browser.tabs, splits: browser.splits,
                         activeID: browser.activeID, interactive: true, pill: pill,
                         close: { browser.closeTab(tab) })
-                    .padding(.leading, icons ? 0 : 14)
+                    .padding(.leading, inset)
                     .modifier(Carried(index: index, steps: memberSteps, vertical: true,
                                       space: "rows", onDropTab: { source, point in drop(source, at: point) },
                                       groupDestination: { source, point in destination(source, at: point) },
@@ -1072,7 +1075,7 @@ struct SideBar: View {
             // A pin carried over its heading goes in at the end.
             if crossing?.target == .group(group.id), let carried = crossingTab {
                 RowGhost(tab: carried, height: rowHeight, size: prefs.sideTitle)
-                    .padding(.leading, icons ? 0 : 14)
+                    .padding(.leading, inset)
             }
         }
         // With icons only, the group's tiles held by a thin bracket in the
@@ -1154,7 +1157,7 @@ struct SideBar: View {
             let loose = looseTabs
             guard !loose.isEmpty, let top = frames.loose?.minY else { return .loose(0) }
             let ghost: (Int, CGFloat)? = if case .loose(let at)? = crossing?.target { (at, rowHeight) } else { nil }
-            let heights = loose.map { browser.split(for: $0) != nil ? rowHeight * 2 : rowHeight }
+            let heights = loose.map { _ in rowHeight }
             return .loose(PinDrop.rowSlot(y: point.y - top, heights: heights, gap: SideBar.gap, ghost: ghost))
         }
     }
@@ -1790,7 +1793,7 @@ private struct SideRow: View, Equatable {
         .contextMenu { if interactive { TabMenu(browser: browser, tab: tab, close: close) } }
         .background {
             if interactive && prefs.splitView {
-                SplitDropZone(browser: browser, tab: tab, kind: .strip)
+                SplitDropZone(browser: browser, tab: tab, kind: tab.pin == nil ? .row : .strip)
             }
         }
         .animation(nil, value: hovering)

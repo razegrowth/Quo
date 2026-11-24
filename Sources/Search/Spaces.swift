@@ -363,15 +363,23 @@ struct Parked {
             !splitView || !splits.contains { $0.tabs.contains(tab.id) && $0.left != tab.id }
         }
         let front = splits.first { pair in active.map(pair.tabs.contains) ?? false }?.left ?? active
-        let kept = groupsOn ? (groups ?? []) : []
+        let kept = groupsOn ? (groups ?? []).treeOrdered() : []
         var shown: [DrawnGroup] = []
         var inGroups = Set<UUID>()
+        let held = Set(tabs.compactMap { $0.pin == nil ? $0.groupID : nil })
         for group in kept {
-            let members = tabs.filter { $0.pin == nil && $0.groupID == group.id && stands($0) }
-            // A group lasts as long as its tabs (see removeEmptyGroup).
-            guard !members.isEmpty else { continue }
+            // A group lasts as long as its tabs, or the groups inside it do
+            // (see removeEmptyGroup).
+            let inside = kept.subtree(of: group.id)
+            guard inside.contains(where: held.contains) else { continue }
             inGroups.insert(group.id)
-            shown.append(DrawnGroup(group: group, tabs: group.collapsed ? members.filter { $0.id == front } : members))
+            // Folded away inside a folded group: there, but not drawn.
+            if kept.hiddenByFold(group.id) { continue }
+            let members = tabs.filter { $0.pin == nil && $0.groupID == group.id && stands($0) }
+            let drawn = group.collapsed
+                ? tabs.filter { $0.id == front && $0.groupID.map(inside.contains) == true }
+                : members
+            shown.append(DrawnGroup(group: group, tabs: drawn, depth: kept.depth(of: group.id)))
         }
         let loose = tabs.filter { tab in
             tab.pin == nil && stands(tab) && !(tab.groupID.map(inGroups.contains) ?? false)
@@ -383,6 +391,8 @@ struct Parked {
     struct DrawnGroup: Identifiable {
         let group: TabGroup
         let tabs: [Tab]
+        /// How deep it is among groups in groups: 0 at the top.
+        var depth = 0
         var id: UUID { group.id }
     }
 }

@@ -91,7 +91,7 @@ struct TabBar: View {
                                                        group: nil, strip: geo.size.width, each: each)
                                             }
                                             if pinLine { PinLine() }
-                                            ForEach(browser.tabGroups) { group in
+                                            ForEach(browser.shownGroups.map(\.group)) { group in
                                                 GroupHeading(browser: browser, group: group,
                                                              horizontal: true, dragSpace: "strip")
                                                 let members = browser.visibleTabs(in: group)
@@ -455,13 +455,13 @@ struct TabBar: View {
         let displayed = browser.displayedTabs
         let pinned = CGFloat(displayed.filter { $0.pin != nil }.count)
         let ungrouped = displayed.filter { $0.pin == nil && browser.group(of: $0) == nil }
-        let grouped = browser.tabGroups.flatMap { browser.visibleTabs(in: $0) }
+        let grouped = browser.shownGroups.flatMap { browser.visibleTabs(in: $0.group) }
         let looseTabs = browser.prefs.usesTabGroups ? ungrouped + grouped : displayed.filter { $0.pin == nil }
         let loose = CGFloat(looseTabs.count)
         let extra = pairWidthExtra(in: looseTabs, base: each, splits: browser.splits)
-        let headers = browser.prefs.usesTabGroups ? CGFloat(browser.tabGroups.count) : 0
+        let headers = browser.prefs.usesTabGroups ? CGFloat(browser.shownGroups.count) : 0
         let headingWidth = browser.prefs.usesTabGroups
-            ? browser.tabGroups.reduce(CGFloat.zero) { $0 + GroupHeading.width(for: $1.name, numbered: browser.prefs.showsTabShortcuts && $1.collapsed, agent: $1.agent != nil) } : 0
+            ? browser.shownGroups.map(\.group).reduce(CGFloat.zero) { $0 + GroupHeading.width(for: $1.name, numbered: browser.prefs.showsTabShortcuts && $1.collapsed, agent: $1.agent != nil) } : 0
         let shown = Int(pinned + loose + headers)
         var total = pinned * Metrics.pinWidth + loose * each + extra
             + headingWidth + CGFloat(max(0, shown - 1)) * Metrics.tabGap
@@ -494,7 +494,7 @@ struct TabBar: View {
     private func width(in strip: CGFloat) -> CGFloat {
         let displayed = browser.displayedTabs
         let ungrouped = displayed.filter { $0.pin == nil && browser.group(of: $0) == nil }
-        let grouped = browser.prefs.usesTabGroups ? browser.tabGroups.flatMap { browser.visibleTabs(in: $0) } : []
+        let grouped = browser.prefs.usesTabGroups ? browser.shownGroups.flatMap { browser.visibleTabs(in: $0.group) } : []
         let items = browser.prefs.usesTabGroups ? ungrouped + grouped : displayed
         let pins = displayed.filter { $0.pin != nil }.count
         if browser.prefs.usesTabGroups {
@@ -502,8 +502,8 @@ struct TabBar: View {
             guard count > 0 else { return Metrics.tabWidth }
             let extra = pairWidthExtra(in: items, base: Metrics.tabMinWidth, splits: browser.splits)
             let spent = CGFloat(pins) * Metrics.pinWidth + extra
-                + browser.tabGroups.reduce(CGFloat.zero) { $0 + GroupHeading.width(for: $1.name, numbered: browser.prefs.showsTabShortcuts && $1.collapsed, agent: $1.agent != nil) }
-                + CGFloat(max(0, pins + count + browser.tabGroups.count - 1)) * Metrics.tabGap
+                + browser.shownGroups.map(\.group).reduce(CGFloat.zero) { $0 + GroupHeading.width(for: $1.name, numbered: browser.prefs.showsTabShortcuts && $1.collapsed, agent: $1.agent != nil) }
+                + CGFloat(max(0, pins + count + browser.shownGroups.count - 1)) * Metrics.tabGap
                 + (pinLine ? PinLine.space : 0)
             return max(Metrics.tabMinWidth, min(Metrics.tabWidth, (room(in: strip) - spent) / CGFloat(count)))
         }
@@ -1195,6 +1195,10 @@ struct Carried: ViewModifier {
                                 switch finished.drop {
                                 case .stage(let target, let onLeft):
                                     browser.pair(source, with: target, onLeft: onLeft)
+                                case .row(let target):
+                                    // On its right, in its group, as Arc did.
+                                    if reordered { move(from) }
+                                    browser.pair(source, with: target, onLeft: false)
                                 case .strip(let target):
                                     if let destination = groupDestination?(source, value.location) {
                                         // Resolve before detaching: the old pair still owns its frame.
@@ -1540,35 +1544,34 @@ struct TabMenu: View {
 
     var body: some View {
         singleMenu
-        if browser.selectedTabIDs.contains(tab.id) && browser.visibleSelectedTabCount > 1 {
-            Divider()
-            Button("Copy Addresses") { browser.copySelectedTabLinks() }
-                .disabled(browser.selectedTabLinkCount == 0)
-        }
     }
 
+    // In five parts, each about one kind of thing, so the eye finds a
+    // part before an item: the tab itself; pinning it; where it lives
+    // (split, panel, group, space, window); its page (what it is, copying
+    // and sending it); and closing. It was three, the middle one eleven
+    // things long, rename to sleep by way of copying and sending.
     @ViewBuilder
     private var singleMenu: some View {
-        if browser.prefs.usesTabGroups && tab.pin == nil && !tab.shy && !tab.bench {
-            // Right-clicked among tabs picked in the column: all of them, as
-            // a drag onto a group takes them (see carried).
-            let moving = browser.carried(with: tab)
-            Menu("Move to Group") {
-                Button("New Group") {
-                    let id = browser.addTabGroup(containing: tab)
-                    for other in moving where other !== tab { browser.move(other, toGroup: id) }
-                }
-                if !browser.tabGroups.isEmpty { Divider() }
-                ForEach(browser.tabGroups) { group in
-                    Button(group.name) { for each in moving { browser.move(each, toGroup: group.id) } }
-                        .disabled(moving.allSatisfy { $0.groupID == group.id })
-                }
-                if moving.contains(where: { $0.groupID != nil }) {
-                    Divider()
-                    Button("Remove from Group") { for each in moving { browser.move(each, toGroup: nil) } }
-                }
+        // The tab itself.
+        Button("Rename") { browser.beginTabRename(tab) }
+        Button("Duplicate") {
+            browser.select(tab)
+            browser.duplicate()
+        }
+        .disabled(!tab.isWeb)
+        Button(tab.muted ? "Unmute Tab" : "Mute Tab") { tab.toggleMute() }
+        // Its page let go of now, as it would be after half an hour unseen:
+        // the row keeps its title and picture, and it loads again when gone
+        // to. Not the tab on screen, nor one that has to stay awake (#310).
+        Button("Put to Sleep") {
+            browser.sleep(tab) { outcome in
+                if outcome != "asleep" { browser.announce("Stays awake: \(outcome)") }
             }
         }
+        .disabled(browser.awake(because: tab) != nil)
+        Divider()
+        // Pinning it, or on a pin, the pin's own.
         let rows = browser.prefs.showsPinRows
         if tab.pin == nil {
             Button("Pin") { browser.pin(tab) }
@@ -1629,6 +1632,72 @@ struct TabMenu: View {
                 browser.close(tab)
             }
         }
+        Divider()
+        // Where it lives: beside another page, in the side panel, a group,
+        // a space or a window.
+        if browser.prefs.splitView {
+            // Right-clicked among tabs picked in the column: those side by
+            // side, up to four. More can't be, so it is there but off.
+            let picked = browser.selectedTabIDs.contains(tab.id) ? browser.visibleSelectedTabCount : 1
+            if picked > 1 && !browser.pickedTabsArePaired {
+                Button("Open \(picked) Tabs in Split View") { browser.pairPickedTabs(focus: tab) }
+                    .disabled(browser.pickedSplit == nil)
+            }
+            if let pair = browser.split(for: tab) {
+                Button("Swap Pages") {
+                    browser.focusPane(tab)
+                    browser.swapSplit()
+                }
+                if pair.tabs.count > 2 {
+                    // This page alone out of it; the others stay together.
+                    Button("Remove from Split View") { browser.leaveSplit(tab) }
+                }
+                Button("Separate Split Tabs") { browser.detachSplit(tab) }
+                Button(pair.tabs.count > 2 ? "Close All Pages" : "Close Both Pages") {
+                    browser.focusPane(tab)
+                    browser.closeSplit()
+                }
+            } else if picked == 1 {
+                // Beside the page on screen; on that page itself, an empty
+                // page beside it. On a split with room, one more page in it.
+                let current = browser.active
+                let adding = browser.activeSplit != nil && current?.id != tab.id
+                Button(adding ? "Add to Split View" : "Open in Split View") { browser.openInSplit(tab) }
+                    .disabled(tab.bench || (adding && current.map { !browser.canJoin(tab, beside: $0) } ?? true))
+            }
+        }
+        if browser.prefs.sitesInPanel {
+            Button("Open in Side Panel") { browser.openInSidePanel(tab) }
+                .disabled(!tab.isWeb || tab.shy)
+        }
+        if browser.prefs.usesTabGroups && tab.pin == nil && !tab.shy && !tab.bench {
+            // Right-clicked among tabs picked in the column: all of them, as
+            // a drag onto a group takes them (see carried).
+            let moving = browser.carried(with: tab)
+            Menu("Move to Group") {
+                Button("New Group") {
+                    let id = browser.addTabGroup(containing: tab)
+                    for other in moving where other !== tab { browser.move(other, toGroup: id) }
+                }
+                // Inside the group it's in, as Dia's New Group does.
+                if let here = browser.group(of: tab), browser.canNest(into: here, height: 1) {
+                    Button("New Group Inside \(browser.tabGroups.group(here)?.name ?? "This Group")") {
+                        let id = browser.addTabGroup(containing: tab, inside: here)
+                        for other in moving where other !== tab { browser.move(other, toGroup: id) }
+                    }
+                }
+                if !browser.tabGroups.isEmpty { Divider() }
+                ForEach(browser.tabGroups) { group in
+                    let depth = browser.tabGroups.depth(of: group.id)
+                    Button(String(repeating: "    ", count: depth) + group.name) { for each in moving { browser.move(each, toGroup: group.id) } }
+                        .disabled(moving.allSatisfy { $0.groupID == group.id })
+                }
+                if moving.contains(where: { $0.groupID != nil }) {
+                    Divider()
+                    Button("Remove from Group") { for each in moving { browser.move(each, toGroup: nil) } }
+                }
+            }
+        }
         // A shared pin is in every space already: nowhere to move it.
         if browser.prefs.usesSpaces, !tab.bench, !tab.everywhere,
            tab.address.flatMap({ Browser.extensionHost(of: $0) }) == nil {
@@ -1662,37 +1731,6 @@ struct TabMenu: View {
                 Button("Always Open \(site) in \(space.name)") { SpaceRoutes.set(site, to: space.id) }
             }
         }
-        if browser.prefs.splitView {
-            // Right-clicked among tabs picked in the column: those side by
-            // side, up to four. More can't be, so it is there but off.
-            let picked = browser.selectedTabIDs.contains(tab.id) ? browser.visibleSelectedTabCount : 1
-            if picked > 1 && !browser.pickedTabsArePaired {
-                Button("Open \(picked) Tabs in Split View") { browser.pairPickedTabs(focus: tab) }
-                    .disabled(browser.pickedSplit == nil)
-            }
-            if let pair = browser.split(for: tab) {
-                Button("Swap Pages") {
-                    browser.focusPane(tab)
-                    browser.swapSplit()
-                }
-                if pair.tabs.count > 2 {
-                    // This page alone out of it; the others stay together.
-                    Button("Remove from Split View") { browser.leaveSplit(tab) }
-                }
-                Button("Separate Split Tabs") { browser.detachSplit(tab) }
-                Button(pair.tabs.count > 2 ? "Close All Pages" : "Close Both Pages") {
-                    browser.focusPane(tab)
-                    browser.closeSplit()
-                }
-            } else if picked == 1 {
-                // Beside the page on screen; on that page itself, an empty
-                // page beside it. On a split with room, one more page in it.
-                let current = browser.active
-                let adding = browser.activeSplit != nil && current?.id != tab.id
-                Button(adding ? "Add to Split View" : "Open in Split View") { browser.openInSplit(tab) }
-                    .disabled(tab.bench || (adding && current.map { !browser.canJoin(tab, beside: $0) } ?? true))
-            }
-        }
         if tab.pin == nil, !tab.bench {
             // Another window, or a new one (see Browser.moveToWindow).
             let others = Browsers.all.filter { $0 !== browser && $0.isOpen && !$0.isPopup && $0.profileID == browser.profileID }
@@ -1711,12 +1749,7 @@ struct TabMenu: View {
             }
         }
         Divider()
-        Button("Rename") { browser.beginTabRename(tab) }
-        Button("Duplicate") {
-            browser.select(tab)
-            browser.duplicate()
-        }
-        .disabled(!tab.isWeb)
+        // Its page: what it is, and copying or sending it somewhere.
         // The card a click on the tab you are on shows under its address.
         Button("Site Information…") {
             if browser.activeID != tab.id { browser.select(tab) }
@@ -1728,16 +1761,21 @@ struct TabMenu: View {
             browser.copyAddress()
         }
         .disabled(!tab.isWeb)
-        Button("Copy as Markdown Link") {
-            browser.select(tab)
-            browser.copyMarkdownLink()
-        }
-        .disabled(!tab.isWeb)
         Button("Copy Clean Link") {
             browser.select(tab)
             browser.copyCleanLink()
         }
         .disabled(!tab.isWeb)
+        Button("Copy as Markdown Link") {
+            browser.select(tab)
+            browser.copyMarkdownLink()
+        }
+        .disabled(!tab.isWeb)
+        // Right-clicked among tabs picked in the column: all their addresses.
+        if browser.selectedTabIDs.contains(tab.id) && browser.visibleSelectedTabCount > 1 {
+            Button("Copy Addresses") { browser.copySelectedTabLinks() }
+                .disabled(browser.selectedTabLinkCount == 0)
+        }
         // To your iPhone (or another Mac), through sync: opens there.
         let targets = browser.sendable(tab) == nil ? [] : browser.sendTargets
         if targets.count == 1, let only = targets.first {
@@ -1753,20 +1791,6 @@ struct TabMenu: View {
                 }
             }
         }
-        if browser.prefs.sitesInPanel {
-            Button("Open in Side Panel") { browser.openInSidePanel(tab) }
-                .disabled(!tab.isWeb || tab.shy)
-        }
-        Button(tab.muted ? "Unmute Tab" : "Mute Tab") { tab.toggleMute() }
-        // Its page let go of now, as it would be after half an hour unseen:
-        // the row keeps its title and picture, and it loads again when gone
-        // to. Not the tab on screen, nor one that has to stay awake (#310).
-        Button("Put to Sleep") {
-            browser.sleep(tab) { outcome in
-                if outcome != "asleep" { browser.announce("Stays awake: \(outcome)") }
-            }
-        }
-        .disabled(browser.awake(because: tab) != nil)
         Divider()
         // Right-clicked among tabs picked in the column: all of them, as ⌘W
         // closes them.

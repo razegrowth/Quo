@@ -23,6 +23,20 @@ cd "$(dirname "$0")"
 # folder sync only.
 if [ -f Quo.provisionprofile ]; then
   export SEARCH_PROFILE=Quo.provisionprofile SEARCH_ENTITLEMENTS=Quo.entitlements
+  # Passkeys (Touch ID, iCloud Keychain, a phone's QR code), the day Apple
+  # grants Quo the browser entitlement for them: requested 22 Nov 2026
+  # (request 95NPHJ9A9C). Signed in only once the profile carries it — an
+  # app claiming a restricted entitlement its profile doesn't is an app
+  # macOS won't open — so a profile made after the grant is all it takes.
+  # The app turns passkeys on when it finds itself entitled (Prefs.swift).
+  PASSKEY_KEY=com.apple.developer.web-browser.public-key-credential
+  if security cms -D -i Quo.provisionprofile 2>/dev/null | grep -q "<key>$PASSKEY_KEY</key>"; then
+    mkdir -p build
+    cp Quo.entitlements build/quo.entitlements
+    /usr/libexec/PlistBuddy -c "Add :$PASSKEY_KEY bool true" build/quo.entitlements >/dev/null
+    export SEARCH_ENTITLEMENTS=build/quo.entitlements
+    echo "passkeys: Quo.provisionprofile grants them, signed in"
+  fi
 fi
 # Updates: Search's own updater, reading Quo's feed instead of Office
 # Commun's. Each release is a GitHub release with Quo.zip, Quo.dmg and the
