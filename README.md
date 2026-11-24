@@ -26,10 +26,9 @@
 
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/new-tab-dark.png">
-  <img src=".github/readme/new-tab-light.png" alt="Quo's window: pinned Gmail, Calendar and Spotify above tabs down the side, the address bar over the page, and a new tab with the time, a search field, your most visited sites, the next meeting with Join, and the tabs you closed last.">
-</picture>
+<p align="center">
+  <img src=".github/readme/quo.jpg" alt="Quo's window on a Mac: pinned YouTube, Gmail and Calendar above tabs down the side, the address bar over the page, and razegrowth.com open.">
+</p>
 
 ---
 
