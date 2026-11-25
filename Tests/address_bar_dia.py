@@ -33,7 +33,7 @@ def main():
     t = sv.T()
     try:
         sv.setup(sidebar=True, **{"sidebar.addressBar": True}); sv.launch()
-        sv.page("watch"); time.sleep(0.6)
+        pid = sv.page("watch"); time.sleep(0.6)
         picture("rest")
 
         # A press on the address: the bar's own, never the window's to drag
@@ -42,9 +42,14 @@ def main():
         t.ok("a press on the address is the bar's", "Press" in h["view"], h)
         t.ok("…and can't move the window", not h["canMoveWindow"], h)
 
-        # Clicked to edit: the whole address, https:// (here http://) and all.
-        r = sv.cmd({"do": "tab-type", "text": ""})
-        t.ok("editing shows the scheme", r["field"].startswith("http://"), r["field"])
+        # Clicked into and away from, the address untouched: nothing loads
+        # (the edit's whole address wasn't the short form it was checked by,
+        # so leaving the bar reloaded the page).
+        sv.ev(pid, "window.__still = 1")
+        r = bar(click=True)
+        t.ok("clicked to edit: the whole address, scheme and all", r["editing"] and r["draft"].startswith("http://"), r)
+        sv.cmd({"do": "ui", "finishedit": True}); time.sleep(1.0)
+        t.ok("clicked away from an untouched address: no reload", sv.ev(pid, "window.__still") == 1)
         sv.cmd({"do": "press", "code": 53, "chars": "\u001b", "mods": []}); time.sleep(0.4)
 
         h = sv.cmd({"do": "hit", "x": 600, "y": 20})

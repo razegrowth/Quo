@@ -3473,7 +3473,8 @@ final class Bench {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     if let path = request["picture"] as? String { _ = SiteCardPanel.picture(to: path) }
                     answer(["card": SiteCardPanel.isShown, "menu": SiteCardPanel.fromButton,
-                            "editing": browser.editingTab != nil, "anchor": SiteCardPanel.state.anchor?.view != nil])
+                            "editing": browser.editingTab != nil, "draft": browser.tabDraft,
+                            "anchor": SiteCardPanel.state.anchor?.view != nil])
                 }
             }
 

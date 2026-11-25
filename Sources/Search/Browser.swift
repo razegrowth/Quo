@@ -2613,8 +2613,12 @@ final class Browser: NSObject, ObservableObject {
             return
         }
         let draft = tabDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if draft.isEmpty || tab.address.map({ Address.editable($0) == draft }) == true
-            || destination(for: draft) == nil {
+        // Left as it was: the address bar's edit holds the address whole
+        // (https:// and all) and the tab's field its short form, so it's
+        // what the edit began with, in either form, that loads nothing.
+        let untouched = draft == tabOriginal.trimmingCharacters(in: .whitespacesAndNewlines)
+            || tab.address.map({ Address.editable($0) == draft || $0.absoluteString == draft }) == true
+        if draft.isEmpty || untouched || destination(for: draft) == nil {
             cancelTabEdit()
             return
         }
