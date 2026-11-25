@@ -245,6 +245,11 @@ enum SettingsIndex {
               more: "The extensions' buttons move from the foot of the sidebar to the bar's far end.",
               keys: ["sidebar.addressBar"], words: ["url", "url bar", "omnibox", "toolbar", "full address", "chrome", "dia"],
               parent: "tabs.layout"),
+        .init(id: "addressBar.full", group: "window", icon: "link",
+              title: "Show the full address", detail: "Off, the bar shows just the site, as Dia does",
+              more: "Either way, a click on the bar shows the whole address to edit.",
+              keys: ["addressBar.full"], words: ["url", "full url", "path", "site", "domain", "dia", "address bar"],
+              parent: "sidebar.addressBar"),
         .init(id: "toolbar.left", group: "window", icon: "arrow.left.arrow.right",
               title: "Back, forward and reload on the left", detail: "Beside the window's buttons, before the tabs",
               keys: ["toolbar.left"], words: ["toolbar", "buttons", "navigation"], parent: "tabs.layout"),
@@ -737,6 +742,7 @@ enum SettingsIndex {
         case "layout.cardsFullScreen": return prefs.sidebar && prefs.cards
         case "pins.folders": return prefs.sidebar && prefs.listsPins
         case "sidebar.foldIcons", "sidebar.addressBar": return prefs.sidebar && !prefs.sideHides
+        case "addressBar.full": return prefs.sidebar && !prefs.sideHides && prefs.addressBar
         case "toolbar.left", "tabs.compact": return !prefs.sidebar
         case "profiles.oneWindow": return Profiles.shared.several
         case "spaces.links": return prefs.usesSpaces
@@ -762,6 +768,7 @@ enum SettingsIndex {
         case "inspector.dark": return "Only while \(Store.name) isn't set to Dark"
         case "toolbar.left", "tabs.compact": return "Only with the tabs across the top"
         case "sidebar.foldIcons", "sidebar.addressBar": return "Only with the column down a side and not hidden until the edge"
+        case "addressBar.full": return "Only with the address bar above the page"
         case "profiles.oneWindow": return "Only with more than one profile"
         case "spaces.links": return "Only with Spaces on"
         case "sidebar.player": return "Only with titles in the sidebar"

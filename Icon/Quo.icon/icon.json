@@ -1,18 +1,31 @@
 {
-  "fill" : "automatic",
+  "fill" : "system-light",
   "groups" : [
     {
       "blur-material" : null,
       "layers" : [
         {
-          "fill" : "system-dark",
+          "fill-specializations" : [
+            {
+              "value" : "system-dark"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "system-light"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "system-light"
+            }
+          ],
+          "glass" : true,
           "image-name" : "quo-q-vector.svg",
           "name" : "quo-q-vector",
           "position" : {
             "scale" : 1.4,
             "translation-in-points" : [
-              0.39394936880489695,
-              0.22111351155115244
+              -145.6996682313129,
+              152
             ]
           }
         }
@@ -21,6 +34,7 @@
         "kind" : "neutral",
         "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
         "enabled" : true,
         "value" : 0.3

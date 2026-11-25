@@ -2274,7 +2274,12 @@ final class Bench {
                             "offers": browser.tabOffers.map { "\($0.key) | \($0.url.absoluteString)" },
                             "picked": browser.tabPicked ?? -1, "listShown": TabOffersPanel.isShown,
                             "editing": browser.editingTab != nil, "draft": browser.tabDraft,
-                            "active": browser.active?.address?.absoluteString ?? "", "picture": shot])
+                            "active": browser.active?.address?.absoluteString ?? "", "picture": shot,
+                            // The list's frame and the field's, in screen points, for where
+                            // the list stands under it (8 points of its frame are shadow room).
+                            "list": TabOffersPanel.frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? [],
+                            "box": TabOffersPanel.barBox?.view.flatMap { v in v.window.map { w in let r = w.convertToScreen(v.convert(v.bounds, to: nil)); return [r.minX, r.minY, r.width, r.height] } } ?? [],
+                            "fieldFrame": field.window.map { w in let r = w.convertToScreen(field.convert(field.bounds, to: nil)); return [r.minX, r.minY, r.width, r.height] } ?? []])
                 }
             }
 
@@ -3443,6 +3448,30 @@ final class Bench {
             else { answer(["error": "place needs a tab id and an index"]); return }
             browser.move(tab, to: to)
             answer(["at": browser.tabs.firstIndex { $0.id == tab.id } ?? -1])
+
+        case "addressbar":
+            // The address bar above the page as Dia has it: "hover" its
+            // buttons up as under the pointer, "menu" the site menu toggled
+            // from its button, "click" the field clicked to type. What's up
+            // after. Test runs only.
+            guard Store.testing else { answer(["error": "addressbar only works on a --test run"]); return }
+            if let hover = request["hover"] as? Bool { SiteCardPanel.state.testHover = hover }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                if request["menu"] as? Bool == true, let tab = browser.active, let button = SiteCardPanel.state.anchor?.view {
+                    SiteCardPanel.toggleMenu(for: tab, in: browser, under: button)
+                }
+                if request["click"] as? Bool == true, let tab = browser.active {
+                    // As the bar's own click does (AddressBar.Field.begin).
+                    SiteCardPanel.hide()
+                    SiteCardPanel.quietNext = true
+                    browser.beginTabEdit(tab)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let path = request["picture"] as? String { _ = SiteCardPanel.picture(to: path) }
+                    answer(["card": SiteCardPanel.isShown, "menu": SiteCardPanel.fromButton,
+                            "editing": browser.editingTab != nil, "anchor": SiteCardPanel.state.anchor?.view != nil])
+                }
+            }
 
         case "rowsplit":
             // A tab carried onto another's row in the column (TabDrag), with

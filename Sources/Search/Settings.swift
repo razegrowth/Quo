@@ -728,6 +728,7 @@ struct SettingsPanel: View {
                 get: { prefs.addressBar },
                 set: { on in withAnimation(Motion.glide) { prefs.addressBar = on } }
             ))
+        case "addressBar.full": Switch(on: $prefs.barFullAddress)
         case "tabs.compact":
             Switch(on: Binding(
                 get: { prefs.compactStrip },

@@ -22,6 +22,18 @@ enum SiteCardPanel {
     private static var resign: Any?
 
     static var isShown: Bool { panel != nil }
+    /// Up from the address bar's site menu button, not from an edit.
+    private(set) static var fromButton = false {
+        didSet { if state.open != fromButton { state.open = fromButton } }
+    }
+    /// The same, for the bar to watch: its buttons stay while the menu is up.
+    static let state = SiteMenuState()
+    private static var outside: Any?
+
+    /// An edit begun from the address bar above the page: no card under it.
+    /// The bar has the card's things behind its site menu button instead,
+    /// and a click there is to type, as in Dia and Chrome.
+    static var quietNext = false
 
     // MARK: - when
 
@@ -45,11 +57,17 @@ enum SiteCardPanel {
                     guard let browser else { return }
                     guard let id = editing, !browser.renamingTab,
                           let tab = browser.tabs.first(where: { $0.id == id }), tab.isWeb
-                    else { original = nil; hide(); return }
+                    else {
+                        original = nil
+                        // Up from the site menu button, it isn't the edit's to put away.
+                        if !fromButton { hide() }
+                        return
+                    }
                     if original == nil {
                         // The edit began: the card comes up under the field once it
-                        // is in its window.
+                        // is in its window — unless the address bar began it.
                         original = draft
+                        if quietNext { quietNext = false; if !fromButton { hide() }; return }
                         place(tab, browser, tries: 0)
                     } else if draft != original {
                         // Typing somewhere else: the card was about the page you are on.
@@ -73,13 +91,30 @@ enum SiteCardPanel {
         }
     }
 
-    /// Under `field`, the tab's address, in `browser`'s window.
-    private static func show(for tab: Tab, in browser: Browser, under field: NSView) {
+    /// The address bar's site menu button: the card under it, its right
+    /// edge on the button's, as a menu drops; again, and it goes. A click
+    /// anywhere else puts it away, as a menu's would.
+    /// The card as drawn, for the bench.
+    static func picture(to path: String) -> Bool {
+        guard let view = panel?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return (try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))) != nil
+    }
+
+    static func toggleMenu(for tab: Tab, in browser: Browser, under button: NSView) {
+        if panel != nil, fromButton { hide(); return }
+        show(for: tab, in: browser, under: button, menu: true)
+    }
+
+    /// Under `field`, the tab's address, in `browser`'s window; or, as
+    /// `menu`, under the site menu button.
+    private static func show(for tab: Tab, in browser: Browser, under field: NSView, menu: Bool = false) {
         guard let window = field.window else { return }
         hide()
+        fromButton = menu
         let card = SiteCard(browser: browser, tab: tab) {
             SiteCardPanel.hide()
-            browser.cancelTabEdit()
+            if !menu { browser.cancelTabEdit() }
         }
         let host = FirstClick(rootView: AnyView(card.fixedSize()))
         let size = host.fittingSize
@@ -112,7 +147,9 @@ enum SiteCardPanel {
         // ever beside the field: pushed up onto it, the card covered the
         // address being edited, and what was typed there with it.
         let spot = window.convertToScreen(field.convert(field.bounds, to: nil))
-        var origin = NSPoint(x: spot.minX - 12, y: spot.minY - 12 - size.height)
+        var origin = menu
+            ? NSPoint(x: spot.maxX - size.width + 4, y: spot.minY - 6 - size.height)
+            : NSPoint(x: spot.minX - 12, y: spot.minY - 12 - size.height)
         var above = false
         if let screen = window.screen?.visibleFrame {
             origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
@@ -137,6 +174,25 @@ enum SiteCardPanel {
         resign = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { SiteCardPanel.hide() }
         }
+        // As a menu: a click anywhere but on it, or Escape, puts it away. The
+        // button's own click goes on to it, which then finds it gone and
+        // leaves it that way (see toggleMenu).
+        if menu {
+            outside = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { event in
+                MainActor.assumeIsolated {
+                    if event.type == .keyDown {
+                        if event.keyCode == 53 { SiteCardPanel.hide(); return nil }
+                        return event
+                    }
+                    guard event.window !== SiteCardPanel.panel else { return event }
+                    let onButton = event.window === window
+                        && field.convert(field.bounds, to: nil).contains(event.locationInWindow)
+                    SiteCardPanel.hide()
+                    // The button's own click would only bring it back.
+                    return onButton ? nil : event
+                }
+            }
+        }
     }
 
     /// A rounded rectangle that stretches to any size, its corners kept.
@@ -155,6 +211,9 @@ enum SiteCardPanel {
     static func hide() {
         if let resign { NotificationCenter.default.removeObserver(resign) }
         resign = nil
+        if let outside { NSEvent.removeMonitor(outside) }
+        outside = nil
+        fromButton = false
         guard let panel else { return }
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
@@ -761,4 +820,14 @@ enum MenuMetrics {
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor.white.withAlphaComponent(0.18) : NSColor.black.withAlphaComponent(0.26)
     }
+}
+
+/// Whether the address bar's site menu is up (SiteCardPanel.toggleMenu).
+@MainActor
+final class SiteMenuState: ObservableObject {
+    @Published var open = false
+    /// The bar's buttons up as if under the pointer, and the site menu
+    /// button they hang from: for the bench's pictures. Test runs only.
+    @Published var testHover = false
+    var anchor: ViewAnchor.Box?
 }

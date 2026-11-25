@@ -38,6 +38,11 @@ enum TabOffersPanel {
     }
 
     static var isShown: Bool { panel != nil }
+    /// The address bar's own box (AddressBar.Field), for the list to hang
+    /// from: under the bar, the two are one card, as Dia's is.
+    static var barBox: ViewAnchor.Box?
+    /// Where the list is, in screen points, while it is shown: for the bench.
+    static var frame: NSRect? { panel?.frame }
 
     /// The list as drawn, for the bench: never on a screen it wasn't already on.
     static func picture(to path: String) -> Bool {
@@ -59,9 +64,19 @@ enum TabOffersPanel {
             return
         }
         let spot = window.convertToScreen(field.convert(field.bounds, to: nil))
-        // As wide as the field and the card's margin either side, within reason.
-        let width = min(max(spot.width + 24, 320), 460)
-        let host = Host(rootView: AnyView(TabOffersList(browser: browser).frame(width: width)))
+        // The address bar over the page: the list is the field's width,
+        // its edges on the field's, as Safari, Chrome and Dia have it. Held
+        // to the tab's size there, it sat short at the left under a field
+        // the width of the window. (8 points of shadow room either side.)
+        let barBox = browser.prefs.addressBar && browser.prefs.sidebar && spot.width > 460
+            ? barBox?.view.flatMap { view in view.window.map { $0.convertToScreen(view.convert(view.bounds, to: nil)) } }
+            : nil
+        let bar = barBox != nil
+        // Under a tab: as wide as the field and the card's margin either
+        // side, within reason. Under the bar: the box's own width, its
+        // sides on the box's, and 8 points of shadow room either side.
+        let width = barBox.map { $0.width + 16 } ?? min(max(spot.width + 24, 320), 460)
+        let host = Host(rootView: AnyView(TabOffersList(browser: browser, attached: bar).frame(width: width)))
         let size = host.fittingSize
         host.frame = NSRect(origin: .zero, size: size)
         let panel = Panel(contentRect: host.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -74,7 +89,9 @@ enum TabOffersPanel {
         // Under the address, lined up with the tab's own edge, as the card
         // is; over it for a tab too near the bottom of the screen. The list
         // has 8 points of clear room around it for its shadow.
-        var origin = NSPoint(x: spot.minX - 20, y: spot.minY + 2 - size.height)
+        // Under the bar, its top on the box's bottom: one card.
+        var origin = barBox.map { NSPoint(x: $0.minX - 8, y: $0.minY - size.height) }
+            ?? NSPoint(x: spot.minX - 20, y: spot.minY + 2 - size.height)
         var above = false
         if let screen = window.screen?.visibleFrame {
             origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
@@ -128,6 +145,9 @@ enum TabOffersPanel {
 /// The list itself, drawn as ⌘L's is.
 private struct TabOffersList: View {
     @ObservedObject var browser: Browser
+    /// Under the address bar: the lower part of one card with the field,
+    /// square at the top, its line there the field's.
+    var attached = false
     /// The list's travelling grounds (Omnibox.Row), and the row under the pointer.
     @Namespace private var rowGround
     @State private var hoveredRow: String?
@@ -142,11 +162,27 @@ private struct TabOffersList: View {
         }
         .animation(Motion.glide, value: browser.tabPicked)
         .padding(m.listAir)
-        .background(Palette.ground, in: RoundedRectangle(cornerRadius: m.corner, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: m.corner, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 1))
-        .padding(8)
-        .shadow(color: .black.opacity(0.1), radius: 10, y: 4)
+        .background(Palette.ground, in: shape)
+        .overlay(
+            shape.strokeBorder(Palette.hairline, lineWidth: 1)
+                // Attached, the line between it and the field is the field's.
+                .mask(VStack(spacing: 0) {
+                    Color.clear.frame(height: attached ? 1 : 0)
+                    Color.black
+                })
+        )
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .padding(.top, attached ? 0 : 8)
+        .shadow(color: .black.opacity(attached ? 0.16 : 0.1), radius: attached ? 14 : 10, y: attached ? 8 : 4)
         .environment(\.fieldMeasures, m)
+    }
+
+    private var shape: UnevenRoundedRectangle {
+        let corner = attached ? AddressBar.openCorner : m.corner
+        return UnevenRoundedRectangle(cornerRadii: .init(topLeading: attached ? 0 : corner, bottomLeading: corner,
+                                                         bottomTrailing: corner, topTrailing: attached ? 0 : corner),
+                                      style: .continuous)
     }
 
     /// A size up with Roomier tabs, as ⌘L's list is.

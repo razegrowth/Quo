@@ -215,6 +215,11 @@ final class Preferences: ObservableObject {
     @Published var addressBar: Bool {
         didSet { store.set(addressBar, forKey: "sidebar.addressBar") }
     }
+    /// The bar's address at rest: the whole of it, the site in ink and the
+    /// rest dim (on unless turned off), or the site alone, as Dia has it.
+    @Published var barFullAddress: Bool {
+        didSet { store.set(barFullAddress, forKey: "addressBar.full") }
+    }
 
     /// The tab strip only a few points taller than its tabs, where it is
     /// otherwise a toolbar's height (Metrics.strip). With the tabs across the
@@ -1167,6 +1172,7 @@ final class Preferences: ObservableObject {
         }
         navigationLeft = store.bool(forKey: "toolbar.left")
         addressBar = SidebarDefault.onWhenFresh("sidebar.addressBar", store, testing: Store.testing)
+        barFullAddress = store.object(forKey: "addressBar.full") as? Bool ?? true
         compactStrip = store.bool(forKey: "tabs.compact")
         // Carried over from when there were four ways of holding the browser
         // and this was one of them.

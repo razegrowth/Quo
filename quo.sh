@@ -15,6 +15,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 # Its icon: Icon/Quo.icon, made in Icon Composer, with its Dark, Clear and
+# (QUO_ICON=<some.icon> ./quo.sh install tries another for one build; a
+# release refuses it, so a trial icon never ships by mistake.)
 # Tinted styles. On a Mac without Icon Composer, the older mark instead: a
 # soft tile with a Q cut out (Icon/quo-mark.svg), drawn by Icon/icon.swift.
 # iCloud sync, once Quo.provisionprofile (git-ignored) is beside this script:
@@ -44,7 +46,7 @@ fi
 # always points at the newest one, so the feed's address never changes.
 REPO="razegrowth/Quo"
 TEAM="8B6VFDJHA2"
-export SEARCH_NAME=Quo SEARCH_BUNDLE_ID=com.edinabazi.quo SEARCH_ICON=Icon/Quo.icon \
+export SEARCH_NAME=Quo SEARCH_BUNDLE_ID=com.edinabazi.quo SEARCH_ICON="${QUO_ICON:-Icon/Quo.icon}" \
   SEARCH_FEEDBACK="https://github.com/$REPO/issues/new" \
   SEARCH_FEED_URL="https://github.com/$REPO/releases/latest/download/appcast.json" \
   SEARCH_FEED_TEAM="$TEAM" SEARCH_NOTARY_PROFILE=quo SEARCH_NOTES=QUO_NOTES.md \
@@ -65,6 +67,7 @@ if [ "${1:-}" = "release" ]; then
     echo "release: QUO_VERSION says $SEARCH_VERSION — set it to $2, add \"## $2\" to QUO_NOTES.md, commit and push" >&2
     exit 1
   fi
+  [ -z "${QUO_ICON:-}" ] || { echo "release: QUO_ICON is set — a trial icon doesn't ship; put it in Icon/Quo.icon" >&2; exit 1; }
   TAG="v$SEARCH_VERSION"
   # What a release needs, checked before anything is built.
   [ -f Quo.provisionprofile ] || { echo "release: Quo.provisionprofile is missing — without it Quo ships without iCloud" >&2; exit 1; }

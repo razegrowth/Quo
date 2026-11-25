@@ -2,6 +2,16 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.1 · 25 November 2026
+
+A new icon, and an address bar that stays out of the way.
+
+Quo has a new icon: the Q sits in the corner of the tile now, and in dark mode it turns light so it doesn't disappear.
+
+The address bar above the page works like Dia's. At rest it's just the address, with no box around it. Hover and a box comes up with four buttons at its end: bookmark the page, open it in Split View, copy the link, and a site menu with everything the old card had (the connection, print, zoom, the blocker, permissions and the rest). Click and you're typing, the whole address selected, with no card popping open first. If you'd rather see only the site, like Dia, turn off Settings › Show the full address.
+
+The suggestions while you type are as wide as the bar now, and they hang straight off it as one card instead of a short list off to the left.
+
 ## 1.0.0 · 24 November 2026
 
 Quo 1.0. Groups inside groups, and splitting tabs by dragging one onto another.

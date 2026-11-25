@@ -12,7 +12,13 @@ import SwiftUI
 // takes the screen, as the bookmarks bar does.
 //
 // The field is the tab's own (TabAddressField): the same draft, the same
-// list of places under it, the same site card. Only where it is drawn moves.
+// list of places under it. Only where it is drawn moves.
+//
+// As Dia has it: at rest, just the site, on nothing; under the pointer, a
+// ground comes up under it with four buttons at its end — bookmark, split,
+// copy the link, and the site menu, which holds what the site card did
+// (the connection, print, zoom, the blocker, permissions and the rest); a
+// click is to type, the whole address selected, with no card in the way.
 
 struct AddressBar: View {
     @ObservedObject var browser: Browser
@@ -37,6 +43,9 @@ struct AddressBar: View {
     /// The bar's buttons, back to the extensions: the column's 26 points,
     /// or 30 beside the roomier field.
     @MainActor static func door(_ prefs: Preferences) -> CGFloat { prefs.roomyTabs ? 30 : 26 }
+    /// The corners of the field and its list while typed in: one card, as
+    /// Dia's opens.
+    static let openCorner: CGFloat = 10
 
     var body: some View {
         HStack(spacing: 8) {
@@ -48,7 +57,7 @@ struct AddressBar: View {
                 DragStrip()
             } else {
                 if let tab = browser.active {
-                    Field(browser: browser, tab: tab)
+                    Field(browser: browser, prefs: browser.prefs, tab: tab)
                 } else {
                     Spacer(minLength: 0)
                 }
@@ -77,9 +86,16 @@ struct AddressBar: View {
     /// rest dim; clicked, or with ⌘L, the field.
     private struct Field: View {
         @ObservedObject var browser: Browser
+        /// For Show the full address, which redraws the bar as it's switched.
+        @ObservedObject var prefs: Preferences
         @ObservedObject var tab: Tab
         @State private var hovering = false
         @State private var shake: CGFloat = 0
+        /// The site menu button, for the menu to hang from.
+        @State private var menuAnchor = ViewAnchor.Box()
+        /// The field's box, for the list to hang from (TabOffersPanel).
+        @State private var boxAnchor = ViewAnchor.Box()
+        @ObservedObject private var siteMenu = SiteCardPanel.state
 
         private var editing: Bool { browser.editingTab == tab.id && !browser.renamingTab }
 
@@ -103,7 +119,20 @@ struct AddressBar: View {
                     resting
                 }
             }
+            // The whole address, under the pointer: on the field alone, not
+            // over its buttons, whose own tooltips it hid.
+            .help(shown?.absoluteString ?? "")
+            .overlay(alignment: .trailing) {
+                // Dia's four, at the end of the field under the pointer, or
+                // while the site menu hangs from it.
+                if !editing, tab.isWeb, hovering || siteMenu.open || siteMenu.testHover {
+                    tools.transition(.opacity)
+                }
+            }
+            .animation(Motion.quick, value: hovering)
             .frame(height: AddressBar.field(browser.prefs))
+            .background(ViewAnchor(box: boxAnchor))
+            .onAppear { TabOffersPanel.barBox = boxAnchor }
             .contentShape(Field.shape)
             .onHover { hovering = $0 }
             .onTapGesture(perform: begin)
@@ -115,7 +144,6 @@ struct AddressBar: View {
                 shake = 0
                 withAnimation(.easeOut(duration: 0.5)) { shake = 1 }
             }
-            .help(shown?.absoluteString ?? "")
         }
 
         /// White over whatever the bar lies on, never a grey of its own: on
@@ -124,13 +152,51 @@ struct AddressBar: View {
         /// grey sat on it as a slab (as the column's rows do, see Greys).
         /// Typing, it is the page's own ground, nearly solid, so the text
         /// sits on something steady, with the colour just showing through.
+        /// At rest, nothing under the site but the bar; the ground comes up
+        /// under the pointer, as Dia's does.
+        @ViewBuilder
         private var ground: some View {
-            let fill: Color = editing ? Palette.ground.opacity(0.88) : hovering ? Field.lifted : Field.lift
-            return Field.shape
-                .fill(fill)
-                .overlay {
-                    Field.shape.strokeBorder(editing ? Palette.faint : Field.rim, lineWidth: editing ? 1 : 0.5)
+            let up = editing || hovering || siteMenu.open || siteMenu.testHover
+            if editing && !browser.tabOffers.isEmpty {
+                // Its list open under it: the top of one card with it, the
+                // page's ground, square at the bottom, the line under it
+                // the one between the two.
+                let open = UnevenRoundedRectangle(cornerRadii: .init(topLeading: AddressBar.openCorner, bottomLeading: 0,
+                                                                     bottomTrailing: 0, topTrailing: AddressBar.openCorner),
+                                                  style: .continuous)
+                open.fill(Palette.ground)
+                    .overlay { open.strokeBorder(Palette.hairline, lineWidth: 1) }
+            } else {
+                let fill: Color = editing ? Palette.ground.opacity(0.88) : up ? Field.lifted : .clear
+                Field.shape
+                    .fill(fill)
+                    .overlay {
+                        Field.shape.strokeBorder(editing ? Palette.faint : up ? Field.rim : .clear, lineWidth: editing ? 1 : 0.5)
+                    }
+            }
+        }
+
+        /// Bookmark the page, split it, copy its link, and the site menu.
+        private var tools: some View {
+            HStack(spacing: 2) {
+                BarTool(symbol: browser.pageKept ? "bookmark.fill" : "bookmark",
+                        help: browser.pageKept ? "Edit This Bookmark" : "Bookmark This Page") {
+                    browser.bookmarkCurrent()
                 }
+                if browser.prefs.splitView {
+                    BarTool(symbol: "rectangle.split.2x1", help: browser.split(for: tab) == nil ? "Open in Split View" : "Add to Split View") {
+                        browser.openInSplit(tab)
+                    }
+                }
+                BarTool(symbol: "link", help: "Copy Link") { browser.copyAddress() }
+                BarTool(symbol: "slider.horizontal.3", help: "Site Menu", lit: siteMenu.open) {
+                    guard let button = menuAnchor.view else { return }
+                    SiteCardPanel.toggleMenu(for: tab, in: browser, under: button)
+                }
+                .background(ViewAnchor(box: menuAnchor))
+                .onAppear { if Store.testing { SiteCardPanel.state.anchor = menuAnchor } }
+            }
+            .padding(.trailing, 4)
         }
 
         static let lift = shade(light: 0.55, dark: 0.07)
@@ -179,21 +245,32 @@ struct AddressBar: View {
 
         private func begin() {
             guard !editing else { return }
+            SiteCardPanel.hide()
             // A new tab has its field over the page already.
-            if tab.isBlank || tab.shownURL == nil { browser.edit() } else { browser.beginTabEdit(tab) }
+            if tab.isBlank || tab.shownURL == nil { browser.edit() } else {
+                // To type, the whole address selected: the site's things are
+                // behind the site menu button, not in a card in the way.
+                SiteCardPanel.quietNext = true
+                browser.beginTabEdit(tab)
+            }
         }
 
         @ViewBuilder
         private var line: some View {
             if let url = shown, let rest = AtRest.of(url), rest.kind == .secure || rest.kind == .notSecure {
+                // The whole address, the site in ink and the rest dim; or,
+                // with Show the full address off, the site alone, as Dia has
+                // it, the rest a click away and in the tooltip.
                 HStack(spacing: 0) {
                     AtRestLine(rest: rest, size: size)
                         .layoutPriority(1)
-                    Text(AddressBar.after(url))
-                        .font(.system(size: size))
-                        .foregroundStyle(Palette.muted)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if prefs.barFullAddress {
+                        Text(AddressBar.after(url))
+                            .font(.system(size: size))
+                            .foregroundStyle(Palette.muted)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             } else if let url = shown, !tab.isBlank {
                 Text(url.absoluteString)
@@ -217,4 +294,43 @@ struct AddressBar: View {
         if let fragment = url.fragment(percentEncoded: true) { rest += "#" + fragment }
         return rest == "/" ? "" : rest
     }
+}
+
+/// One of the address bar's buttons under the pointer: a mark, a ground
+/// under the pointer or while what it opened is up.
+private struct BarTool: View {
+    let symbol: String
+    let help: String
+    var lit = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(hovering || lit ? Palette.ink : Palette.muted)
+                .frame(width: 24, height: 22)
+                .background(Palette.ink.opacity(hovering || lit ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+/// The AppKit view under a SwiftUI one, for a window to hang from it.
+struct ViewAnchor: NSViewRepresentable {
+    final class Box { weak var view: NSView? }
+    let box: Box
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        box.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) { box.view = view }
 }
