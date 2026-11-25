@@ -2559,39 +2559,6 @@ private struct ExtensionButtons: View {
         }
     }
 
-    /// Under each button: the window held still while the pointer is over
-    /// it, so a ⌘-drag moves the button, not the window it sits in the title
-    /// bar of. Takes no clicks itself, and is told of the pointer by the
-    /// button's own hover: a tracking area of its own took the hover from
-    /// the button, which then never lit up.
-    private struct StillWindow: NSViewRepresentable {
-        let on: Bool
-        func makeNSView(context: Context) -> Still { Still() }
-        func updateNSView(_ view: Still, context: Context) { view.hold(on) }
-
-        final class Still: NSView {
-            private var over: NSWindow?
-
-            override var mouseDownCanMoveWindow: Bool { false }
-            override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-            override func viewWillMove(toWindow newWindow: NSWindow?) {
-                hold(false)
-                super.viewWillMove(toWindow: newWindow)
-            }
-
-            func hold(_ on: Bool) {
-                if on, over == nil, let window {
-                    over = window
-                    DragStrip.hold(window, true)
-                } else if !on, let window = over {
-                    over = nil
-                    DragStrip.hold(window, false)
-                }
-            }
-        }
-    }
-
     /// A real view under the button, so the popup has something to hang from.
     private struct Anchor: NSViewRepresentable {
         let id: String

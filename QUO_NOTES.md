@@ -2,6 +2,14 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.2 · 25 November 2026
+
+Selecting the address no longer drags the window.
+
+The address bar sits in the window's title bar, so holding and dragging over the address to select it moved the whole window instead. Now the window stays put while your mouse is over the bar, and a drag there selects text like it should.
+
+And when you click into the bar, you see the full address, https:// and all.
+
 ## 1.0.1 · 25 November 2026
 
 A new icon, and an address bar that stays out of the way.

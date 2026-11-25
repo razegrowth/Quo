@@ -1465,7 +1465,11 @@ final class Bench {
                   let frame = window.contentView?.superview
             else { answer(["error": "hit needs an x and a y"]); return }
             let point = NSPoint(x: x, y: Double(window.frame.height) - y)
+            // "press": as a left press would find it, for what claims only
+            // a press (the address bar's, BarPress).
+            if request["press"] as? Bool == true { BarPress.Press.probing = true }
             let hit = frame.hitTest(frame.convert(point, from: nil))
+            BarPress.Press.probing = false
             if request["middle"] as? Bool == true {
                 // The middle button pressed and let go there. A probe's window
                 // is hidden and takes no events through the app, so they are

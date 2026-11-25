@@ -2514,7 +2514,10 @@ final class Browser: NSObject, ObservableObject {
             return
         }
         renamingTab = false
-        tabDraft = Address.editable(url)
+        // The address bar shows the address whole once it's to be edited,
+        // https:// and all, as Safari's and Chrome's do; the tab's own field
+        // in the column keeps it short.
+        tabDraft = addressBarUp ? url.absoluteString : Address.editable(url)
         tabOriginal = tabDraft
         tabOffers = []
         tabPicked = nil

@@ -36,8 +36,23 @@ def main():
         sv.page("watch"); time.sleep(0.6)
         picture("rest")
 
+        # A press on the address: the bar's own, never the window's to drag
+        # (the bar lies in the title bar, where it carried the window off).
+        h = sv.cmd({"do": "hit", "x": 600, "y": 20, "press": True})
+        t.ok("a press on the address is the bar's", "Press" in h["view"], h)
+        t.ok("…and can't move the window", not h["canMoveWindow"], h)
+
+        # Clicked to edit: the whole address, https:// (here http://) and all.
+        r = sv.cmd({"do": "tab-type", "text": ""})
+        t.ok("editing shows the scheme", r["field"].startswith("http://"), r["field"])
+        sv.cmd({"do": "press", "code": 53, "chars": "\u001b", "mods": []}); time.sleep(0.4)
+
+        h = sv.cmd({"do": "hit", "x": 600, "y": 20})
+        t.ok("away from the bar, the window can be moved", h["windowMovable"], h)
         r = bar(hover=True)
         t.ok("under the pointer: the site menu button is there", r["anchor"], r)
+        h = sv.cmd({"do": "hit", "x": 600, "y": 20})
+        t.ok("over the bar, the window is held still (no drag from the title bar)", not h["windowMovable"], h)
         picture("hover")
 
         r = bar(menu=True, picture=f"{OUT}/bar-menu.png" if OUT else None)
@@ -45,6 +60,10 @@ def main():
         t.ok("…without an edit", not r["editing"], r)
         r = bar(menu=True)
         t.ok("the button again: it goes", not r["card"], r)
+        bar(hover=False); time.sleep(0.3)
+        h = sv.cmd({"do": "hit", "x": 600, "y": 20})
+        t.ok("off the bar again, the window can be moved", h["windowMovable"], h)
+        bar(hover=True)
 
         bar(menu=True)
         r = bar(hover=False, click=True)

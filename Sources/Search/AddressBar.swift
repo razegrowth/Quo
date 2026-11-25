@@ -122,6 +122,15 @@ struct AddressBar: View {
             // The whole address, under the pointer: on the field alone, not
             // over its buttons, whose own tooltips it hid.
             .help(shown?.absoluteString ?? "")
+            // The bar sits in the window's title bar: a press there that
+            // SwiftUI didn't claim on the way down moved the window, so
+            // holding and dragging over the address carried the window off.
+            // The press is the bar's, to type in; the buttons keep theirs.
+            .overlay {
+                if !editing {
+                    BarPress(trailing: tab.isWeb && (hovering || siteMenu.open || siteMenu.testHover) ? 112 : 0, press: begin)
+                }
+            }
             .overlay(alignment: .trailing) {
                 // Dia's four, at the end of the field under the pointer, or
                 // while the site menu hangs from it.
@@ -135,6 +144,9 @@ struct AddressBar: View {
             .onAppear { TabOffersPanel.barBox = boxAnchor }
             .contentShape(Field.shape)
             .onHover { hovering = $0 }
+            // Over the address, a press and drag is to select it, never to
+            // carry the window off: the bar lies in the title bar.
+            .background(StillWindow(on: hovering || siteMenu.testHover))
             .onTapGesture(perform: begin)
             .contextMenu { menu }
             .offset(x: wobble)
@@ -334,3 +346,78 @@ struct ViewAnchor: NSViewRepresentable {
 
     func updateNSView(_ view: NSView, context: Context) { box.view = view }
 }
+
+/// The address bar's press: begins the edit on the way down, and never lets
+/// the window be dragged from the bar (it lies in the title bar). Only a
+/// plain left press is taken; hovering, right-clicks and the buttons at the
+/// bar's end (`trailing`) go on to what's under it.
+struct BarPress: NSViewRepresentable {
+    var trailing: CGFloat
+    let press: () -> Void
+
+    func makeNSView(context: Context) -> Press { Press() }
+
+    func updateNSView(_ view: Press, context: Context) {
+        view.trailing = trailing
+        view.press = press
+    }
+
+    final class Press: NSView {
+        var trailing: CGFloat = 0
+        var press: () -> Void = {}
+
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        /// A press asked about by the bench (`hit` … `press`), with no event.
+        @MainActor static var probing = false
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            let pressed = Press.probing || NSApp.currentEvent.map {
+                $0.type == .leftMouseDown && $0.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            } == true
+            guard pressed else { return nil }
+            let inside = convert(point, from: superview)
+            guard inside.x <= bounds.width - trailing else { return nil }
+            return super.hitTest(point)
+        }
+
+        override func mouseDown(with event: NSEvent) { press() }
+    }
+}
+
+/// Under something in the title bar that takes its own presses (an
+/// extension's button, the address bar): the window held still while the
+/// pointer is over it, so a drag there is the thing's, not the window's —
+/// the window server starts moving a window before the app sees the
+/// press. Takes no clicks itself, and is told of the pointer by the thing's
+/// own hover: a tracking area of its own took the hover from the button,
+/// which then never lit up.
+struct StillWindow: NSViewRepresentable {
+    let on: Bool
+    func makeNSView(context: Context) -> Still { Still() }
+    func updateNSView(_ view: Still, context: Context) { view.hold(on) }
+
+    final class Still: NSView {
+        private var over: NSWindow?
+
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            hold(false)
+            super.viewWillMove(toWindow: newWindow)
+        }
+
+        func hold(_ on: Bool) {
+            if on, over == nil, let window {
+                over = window
+                DragStrip.hold(window, true)
+            } else if !on, let window = over {
+                over = nil
+                DragStrip.hold(window, false)
+            }
+        }
+    }
+}
+
