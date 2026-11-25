@@ -84,6 +84,20 @@ if [ "${1:-}" = "release" ]; then
   PUSHED="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "origin/$(git rev-parse --abbrev-ref HEAD)")"
   git merge-base --is-ancestor HEAD "$PUSHED" \
     || { echo "release: push first — the release's tag goes on this commit ($PUSHED)" >&2; exit 1; }
+  # Quo's repo still has Search's own release tags, v1.0.1 to v1.0.15, from
+  # the fork. A release whose tag is one of them hung on Search's commit,
+  # and its source downloads were Search's (1.0.1 did). Its tag is this
+  # commit's, so one found anywhere else is moved here first, before
+  # anything is built. Search's own tags stay in Search's repo.
+  HERE="$(git rev-parse HEAD)"
+  THERE="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
+  [ -n "$THERE" ] || THERE="$(git ls-remote origin "refs/tags/$TAG" | cut -f1)"
+  if [ -n "$THERE" ] && [ "$THERE" != "$HERE" ]; then
+    echo "release: $TAG is on ${THERE:0:7}, not this commit — moving it here"
+    git tag -f "$TAG" "$HERE" >/dev/null
+    git push -q -f origin "refs/tags/$TAG" \
+      || { echo "release: couldn't move $TAG to this commit — try again" >&2; exit 1; }
+  fi
   SEARCH_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG" ./build.sh release ship
   # The signed feed has to hold up before it goes out: a broken one stops
   # every Quo's updates without a word.
