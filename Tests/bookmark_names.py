@@ -12,7 +12,7 @@ Checked through bench `marks`, nothing drawn on a screen: the bar's buttons
 laid out off every screen (an unnamed one is a square as tall as the rest),
 every folder's menu and the Bookmarks menu with each folder opened (each
 bookmark has an image, the site's or the bar's letter, and reads as a name
-or its address), and the button's list. A name emptied in the ⇧⌘B card
+or its address), and the button's list. A name emptied in the ⌥⌘B card
 stays empty after a relaunch. `--pictures DIR` saves what it looks like.
 """
 import json
@@ -107,7 +107,7 @@ def main():
         t.ok("the list: every row reads as something", all(r["label"].strip() for r in rows), rows)
         t.ok("the list: kept icons found two deep", any(r["depth"] == 2 and r["icon"] for r in rows), rows)
 
-        # The ⇧⌘B card's Name field: emptied, and only spaces.
+        # The ⌥⌘B card's Name field: emptied, and only spaces.
         marks(rename=["https://beta.example/", ""])
         marks(rename=["https://alpha.example/", "   "])
         bar = {b["label"]: b for b in marks()["bar"]}

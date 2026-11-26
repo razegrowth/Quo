@@ -387,6 +387,12 @@ final class Preferences: ObservableObject {
     @Published var tabsGive: Bool {
         didSet { store.set(tabsGive, forKey: "tabs.give") }
     }
+    /// A card with a picture of a tab's page beside its row while the
+    /// pointer rests there, as Chrome's hover cards (see TabPreview). On
+    /// unless turned off.
+    @Published var tabPreviews: Bool {
+        didSet { store.set(tabPreviews, forKey: "tabs.previews") }
+    }
     @Published var awakeSites: Set<String> {
         didSet { store.set(Array(awakeSites).sorted(), forKey: "tabs.awakeSites") }
     }
@@ -1227,6 +1233,7 @@ final class Preferences: ObservableObject {
         keywords = store.data(forKey: "search.keywords")
             .flatMap { try? JSONDecoder().decode([Keyword].self, from: $0) } ?? []
         tabsGive = store.bool(forKey: "tabs.give")
+        tabPreviews = store.object(forKey: "tabs.previews") as? Bool ?? true
         awakeSites = Set(store.stringArray(forKey: "tabs.awakeSites") ?? [])
         popupWindows = store.bool(forKey: "tabs.popupWindows")
         popupSites = Set(store.stringArray(forKey: "privacy.popupSites") ?? [])
@@ -1503,6 +1510,7 @@ final class Preferences: ObservableObject {
         SmoothWheel.on = smoothWheel
         take(\.glyph, "glyph", store.string(forKey: "glyph").flatMap(Glyph.init), or: .icons)
         take(\.tabsGive, store.bool(forKey: "tabs.give"))
+        take(\.tabPreviews, "tabs.previews", store.object(forKey: "tabs.previews") as? Bool, or: true)
         take(\.instantMotion, store.bool(forKey: Motion.instantKey))
         take(\.showsTabShortcuts, store.bool(forKey: "tabs.shortcuts"))
         take(\.spacesOnCommand, store.bool(forKey: Preferences.spacesOnCommandKey))

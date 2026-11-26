@@ -272,6 +272,10 @@ final class Inbox: ObservableObject {
         return (note.when ?? .distantPast) >= when ? note : first
     }
 
+    /// Reload on the pin: the next look reads the inbox again, without
+    /// waiting out the half minute.
+    func stale(_ tab: UUID) { fetched[tab] = nil }
+
     /// For the bench: as if never read.
     func forget(_ tab: UUID) {
         notes[tab] = nil

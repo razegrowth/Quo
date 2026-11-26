@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import Search
 
-/// ⇧⌘B (Add This Page) files a new bookmark in the folder picked last on
+/// ⌥⌘B (Add This Page) files a new bookmark in the folder picked last on
 /// its card, per profile, instead of the top level every time.
 @MainActor
 final class BookmarkFolderMemoryTests: XCTestCase {

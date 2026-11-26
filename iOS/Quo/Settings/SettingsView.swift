@@ -216,9 +216,8 @@ extension MacSync {
         if let problem { return problem }
         if running && lastSynced == nil { return "Syncing\u{2026}" }
         guard let lastSynced else { return "Not yet synced" }
-        let when = RelativeDateTimeFormatter().localizedString(for: lastSynced, relativeTo: Date())
-        let with = macs.isEmpty ? "no Mac yet" : macs.joined(separator: ", ")
-        return "\(with) \u{00B7} \(when)"
+        let with = macs.isEmpty ? "no Mac yet" : "with " + SyncTabs.once(macs).joined(separator: ", ")
+        return "\(with) \u{00B7} \(SyncTabs.synced(lastSynced))"
     }
 }
 

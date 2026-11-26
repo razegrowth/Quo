@@ -181,6 +181,10 @@ enum SettingsIndex {
               title: "Sync history", detail: "Where you've been, on your other Macs and Quo for iPhone, while sync is on",
               more: "The last 60 days, in your own iCloud or folder, sent only once another device of yours has shown up. Clear History, or forgetting a page, clears it on your other devices too. Private tabs are never kept, and a space with its own sign-ins keeps its history on this Mac.",
               keys: ["sync.history"], words: ["history sync", "sync history", "devices", "icloud", "iphone"], parent: "sync"),
+        .init(id: "sync.devices", group: "browser", icon: "iphone.and.arrow.forward",
+              title: "Your other devices", detail: "The Macs and iPhones you can send a page to",
+              more: "Remove one you've stopped using, a test install or an old phone: it leaves Send to and the tabs from other devices. A device still in use comes back the next time Quo is opened on it. Devices not heard from in a week leave Send to on their own.",
+              words: ["devices", "iphone", "send to device", "remove device", "forget device", "sync"], kind: .wide, parent: "sync"),
         .init(id: "quit.confirm", group: "browser", icon: "power",
               title: "Confirm before quitting", detail: "Ask before ⌘Q or Quit \(Store.name) closes the browser",
               keys: ["quit.confirm"], words: ["quit", "cmd q"]),
@@ -276,6 +280,10 @@ enum SettingsIndex {
         .init(id: "tabs.give", group: "tablook", icon: "hand.point.up.left",
               title: "Tabs give when pressed", detail: "A tab sinks a little under the pointer, as in Arc",
               keys: ["tabs.give"], words: ["press", "animation", "bounce"]),
+        .init(id: "tabs.previews", group: "tablook", icon: "rectangle.portrait.on.rectangle.portrait",
+              title: "Preview a tab when you rest on it", detail: "Its page, title and site beside the column, as in Chrome",
+              more: "Not for the tab you're on. A tab not opened since Quo started shows its title and site alone.",
+              keys: ["tabs.previews"], words: ["hover", "hover card", "thumbnail", "preview", "peek"]),
         .init(id: "bookmarks.bar", group: "tablook", icon: "bookmark",
               title: "Show the bookmarks bar", detail: "Your bookmarks in a row above the page",
               keys: ["bookmarks.bar"], words: ["favorites bar"]),
@@ -755,6 +763,7 @@ enum SettingsIndex {
         case "pins.links": return prefs.pinsKeepSite
         case "launcher.key": return prefs.launcher
         case "shield.lists": return prefs.shielded
+        case "sync.devices": return !Sync.shared.otherDevices.isEmpty
         // Only Search's own releases update themselves: a fork is built again.
         case "updates.version", "updates.auto": return Updater.updates
         default: return true
@@ -781,6 +790,7 @@ enum SettingsIndex {
         case "links.peek.stays": return "Only when links or pins open peeks"
         case "launcher.key": return "Only with the address field from any app on"
         case "shield.lists": return "Only while ads and trackers are blocked"
+        case "sync.devices": return "Only while sync is on and another device has shown up"
         default: return "Only with the tabs down a side"
         }
     }

@@ -63,7 +63,27 @@ struct TabTarget: Equatable, Hashable, Identifiable {
     var device: String
     var name: String
     var phone: Bool
+    /// When it was last heard from, seconds since 1970.
+    var seen: Double = 0
+    /// What a menu calls it: its name, and when it was last heard from
+    /// while another one has the same name (an iPhone can't tell an app
+    /// its own name, so every iPhone is "iPhone"). See SyncTabs.targets.
+    var label: String = ""
     var id: String { device }
+
+    init(device: String, name: String, phone: Bool, seen: Double = 0) {
+        self.device = device
+        self.name = name
+        self.phone = phone
+        self.seen = seen
+        label = name
+    }
+
+    /// The same device, whatever its label says this minute.
+    static func == (a: TabTarget, b: TabTarget) -> Bool {
+        a.device == b.device && a.name == b.name && a.phone == b.phone
+    }
+    func hash(into hasher: inout Hasher) { hasher.combine(device) }
 }
 
 /// A page another device sent here, and who sent it.
@@ -120,6 +140,11 @@ enum SyncTabs {
     /// A device not heard from for this long is left out: its tabs are
     /// likely long closed, and it may be gone.
     static let stale: Double = 30 * 24 * 60 * 60
+    /// A device a page can still be sent to: heard from within a week. A
+    /// page sent waits three days for it (keepSent); one quiet longer than
+    /// that is most likely a test install or a phone put away, and only
+    /// made the list longer.
+    static let reach: Double = 7 * 24 * 60 * 60
     /// How often a device writes its tabs at most, unless it is going away
     /// (put in the background, or another app comes forward). Under the
     /// Mac's half-minute pass, so the next pass after a change writes it.
@@ -246,10 +271,57 @@ enum SyncTabs {
     /// from lately with a tabs file there, open tabs or not, the one heard
     /// from last first.
     static func targets(_ files: [SyncFile], scope: String, device: String, now: Double) -> [TabTarget] {
-        files.filter { $0.scope == scope && $0.device != device && now - $0.written < stale }
+        var targets = files.filter { $0.scope == scope && $0.device != device && now - $0.written < reach }
             .sorted { a, b in a.written != b.written ? a.written > b.written : a.device < b.device }
             .compactMap(read)
-            .map { TabTarget(device: $0.device, name: $0.name, phone: $0.phone) }
+            .map { TabTarget(device: $0.device, name: $0.name, phone: $0.phone, seen: $0.written) }
+        // Two called the same: each says when it was last heard from.
+        let names = Dictionary(grouping: targets, by: \.name)
+        for i in targets.indices where (names[targets[i].name]?.count ?? 0) > 1 {
+            targets[i].label = "\(targets[i].name) \u{00B7} \(seen(targets[i].seen, now: now))"
+        }
+        return targets
+    }
+
+    /// Every other device with a tabs file in a scope, however long ago it
+    /// was heard from, the one heard from last first: for Settings, to
+    /// remove the ones that are gone.
+    static func devices(_ files: [SyncFile], scope: String, device: String) -> [TabTarget] {
+        files.filter { $0.scope == scope && $0.device != device }
+            .sorted { a, b in a.written != b.written ? a.written > b.written : a.device < b.device }
+            .compactMap(read)
+            .map { TabTarget(device: $0.device, name: $0.name, phone: $0.phone, seen: $0.written) }
+    }
+
+    /// When the last sync was, for the line under Sync: "synced just now",
+    /// "synced 4 min ago". Both apps sync every half minute, so it is
+    /// nearly always just now. A clock a second ahead of the pass made
+    /// Apple's relative wording say "in 0 seconds", which read as a
+    /// countdown.
+    static func synced(_ at: Date, now: Date = Date()) -> String {
+        let ago = max(0, now.timeIntervalSince(at))
+        if ago < 60 { return "synced just now" }
+        if ago < 60 * 60 { return "synced \(Int(ago / 60)) min ago" }
+        if ago < 24 * 60 * 60 { return "synced \(Int(ago / 3600)) h ago" }
+        let days = Int(ago / 86400)
+        return days == 1 ? "synced yesterday" : "synced \(days) days ago"
+    }
+
+    /// Names said once each, in order: four iPhones are "iPhone".
+    static func once(_ names: [String]) -> [String] {
+        var seen = Set<String>()
+        return names.filter { seen.insert($0).inserted }
+    }
+
+    /// When a device was last heard from, in a word or two: "active now",
+    /// "seen 20 min ago", "seen 3 h ago", "seen 2 days ago".
+    static func seen(_ at: Double, now: Double) -> String {
+        let ago = max(0, now - at)
+        if ago < 5 * 60 { return "active now" }
+        if ago < 60 * 60 { return "seen \(Int(ago / 60)) min ago" }
+        if ago < 24 * 60 * 60 { return "seen \(Int(ago / 3600)) h ago" }
+        let days = Int(ago / 86400)
+        return days == 1 ? "seen yesterday" : "seen \(days) days ago"
     }
 
     /// Pages the other devices sent to this one that it hasn't opened yet,

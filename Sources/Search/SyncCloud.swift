@@ -148,6 +148,16 @@ final class SyncCloud {
         forget()
     }
 
+    /// Another device's files in these scopes, out of iCloud: Settings ›
+    /// Sync removing a device that's gone.
+    func remove(device: String, scopes: Set<String>) async {
+        let names = files.filter { $0.value.device == device && scopes.contains($0.value.scope) }.map(\.key)
+        guard !names.isEmpty else { return }
+        try? await backend.delete(names)
+        for name in names { files[name] = nil }
+        keep()
+    }
+
     func forget() {
         files = [:]
         token = nil

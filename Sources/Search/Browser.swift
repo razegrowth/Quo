@@ -241,7 +241,7 @@ final class Browser: NSObject, ObservableObject {
     /// The dropdown off the button.
     @Published var bookmarksOpen = false
     /// What hangs off the button instead of the list: the card for one
-    /// bookmark, its name and folder, as ⇧⌘B opens it.
+    /// bookmark, its name and folder, as ⌥⌘B opens it.
     @Published var bookmarkCard: Bookmark.ID?
 
     /// The page you are on is kept, wherever it is filed.
@@ -249,7 +249,7 @@ final class Browser: NSObject, ObservableObject {
         active?.address.map(bookmarks.contains) ?? false
     }
 
-    /// ⇧⌘B. The page you are on, at the end of the list, and the card off
+    /// ⌥⌘B. The page you are on, at the end of the list, and the card off
     /// the button to name it and file it — or the card for it, if it was
     /// kept already. Without the button on screen (the tabs folded away)
     /// there is nothing to hang the card from, and a word says what
@@ -2246,6 +2246,18 @@ final class Browser: NSObject, ObservableObject {
     static func home(of entry: Session.Entry, at url: URL) -> URL? {
         guard entry.pin != nil else { return nil }
         return entry.home.flatMap(URL.init(string:)) ?? url
+    }
+
+    /// Reload in a pin's menu, on the pin you are on or not: its page
+    /// fetched again where it stands (a pin put down is woken, which is its
+    /// reload), and a calendar's or an inbox's card read again (Glance).
+    func reloadPin(_ tab: Tab) {
+        tab.reload()
+        switch GlanceKind.of(tab.home ?? tab.address) {
+        case .calendar: Meetings.shared.refresh()
+        case .mail: Inbox.shared.stale(tab.id)
+        case nil: break
+        }
     }
 
     /// A double-click on the pin you are on: back to the page it was pinned

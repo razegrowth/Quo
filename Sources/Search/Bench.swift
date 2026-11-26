@@ -1008,7 +1008,7 @@ final class Bench {
                 "archive": browser.archiving,
                 "archived": browser.archive.tabs.map { ["url": $0.url.absoluteString, "title": $0.title] },
                 "bookmarks": browser.bookmarking,
-                // The dropdown off the button, the ⇧⌘B card in it, and how
+                // The dropdown off the button, the ⌥⌘B card in it, and how
                 // many are kept, for every window alike.
                 "bookmarksOpen": browser.bookmarksOpen,
                 "bookmarkCard": browser.bookmarkCard != nil,
@@ -1226,6 +1226,70 @@ final class Bench {
                 }
             }
             step(1)
+
+        case "deviceswell":
+            // Settings › General › Your other devices, drawn with made-up
+            // devices in light and dark, to `path`-light.png and -dark.png,
+            // without sync or a window. Test runs only.
+            guard Store.testing, let path = request["path"] as? String else { answer(["error": "deviceswell PATH, test runs only"]); return }
+            let now = Date().timeIntervalSince1970
+            let devices = [
+                TabTarget(device: "a", name: "iPhone", phone: true, seen: now - 60),
+                TabTarget(device: "b", name: "iPhone 17 Pro Simulator", phone: true, seen: now - 2 * 3600),
+                TabTarget(device: "c", name: "Studio", phone: false, seen: now - 2 * 86400),
+                TabTarget(device: "d", name: "iPhone", phone: true, seen: now - 9 * 86400),
+            ]
+            for (name, look) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                let row = VStack(spacing: 0) {
+                    SettingRow(icon: "iphone", title: "Your other devices", detail: "The Macs and iPhones you can send a page to",
+                               more: "More", wide: true) {
+                        DeviceWell(devices: devices, now: now) { _ in }
+                    }
+                }
+                .frame(width: 620)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Palette.ground))
+                .padding(20)
+                .background(Palette.frame)
+                let host = NSHostingView(rootView: row)
+                host.appearance = NSAppearance(named: look)
+                host.frame.size = host.fittingSize
+                host.layoutSubtreeIfNeeded()
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(path)-\(name).png"))
+                }
+            }
+            answer(["path": path])
+
+        case "tabpreview":
+            // The pointer resting on a tab's row in the column, or leaving
+            // it ("over": false), through the row's own hover answer as
+            // hoversweep does; after "wait" seconds, whether its card
+            // (TabPreview) is up and for which tab, and the card as drawn,
+            // to `path` as a PNG, without showing it. Test runs only.
+            guard Store.testing else { answer(["error": "tabpreview is for test runs"]); return }
+            guard let tab = find(request, in: browser) else { answer(missing(request)); return }
+            guard let hover = Bench.hoverRows[tab.id] else { answer(["error": "that tab has no row in the column"]); return }
+            hover(request["over"] as? Bool ?? true)
+            let wait = request["wait"] as? Double ?? 0.8
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                MainActor.assumeIsolated {
+                    var reply: [String: Any] = [
+                        "showing": TabPreview.showing,
+                        "tab": TabPreview.tabID.map { String($0.uuidString.prefix(8)).lowercased() } ?? "",
+                        "canPreview": tab.canPreview,
+                        "title": TabPreview.shown.title,
+                        "site": TabPreview.shown.site ?? "",
+                        "picture": TabPreview.shown.picture.map { [Double($0.size.width), Double($0.size.height)] } ?? [],
+                    ]
+                    if let path = request["path"] as? String,
+                       let data = TabPreview.render(tab, picture: TabPreview.tabID == tab.id ? TabPreview.shown.picture : nil) {
+                        try? data.write(to: URL(fileURLWithPath: path))
+                        reply["path"] = path
+                    }
+                    answer(reply)
+                }
+            }
 
         case "hoversweep":
             // The pointer taken down the column's rows and back, one row a
@@ -1805,7 +1869,7 @@ final class Bench {
             // button's list, row by row — each with what it reads and
             // whether it wears the site's icon or a letter in its place.
             guard Store.testing else { answer(["error": "marks only works on a --test run"]); return }
-            // "rename": [url, name] — typed into the ⇧⌘B card's Name field.
+            // "rename": [url, name] — typed into the ⌥⌘B card's Name field.
             if let pair = request["rename"] as? [String], pair.count == 2,
                let url = URL(string: pair[0]), let kept = browser.bookmarks.bookmark(for: url) {
                 BookmarkCard.rename(kept.id, pair[1], in: browser.bookmarks)

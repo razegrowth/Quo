@@ -1543,7 +1543,143 @@ struct TabMenu: View {
     let close: () -> Void
 
     var body: some View {
-        singleMenu
+        if tab.pin != nil { pinMenu } else { singleMenu }
+    }
+
+    // A pin's own, square or row, in four parts read top to bottom as you
+    // reach for them: its page now (reload, home, copy, send), the pin
+    // itself (its name, its look, where it's kept), where it opens, and
+    // letting it go. What a loose tab's menu has that means nothing on a
+    // pin (Site Information, which a pin never had, closing other tabs or
+    // the ones below, reopening one closed) isn't here, and what only
+    // applies now and then (back home, the pinned page replaced, sound)
+    // shows only then, rather than sitting there greyed out.
+    @ViewBuilder
+    private var pinMenu: some View {
+        let rows = browser.prefs.showsPinRows
+        let wandered = tab.isWeb && tab.home.map { !Browser.samePage($0, tab.address) } ?? false
+        // Its page, now.
+        Button("Reload") { browser.reloadPin(tab) }
+            .disabled(tab.address == nil)
+        if wandered {
+            Button("Back to Pinned Page") { browser.goHome(tab) }
+            Button("Pin This Page Instead") { browser.rehome(tab) }
+        }
+        if tab.noisy || tab.muted {
+            Button(tab.muted ? "Unmute Tab" : "Mute Tab") { tab.toggleMute() }
+        }
+        Divider()
+        Button("Copy Address") {
+            browser.select(tab)
+            browser.copyAddress()
+        }
+        .disabled(!tab.isWeb)
+        Button("Copy Clean Link") {
+            browser.select(tab)
+            browser.copyCleanLink()
+        }
+        .disabled(!tab.isWeb)
+        Button("Copy as Markdown Link") {
+            browser.select(tab)
+            browser.copyMarkdownLink()
+        }
+        .disabled(!tab.isWeb)
+        let targets = browser.sendable(tab) == nil ? [] : browser.sendTargets
+        if targets.count == 1, let only = targets.first {
+            Button("Send to \(only.label)") { browser.send(tab, to: only) }
+        } else if targets.count > 1 {
+            Menu("Send to Device") {
+                ForEach(targets) { target in
+                    Button {
+                        browser.send(tab, to: target)
+                    } label: {
+                        Label(target.label, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    }
+                }
+            }
+        }
+        Divider()
+        // The pin itself.
+        Button("Rename") { browser.beginTabRename(tab) }
+        if !(rows && tab.listed) {
+            Button("Change Letter") { browser.editLetter(tab) }
+        }
+        if rows {
+            Button(tab.listed ? "Show as Square" : "Show as Row") { browser.setListed(tab, !tab.listed) }
+        }
+        if browser.prefs.showsPinFolders && browser.takesFolder(tab) {
+            let folders = browser.pinFolders
+            if !folders.isEmpty {
+                Menu("Move to Folder") {
+                    ForEach(PinFolderMenu.entries(folders), id: \.folder.id) { entry in
+                        Button(entry.title) { browser.movePin(tab, into: entry.folder.id) }
+                            .disabled(tab.pinFolder == entry.folder.id)
+                    }
+                    if tab.pinFolder != nil {
+                        Divider()
+                        Button("Remove from Folder") { browser.movePin(tab, into: nil) }
+                    }
+                }
+            }
+            Button("New Folder") { browser.newPinFolder(holding: tab) }
+            Button("New Live Folder…") { LiveFolders.ask(for: browser, in: tab.pinFolder) }
+        } else if browser.prefs.showsPinFolders {
+            // A square: a live folder lands at the top of the rows, holding
+            // a feed, not this pin.
+            Button("New Live Folder…") { LiveFolders.ask(for: browser, in: nil) }
+        }
+        if browser.prefs.showsSharedPins {
+            Button(tab.everywhere ? "Only in This Space" : "Keep in Every Space") {
+                if tab.everywhere { browser.keepHere(tab) } else { browser.shareEverywhere(tab) }
+            }
+        }
+        Divider()
+        // Where it opens.
+        Button("Open in New Tab") {
+            browser.select(tab)
+            browser.duplicate()
+        }
+        .disabled(!tab.isWeb)
+        if browser.prefs.splitView, browser.split(for: tab) == nil {
+            let current = browser.active
+            let adding = browser.activeSplit != nil && current?.id != tab.id
+            Button(adding ? "Add to Split View" : "Open in Split View") { browser.openInSplit(tab) }
+                .disabled(tab.bench || (adding && current.map { !browser.canJoin(tab, beside: $0) } ?? true))
+        }
+        if browser.prefs.sitesInPanel {
+            Button("Open in Side Panel") { browser.openInSidePanel(tab) }
+                .disabled(!tab.isWeb || tab.shy)
+        }
+        if browser.prefs.usesSpaces, !tab.bench, !tab.everywhere,
+           tab.address.flatMap({ Browser.extensionHost(of: $0) }) == nil {
+            Menu("Move to Space") {
+                ForEach(browser.spaces.filter { $0.id != browser.spaceID }) { space in
+                    Button {
+                        browser.move(tab, toSpace: space.id)
+                    } label: {
+                        Label(space.name, systemImage: space.symbol)
+                    }
+                }
+                if browser.spaces.count > 1 { Divider() }
+                Button("New Space…") {
+                    browser.askForSpace { space in
+                        browser.move(tab, toSpace: space.id) {
+                            browser.switchSpace(to: space.id)
+                        }
+                    }
+                }
+            }
+        }
+        Divider()
+        // Letting it go: its page for now (⌘W, the letter stays), the pin
+        // back to a tab, or gone (⇧⌘T brings it back as a tab, #834).
+        Button("Close Page") { browser.close(tab) }
+            .disabled(tab.asleep)
+        Button("Unpin") { browser.unpin(tab) }
+        Button("Delete Pin") {
+            browser.unpin(tab)
+            browser.close(tab)
+        }
     }
 
     // In five parts, each about one kind of thing, so the eye finds a
@@ -1571,7 +1707,7 @@ struct TabMenu: View {
         }
         .disabled(browser.awake(because: tab) != nil)
         Divider()
-        // Pinning it, or on a pin, the pin's own.
+        // Pinning it (a pin has a menu of its own, pinMenu).
         let rows = browser.prefs.showsPinRows
         if tab.pin == nil {
             Button("Pin") { browser.pin(tab) }
@@ -1579,57 +1715,6 @@ struct TabMenu: View {
             if rows {
                 Button("Pin as Row") { browser.pin(tab, listed: true) }
                     .disabled(!tab.isWeb || tab.shy)
-            }
-        } else {
-            if rows {
-                Button(tab.listed ? "Show as Square" : "Show as Row") { browser.setListed(tab, !tab.listed) }
-            }
-            // Settings › Tabs › Folders in pinned rows: a row of this
-            // space's own into a folder, a new one or one there is.
-            // New Live Folder… on a square too, where it lands at the top
-            // of the rows: it holds a feed, not this pin.
-            if browser.prefs.showsPinFolders && !browser.takesFolder(tab) {
-                Button("New Live Folder…") { LiveFolders.ask(for: browser, in: nil) }
-            }
-            if browser.prefs.showsPinFolders && browser.takesFolder(tab) {
-                Button("New Folder") { browser.newPinFolder(holding: tab) }
-                Button("New Live Folder…") { LiveFolders.ask(for: browser, in: tab.pinFolder) }
-                let folders = browser.pinFolders
-                if !folders.isEmpty {
-                    Menu("Move to Folder") {
-                        ForEach(PinFolderMenu.entries(folders), id: \.folder.id) { entry in
-                            Button(entry.title) { browser.movePin(tab, into: entry.folder.id) }
-                                .disabled(tab.pinFolder == entry.folder.id)
-                        }
-                        if tab.pinFolder != nil {
-                            Divider()
-                            Button("Remove from Folder") { browser.movePin(tab, into: nil) }
-                        }
-                    }
-                }
-            }
-            // A row wears its title, not its letter; and a click on it is
-            // the address, so the way home a square's double-click is
-            // (Browser.goHome) is here instead, while it has wandered.
-            if rows && tab.listed {
-                Button("Back to Pinned Page") { browser.goHome(tab) }
-                    .disabled(tab.home.map { Browser.samePage($0, tab.address) } ?? true)
-            } else {
-                Button("Change Letter") { browser.editLetter(tab) }
-            }
-            Button("Replace Pinned Page with Current URL") { browser.rehome(tab) }
-                .disabled(!tab.isWeb || tab.home.map { Browser.samePage($0, tab.address) } ?? false)
-            if browser.prefs.showsSharedPins {
-                Button(tab.everywhere ? "Only in This Space" : "Keep in Every Space") {
-                    if tab.everywhere { browser.keepHere(tab) } else { browser.shareEverywhere(tab) }
-                }
-            }
-            Button("Unpin") { browser.unpin(tab) }
-            // Away for good in one go, where Unpin, finding the row and its
-            // × took three (#834); ⇧⌘T brings it back as a tab.
-            Button("Delete") {
-                browser.unpin(tab)
-                browser.close(tab)
             }
         }
         Divider()
@@ -1779,14 +1864,14 @@ struct TabMenu: View {
         // To your iPhone (or another Mac), through sync: opens there.
         let targets = browser.sendable(tab) == nil ? [] : browser.sendTargets
         if targets.count == 1, let only = targets.first {
-            Button("Send to \(only.name)") { browser.send(tab, to: only) }
+            Button("Send to \(only.label)") { browser.send(tab, to: only) }
         } else if targets.count > 1 {
             Menu("Send to Device") {
                 ForEach(targets) { target in
                     Button {
                         browser.send(tab, to: target)
                     } label: {
-                        Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                        Label(target.label, systemImage: target.phone ? "iphone" : "laptopcomputer")
                     }
                 }
             }

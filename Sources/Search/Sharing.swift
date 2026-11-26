@@ -63,7 +63,7 @@ extension Browser {
         guard let tab, sendable(tab) != nil else { return [] }
         return sendTargets.map { target in
             let symbol = NSImage(systemSymbolName: target.phone ? "iphone" : "laptopcomputer", accessibilityDescription: nil) ?? NSImage()
-            return NSSharingService(title: "Send to \(target.name)", image: symbol, alternateImage: nil) { [weak self, weak tab] in
+            return NSSharingService(title: "Send to \(target.label)", image: symbol, alternateImage: nil) { [weak self, weak tab] in
                 guard let self, let tab else { return }
                 self.send(tab, to: target)
             }
@@ -96,7 +96,7 @@ struct SendMenuItems: View {
         if targets.count > 1 {
             Menu("Send to Device") {
                 ForEach(targets) { target in
-                    Button(target.name) { if let tab { browser.send(tab, to: target) } }
+                    Button(target.label) { if let tab { browser.send(tab, to: target) } }
                 }
             }
             .disabled(!can)

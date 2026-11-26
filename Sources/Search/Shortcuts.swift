@@ -328,9 +328,10 @@ struct Command: Identifiable {
         },
         Command("tabs.mute", "Stop Sound in Tab", .tabs, KeyCombo("m", shift: true)) { $0.pauseMedia() },
 
-        Command("bookmarks.add", "Add This Page", .bookmarks, KeyCombo("b", shift: true)) { $0.bookmarkCurrent() },
+        Command("bookmarks.add", "Add This Page", .bookmarks, KeyCombo("b", option: true)) { $0.bookmarkCurrent() },
         Command("bookmarks.show", "Show Bookmarks…", .bookmarks, nil) { $0.bookmarking = true },
-        Command("bookmarks.bar", "Show Bookmarks Bar", .bookmarks, nil) { browser in
+        // ⇧⌘B, as in Chrome.
+        Command("bookmarks.bar", "Show Bookmarks Bar", .bookmarks, KeyCombo("b", shift: true)) { browser in
             withAnimation(Motion.glide) { browser.prefs.bookmarksBar.toggle() }
         },
 

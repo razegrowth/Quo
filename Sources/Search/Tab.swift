@@ -863,6 +863,9 @@ final class Tab: ObservableObject, Identifiable {
     private var picture: Data?
     /// For the bench.
     var keptPicture: Data? { picture }
+    /// It has a page to picture: built, or asleep with the picture kept for
+    /// waking it (see preview). A tab not opened since last time has neither.
+    var canPreview: Bool { built != nil || picture != nil }
     /// That picture, over the stage while the page is rebuilt underneath it:
     /// coming back to a tab that slept starts from what you left, not white.
     @Published private(set) var cover: NSImage?

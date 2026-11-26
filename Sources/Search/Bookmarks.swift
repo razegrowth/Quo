@@ -1088,7 +1088,7 @@ struct BookmarkOutline: View {
 
 /// The bookmark button, in the row or at the foot of the column: filled on
 /// a page that is kept, and what hangs off it — the card for one bookmark
-/// when ⇧⌘B opened it, the list otherwise.
+/// when ⌥⌘B opened it, the list otherwise.
 struct BookmarkDoor: View {
     @ObservedObject var browser: Browser
     let arrowEdge: Edge
@@ -1131,7 +1131,7 @@ struct BookmarkDoor: View {
     }
 }
 
-/// What ⇧⌘B opens off the button: the page just kept, or kept before, with
+/// What ⌥⌘B opens off the button: the page just kept, or kept before, with
 /// its name to change and a folder to file it in. Each change is kept as it
 /// is made, so Done, Return, Escape and a click elsewhere all only close it.
 struct BookmarkCard: View {
@@ -1446,7 +1446,7 @@ struct BookmarksPanel: View {
                     .onSubmit(openFirst)
 
                 if bookmarks.isEmpty {
-                    Card { Nothing("Nothing kept yet. Add this page with ⇧⌘B, or bring yours in below.") }
+                    Card { Nothing("Nothing kept yet. Add this page with ⌥⌘B, or bring yours in below.") }
                 } else if !query.isEmpty {
                     found
                 } else {

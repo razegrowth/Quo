@@ -650,6 +650,7 @@ struct SettingsPanel: View {
             // page as File › Bring Things Over… and the Welcome's.
             Pill("Bring Things Over…") { browser.lead(to: InternalPage(.importing)) }
         case "sync.history": Switch(on: $prefs.syncsHistory)
+        case "sync.devices": DeviceList(sync: sync)
         case "sync":
             // Off, iCloud (in a build that can reach it), or a folder, which
             // is asked for first; cancelled, it stays as it was.
@@ -743,6 +744,7 @@ struct SettingsPanel: View {
         case "glyph": Segmented(options: Glyph.allCases.map { ($0, $0.title) }, selection: $prefs.glyph)
         case "tabs.reading": Switch(on: $prefs.showsReading)
         case "tabs.give": Switch(on: $prefs.tabsGive)
+        case "tabs.previews": Switch(on: $prefs.tabPreviews)
         case "bookmarks.bar": Switch(on: $prefs.bookmarksBar)
         case "motion.light": Switch(on: $prefs.lightMotion)
         case "motion.instant": Switch(on: $prefs.instantMotion)
@@ -2114,6 +2116,104 @@ private struct FilterListRow: View {
         formatter.unitsStyle = .full
         return formatter
     }()
+}
+
+/// Settings › General › Your other devices: the devices that sync, in a
+/// well under the row's words, so they read as the row's own and not rows
+/// of their own. The one heard from last first, each with its kind, when
+/// that was, and Remove.
+struct DeviceList: View {
+    @ObservedObject var sync: Sync
+    @Environment(\.roomySettings) private var roomy
+
+    var body: some View {
+        let now = Date().timeIntervalSince1970
+        let devices = sync.otherDevices
+        if !devices.isEmpty {
+            DeviceWell(devices: devices, now: now) { sync.forget(device: $0) }
+        }
+    }
+
+    /// "Active now", "Last seen 2 days ago", and for one quiet longer than
+    /// Send to waits, that it's no longer there.
+    static func said(_ device: TabTarget, now: Double) -> String {
+        let seen = SyncTabs.seen(device.seen, now: now)
+        let when = seen == "active now" ? "Active now" : "Last \(seen)"
+        return now - device.seen < SyncTabs.reach ? when : "\(when), so it's left out of Send to"
+    }
+}
+
+/// The well itself, apart from Sync, so the bench can draw it.
+struct DeviceWell: View {
+    let devices: [TabTarget]
+    let now: Double
+    let remove: (String) -> Void
+    @Environment(\.roomySettings) private var roomy
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(devices.enumerated()), id: \.element.id) { index, device in
+                if index > 0 {
+                    Rectangle().fill(Palette.hairline).frame(height: 0.5).padding(.leading, roomy ? 50 : 46)
+                }
+                DeviceLine(device: device, now: now) { remove(device.device) }
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Palette.ink.opacity(0.035)))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 0.5))
+        .padding(.top, 2)
+    }
+}
+
+private struct DeviceLine: View {
+    let device: TabTarget
+    let now: Double
+    let remove: () -> Void
+    @Environment(\.roomySettings) private var roomy
+    @State private var hovering = false
+
+    private var active: Bool { now - device.seen < 5 * 60 }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: device.phone ? "iphone" : "laptopcomputer")
+                .font(.system(size: roomy ? 13 : 12))
+                .foregroundStyle(Palette.muted)
+                .frame(width: roomy ? 28 : 26, height: roomy ? 28 : 26)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Palette.ink.opacity(0.06)))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name)
+                    .font(.system(size: roomy ? 13.5 : 12.5))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    if active {
+                        Circle().fill(Palette.safe).frame(width: 6, height: 6)
+                    }
+                    Text(DeviceList.said(device, now: now))
+                        .font(.system(size: roomy ? 12 : 11))
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Button(action: remove) {
+                Text("Remove")
+                    .font(.system(size: roomy ? 12 : 11.5))
+                    .foregroundStyle(hovering ? Palette.ink : Palette.muted)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(hovering ? Palette.hover : .clear))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .onHover { hovering = $0 }
+            .accessibilityLabel("Remove \(device.name)")
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .padding(.vertical, roomy ? 9 : 8)
+    }
 }
 
 /// Settings › Privacy: the sites allowed to send notifications, each with a

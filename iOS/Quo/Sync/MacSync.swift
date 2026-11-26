@@ -507,9 +507,18 @@ final class MacSync: ObservableObject {
         }
     }
 
+    /// What the Mac's Send to calls this phone. iOS gives an app its
+    /// model ("iPhone"), not the name you gave it, without an entitlement
+    /// from Apple. A simulator says it is one, with its model, so it is
+    /// never taken for the phone in your pocket.
     static var deviceName: String {
+        #if targetEnvironment(simulator)
+        let model = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"].flatMap { $0.isEmpty ? nil : $0 } ?? "iPhone"
+        return "\(model) Simulator"
+        #else
         let name = UIDevice.current.name
         return name.isEmpty ? "iPhone" : name
+        #endif
     }
 
     static func describe(_ error: Error) -> String {

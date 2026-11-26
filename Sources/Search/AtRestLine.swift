@@ -69,6 +69,9 @@ struct TitleAtRest: View {
     /// In the column, with room for "Not secure" and the subdomain; across
     /// the top a lock says the first and the site alone stands for the host.
     let roomy: Bool
+    /// The cut title's whole under it on hover. Off where something else
+    /// says it, as a tab's preview card does (TabPreview).
+    var tips = true
 
     private var on: Bool { shown && rest != nil }
     /// The title doesn't fit and ends in "…": then, and only then, the whole
@@ -110,9 +113,9 @@ struct TitleAtRest: View {
         // The whole title under the row while the pointer is on it
         // (HoverTip), only when the row cut it short.
         .background(TipAnchor(spot: spot))
-        .onChange(of: hovering && cut) { _, want in tip(want) }
-        .onChange(of: label) { _, _ in if hovering && cut { tip(true) } }
-        .onAppear { if hovering && cut { tip(true) } }
+        .onChange(of: hovering && cut && tips) { _, want in tip(want) }
+        .onChange(of: label) { _, _ in if hovering && cut && tips { tip(true) } }
+        .onAppear { if hovering && cut && tips { tip(true) } }
         .onDisappear { tip(false) }
     }
 

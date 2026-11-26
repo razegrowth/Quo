@@ -1594,6 +1594,13 @@ private struct SideRow: View, Equatable {
     @State private var selectedOnPress = false
     @State private var shake: CGFloat = 0
     @State private var pressed = false
+    /// Where the tab's preview card hangs from (TabPreview).
+    @State private var spot = TipSpot()
+
+    /// A card beside the row while the pointer rests on it, which says the
+    /// whole title too: then the cut title's own tip stays away. Not for
+    /// the tab you're on, nor one being typed in.
+    private var previews: Bool { prefs.tabPreviews && interactive && !live && !editing }
 
     /// The ring or the speaker, which stay for as long as the page loads or
     /// plays (or is muted) and so keep a place of their own at the end of the
@@ -1663,7 +1670,7 @@ private struct SideRow: View, Equatable {
                     // The page is translated (Translate.swift).
                     TranslateSign(tab: tab, colour: colour)
                     TitleAtRest(label: tab.rowLabel, rest: rest, shown: atRest, hovering: hovering,
-                                size: prefs.sideTitle, colour: colour, roomy: true)
+                                size: prefs.sideTitle, colour: colour, roomy: true, tips: !previews)
                 }
                 Spacer(minLength: 0)
             }
@@ -1788,8 +1795,13 @@ private struct SideRow: View, Equatable {
         .modifier(OptionClick { if interactive && !editing { browser.optionClick(tab) } })
         .overlay { if interactive { MiddleClick(act: close) } }
         .onHover(perform: hover)
+        .background(TipAnchor(spot: spot))
+        .onChange(of: hovering && previews) { _, want in preview(want) }
         .onAppear { if interactive { Bench.rowAppeared(tab.id, hover: hover) } }
-        .onDisappear { if interactive { Bench.rowDisappeared(tab.id) } }
+        .onDisappear {
+            if interactive { Bench.rowDisappeared(tab.id) }
+            preview(false)
+        }
         .contextMenu { if interactive { TabMenu(browser: browser, tab: tab, close: close) } }
         .background {
             if interactive && prefs.splitView {
@@ -1807,6 +1819,11 @@ private struct SideRow: View, Equatable {
     }
 
     private func hover(_ over: Bool) { hovering = over }
+
+    private func preview(_ want: Bool) {
+        guard let view = spot.view else { return }
+        if want { TabPreview.want(tab, from: view) } else { TabPreview.drop(from: view) }
+    }
 
     @ViewBuilder
     private var ground: some View {

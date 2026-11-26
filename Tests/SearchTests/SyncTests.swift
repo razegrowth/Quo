@@ -649,6 +649,19 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(targets, [TabTarget(device: "iphone", name: "Edin\u{2019}s iPhone", phone: true)])
     }
 
+    func testDevicesWithTheSameNameSayWhenTheyWereLastSeenAndOldOnesLeaveSendTo() {
+        let now = 50_000_000.0
+        let phone = SyncTabs.file(device: "a", name: "iPhone", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now - 60)
+        let test = SyncTabs.file(device: "b", name: "iPhone", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now - 3 * 86400)
+        let sim = SyncTabs.file(device: "c", name: "iPhone 17 Pro Simulator", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now - 7200)
+        let gone = SyncTabs.file(device: "d", name: "iPhone", phone: true, scope: tabsScope, tabs: [], spaces: [], now: now - SyncTabs.reach - 1)
+        let targets = SyncTabs.targets([phone, test, sim, gone], scope: tabsScope, device: "me", now: now)
+        XCTAssertEqual(targets.map(\.device), ["a", "c", "b"])
+        XCTAssertEqual(targets.map(\.label), ["iPhone \u{00B7} active now", "iPhone 17 Pro Simulator", "iPhone \u{00B7} seen 3 days ago"])
+        // Settings lists every one, the quiet one too, to remove.
+        XCTAssertEqual(SyncTabs.devices([phone, test, sim, gone], scope: tabsScope, device: "me").map(\.device), ["a", "c", "b", "d"])
+    }
+
     func testTheSentBookKeepsAnOutboxPerScopeAndWhatWasOpened() {
         let defaults = UserDefaults(suiteName: "sentbook-\(UUID().uuidString)")!
         let book = SentBook(defaults: defaults)

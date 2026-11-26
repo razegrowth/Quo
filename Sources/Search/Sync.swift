@@ -137,6 +137,9 @@ final class Sync: ObservableObject {
     /// The devices a page can be sent to, an iPhone's among them, by the
     /// scope of the profile they are in.
     @Published private(set) var targets: [String: [TabTarget]] = [:]
+    /// Every other device that has said what tabs it has open, by profile
+    /// scope, however long ago: what Settings › Sync lists to remove.
+    @Published private(set) var known: [String: [TabTarget]] = [:]
     /// What this Mac sent and what it opened (SyncTabs.swift).
     private let book = SentBook(defaults: Store.settings)
     /// The app went to the back: this Mac's tabs are written in the next
@@ -510,6 +513,7 @@ final class Sync: ObservableObject {
             let theirs = theirFiles(in: folder, scope: scope, own: own)
             found[Sync.scope(profile.id)] = SyncTabs.others(theirs, scope: scope, device: device, now: now)
             reachable[Sync.scope(profile.id)] = SyncTabs.targets(theirs, scope: scope, device: device, now: now)
+            known[Sync.scope(profile.id)] = SyncTabs.devices(theirs, scope: scope, device: device)
             // Before a window is up there is nothing to say yet, not "none".
             guard !Browsers.all.isEmpty else { continue }
             openArrived(theirs, scope: scope, profile: profile.id, now: now)
@@ -523,7 +527,7 @@ final class Sync: ObservableObject {
             if let data = SyncMerge.encode(file) { try? data.write(to: own, options: .atomic) }
         }
         if elsewhere != found { elsewhere = found }
-        if targets != reachable { targets = reachable }
+        if targets != reachable || labels(targets) != labels(reachable) { targets = reachable }
     }
 
     /// One scope's items merged with the other Macs', applied here, and what
@@ -609,6 +613,7 @@ final class Sync: ObservableObject {
                 let theirs = store.files(in: scope)
                 found[Sync.scope(profile.id)] = SyncTabs.others(theirs, scope: scope, device: device, now: now)
                 reachable[Sync.scope(profile.id)] = SyncTabs.targets(theirs, scope: scope, device: device, now: now)
+            known[Sync.scope(profile.id)] = SyncTabs.devices(theirs, scope: scope, device: device)
                 guard problem == nil, !Browsers.all.isEmpty else { continue }
                 openArrived(theirs, scope: scope, profile: profile.id, now: now)
                 let mine = Sync.openTabs(of: profile.id)
@@ -623,7 +628,7 @@ final class Sync: ObservableObject {
                 }
             }
             if elsewhere != found { elsewhere = found }
-            if targets != reachable { targets = reachable }
+            if targets != reachable || labels(targets) != labels(reachable) { targets = reachable }
             others = seen.sorted()
             // Each profile's history: the others' taken in, this Mac's saved
             // when due (SyncHistory.swift).
@@ -728,6 +733,42 @@ final class Sync: ObservableObject {
     /// The devices a page in a profile can be sent to.
     func targets(_ profile: UUID) -> [TabTarget] { on ? targets[Sync.scope(profile)] ?? [] : [] }
 
+    /// Labels say "seen 3 h ago": a new hour is a change to show.
+    private func labels(_ all: [String: [TabTarget]]) -> [String: [String]] { all.mapValues { $0.map(\.label) } }
+
+    /// The other devices with tabs, every profile's, each once, the one
+    /// heard from last first: for Settings › Sync.
+    var otherDevices: [TabTarget] {
+        guard on else { return [] }
+        var seen = Set<String>()
+        return known.values.flatMap { $0 }.sorted { $0.seen > $1.seen }.filter { seen.insert($0.device).inserted }
+    }
+
+    /// Remove a device from Send to and the other devices' tabs: its tabs
+    /// files leave iCloud or the folder, every profile's. A test install
+    /// gone for good stays gone; a device still in use comes back the next
+    /// time Quo is opened on it, as it should.
+    func forget(device other: String) {
+        guard on, other != device else { return }
+        let scopes = Set(Profiles.shared.list.map { SyncTabs.scope(Sync.scope($0.id)) })
+        for key in known.keys { known[key]?.removeAll { $0.device == other } }
+        for key in targets.keys { targets[key]?.removeAll { $0.device == other } }
+        for key in elsewhere.keys { elsewhere[key]?.removeAll { $0.device == other } }
+        if cloud {
+            let store = self.store
+            Task { @MainActor in
+                await store.remove(device: other, scopes: scopes)
+                pass()
+            }
+        } else if let root {
+            for scope in scopes {
+                let file = root.appendingPathComponent(scope, isDirectory: true).appendingPathComponent(other + ".json")
+                try? FileManager.default.removeItem(at: file)
+            }
+            pass()
+        }
+    }
+
     /// A page sent to another device: in this Mac's own file, written now,
     /// for the iPhone to open (at once when it's open, else when it next is).
     func send(_ url: URL, title: String, to target: TabTarget, profile: UUID) {
@@ -786,9 +827,8 @@ final class Sync: ObservableObject {
         if cloud {
             if let problem { return "iCloud: \(problem.lowercased())" }
             guard let lastSynced else { return "iCloud" }
-            let when = RelativeDateTimeFormatter().localizedString(for: lastSynced, relativeTo: Date())
-            let with = others.isEmpty ? "no other Mac yet" : others.joined(separator: ", ")
-            return "iCloud · \(with) · \(when)"
+            let with = others.isEmpty ? "no other device yet" : "with " + SyncTabs.once(others).joined(separator: ", ")
+            return "iCloud · \(with) · \(SyncTabs.synced(lastSynced))"
         }
         guard let folder else { return "" }
         var place = folder.path
@@ -797,8 +837,7 @@ final class Sync: ObservableObject {
         place = place.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         if let problem { return "\(place): \(problem.lowercased())" }
         guard let lastSynced else { return place }
-        let when = RelativeDateTimeFormatter().localizedString(for: lastSynced, relativeTo: Date())
-        let with = others.isEmpty ? "no other Mac yet" : others.joined(separator: ", ")
-        return "\(place) · \(with) · \(when)"
+        let with = others.isEmpty ? "no other device yet" : "with " + SyncTabs.once(others).joined(separator: ", ")
+        return "\(place) · \(with) · \(SyncTabs.synced(lastSynced))"
     }
 }

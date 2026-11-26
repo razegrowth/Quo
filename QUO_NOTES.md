@@ -2,6 +2,20 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.3 · 26 November 2026
+
+Tab previews when you hover, and ⇧⌘B shows the bookmarks bar like in Chrome.
+
+Rest your pointer on a tab in the column and a card comes up next to it with a small picture of the page, its full title and the site. Really handy when you've got five tabs all called "Inbox". The tab you're on doesn't get one, since you're already looking at it. You can turn it off in Settings › Appearance.
+
+⇧⌘B now shows and hides the bookmarks bar, same as Chrome. It used to bookmark the page, which is a fun surprise if your hands still think they're in Chrome. Add This Page moved to ⌥⌘B.
+
+Pinned tabs have their own right-click menu now, with Reload right at the top (it also refreshes the card on a Gmail or Calendar pin). The tab-only stuff that made no sense on a pin, like Close Tabs Below, is gone.
+
+Send to Device tells your devices apart. Every iPhone calls itself "iPhone" to apps, so when there's more than one, each says when it was last seen, and a device that's been quiet for a week drops off the list. Settings › General › Your other devices shows them all, with Remove for old phones and test installs.
+
+Smaller fixes: clicking into the address bar and leaving without changing anything no longer reloads the page, and the sync line says "synced just now" instead of "in 0 seconds".
+
 ## 1.0.2 · 25 November 2026
 
 Selecting the address no longer drags the window.

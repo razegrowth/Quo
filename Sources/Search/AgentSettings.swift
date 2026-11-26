@@ -112,6 +112,7 @@ enum AgentSettings {
         .bool("tabs.give", \.tabsGive),
         .bool("tabs.popupWindows", \.popupWindows),
         .bool("tabs.sleep", \.sleepsTabs),
+        .bool("tabs.previews", \.tabPreviews),
         .choice("tabs.close.after", \.tabLife),
         .choice(SleepPace.key, \.sleepPace),
         .bool("notifications.ask", \.siteNotifications),
