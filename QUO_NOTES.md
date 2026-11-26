@@ -2,6 +2,12 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.5 · 26 November 2026
+
+No more "New in Search 1.0.4" card.
+
+Updating to 1.0.4 popped up a card that wasn't ours: Search's own What's New for its version 1.0.4, with a bunch of Search's switches in it. Quo's version numbers happened to line up with Search's, and that card only knew about numbers. It's gone for good now, and Quo's own notes stay where they live, in Settings › About › What's New. Sorry about that one.
+
 ## 1.0.4 · 26 November 2026
 
 Quo gets out of your password manager's way, and ⇧⌘B actually shows the bookmarks bar now.

@@ -147,8 +147,14 @@ enum WhatsNew {
         Release(version: "1.0.4"),
     ]
 
-    /// This version's card, when it has one.
-    static var current: Release? { releases.first { $0.version == Updater.version } }
+    /// This version's card, when it has one. Never in a fork: `releases` are
+    /// Search's versions, and a fork's own run on numbers of their own, so
+    /// Quo 1.0.4 came up as "New in Search 1.0.4" with Search's switches. A
+    /// fork's notes (`own`) are in Settings › About › What's New instead.
+    static var current: Release? {
+        guard Updater.official, own.isEmpty else { return nil }
+        return releases.first { $0.version == Updater.version }
+    }
 
     /// Version strings in order: 1.0.10 after 1.0.9.
     static func older(_ one: String, than other: String) -> Bool {
