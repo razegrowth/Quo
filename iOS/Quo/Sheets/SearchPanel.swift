@@ -17,6 +17,7 @@ struct SearchPanel: View {
     @StateObject private var dictation = Dictation()
     @ObservedObject private var tabs = Tabs.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var lock = IncognitoLock.shared
 
     let morph: Namespace.ID
     /// While the bar is being drawn up into this, its own row stands where
@@ -199,8 +200,10 @@ struct SearchPanel: View {
             return rows
         }
         let lower = typed.lowercased()
-        // Open tabs first, as ⌘T has them on the Mac.
-        for tab in tabs.all where tab.incognito == incognito {
+        // Open tabs first, as ⌘T has them on the Mac. Incognito ones only
+        // while they're unlocked: locked, their titles stay behind Face ID
+        // here too, not only on the page (IncognitoLock).
+        for tab in tabs.all where tab.incognito == incognito && !(tab.incognito && lock.hiding) {
             let hay = (tab.title + " " + (tab.url?.absoluteString ?? "")).lowercased()
             guard hay.contains(lower) else { continue }
             add(Suggestion(id: "tab" + tab.id.uuidString, kind: .tab(tab), title: tab.shownTitle, note: "Switch to tab", host: tab.host),

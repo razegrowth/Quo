@@ -527,6 +527,10 @@ enum SettingsIndex {
         // Passwords
         .init(id: "passwords.open", group: "passwords", icon: "key.viewfinder",
               title: "Your passwords", detail: "In the macOS keychain, shown with Touch ID", words: ["keychain"]),
+        .init(id: "passwords.yield", group: "passwords", icon: "puzzlepiece.extension",
+              title: "Let a password manager take over", detail: "With 1Password, Bitwarden or another one's extension on, \(Store.name)'s own filling steps aside",
+              more: "Sign-ins, strong passwords, offers to save, Apple Passwords and cards, so only your password manager's list shows under a box. Turn it off to keep both.",
+              keys: ["passwords.yield"], words: ["1password", "bitwarden", "dashlane", "lastpass", "password manager", "extension", "autofill"]),
         .init(id: "passwords.save", group: "passwords", icon: "square.and.arrow.down",
               title: "Offer to save passwords", detail: "Asked once per site, never again for a site you refuse",
               keys: ["passwords.save"], words: ["save password"]),
@@ -741,6 +745,13 @@ enum SettingsIndex {
 
     /// Whether a dependent row means anything as things are set now. Its
     /// section hides it otherwise; the find field shows it dimmed.
+    /// The password manager Quo steps aside for, if any (Browser.passwordManagerHere).
+    @MainActor static func manager(_ prefs: Preferences) -> String? {
+        guard prefs.yieldsToPasswordManager else { return nil }
+        if #available(macOS 15.4, *) { return Extensions.shared.passwordManager }
+        return nil
+    }
+
     @MainActor static func applies(_ item: SettingsItem, _ prefs: Preferences) -> Bool {
         switch item.id {
         case "pages.dusk": return prefs.look != .light
@@ -763,6 +774,7 @@ enum SettingsIndex {
         case "pins.links": return prefs.pinsKeepSite
         case "launcher.key": return prefs.launcher
         case "shield.lists": return prefs.shielded
+        case "passwords.save", "passwords.fill", "passwords.apple", "cards.fill": return manager(prefs) == nil
         case "sync.devices": return !Sync.shared.otherDevices.isEmpty
         // Only Search's own releases update themselves: a fork is built again.
         case "updates.version", "updates.auto": return Updater.updates
@@ -771,7 +783,7 @@ enum SettingsIndex {
     }
 
     /// What a dimmed dependent row says instead of its own line.
-    static func needs(_ item: SettingsItem) -> String {
+    @MainActor static func needs(_ item: SettingsItem) -> String {
         switch item.id {
         case "pages.dusk": return "Only while \(Store.name) isn't set to Light"
         case "inspector.dark": return "Only while \(Store.name) isn't set to Dark"
@@ -790,6 +802,8 @@ enum SettingsIndex {
         case "links.peek.stays": return "Only when links or pins open peeks"
         case "launcher.key": return "Only with the address field from any app on"
         case "shield.lists": return "Only while ads and trackers are blocked"
+        case "passwords.save", "passwords.fill", "passwords.apple", "cards.fill":
+            return "\(manager(Shared.prefs) ?? "Your password manager") does this while it's on"
         case "sync.devices": return "Only while sync is on and another device has shown up"
         default: return "Only with the tabs down a side"
         }

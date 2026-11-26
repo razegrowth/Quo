@@ -227,22 +227,22 @@ struct WelcomePanel: View {
                     .scaleEffect(wave ? 6 : 0.8)
                     .opacity(wave ? 0 : (opening >= 1 ? 1 : 0))
                     .allowsHitTesting(false)
-                Floating(reduced: reduced) {
-                    AppMark(height: 96)
-                        // A glint crossing the mark as it lights, in its shape.
-                        .overlay {
-                            LinearGradient(colors: [.clear, .white.opacity(0.75), .clear], startPoint: .leading, endPoint: .trailing)
-                                .frame(width: 46)
-                                .rotationEffect(.degrees(18))
-                                .offset(x: glint ? 110 : -110)
-                                .opacity(glint ? 0 : 1)
-                                .blendMode(.plusLighter)
-                                .mask(AppMark(height: 96))
-                                .allowsHitTesting(false)
-                        }
-                        .shadow(color: .white.opacity(opening == 1 ? 0.55 : 0.18), radius: opening == 1 ? 60 : 36)
-                        .shadow(color: .black.opacity(0.35), radius: 20, y: 14)
-                }
+                // Still once it has lit: it used to drift and tilt for as
+                // long as the page was up.
+                AppMark(height: 96)
+                    // A glint crossing the mark as it lights, in its shape.
+                    .overlay {
+                        LinearGradient(colors: [.clear, .white.opacity(0.75), .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 46)
+                            .rotationEffect(.degrees(18))
+                            .offset(x: glint ? 110 : -110)
+                            .opacity(glint ? 0 : 1)
+                            .blendMode(.plusLighter)
+                            .mask(AppMark(height: 96))
+                            .allowsHitTesting(false)
+                    }
+                    .shadow(color: .white.opacity(opening == 1 ? 0.55 : 0.18), radius: opening == 1 ? 60 : 36)
+                    .shadow(color: .black.opacity(0.35), radius: 20, y: 14)
                 .scaleEffect(opening == 0 ? 0.5 : opening == 1 ? 1.3 : 1)
                 .opacity(opening == 0 ? 0 : 1)
                 .blur(radius: opening == 0 ? 20 : 0)
@@ -254,12 +254,14 @@ struct WelcomePanel: View {
                         .font(.system(size: 50, weight: .semibold))
                         .foregroundStyle(.white)
                         .modifier(Unfurl())
-                    Text("A fast, quiet browser for the Mac, with Arc's habits on the engine already inside it.")
+                    // The site's own words (quobrowser.com's first lines).
+                    Text("A tiny Mac browser that feels and works like Arc. Safari's speed,\nChrome's extensions, fully agentic, completely free and open source.")
                         .font(.system(size: 17))
                         .foregroundStyle(.white.opacity(0.62))
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
-                        .frame(maxWidth: 440)
+                        // Two lines, broken after "speed,": no word left alone on a third.
+                        .frame(maxWidth: 580)
                         .rise(3)
                 }
                 Primary("Get Started", large: true) { go(1) }
@@ -275,6 +277,7 @@ struct WelcomePanel: View {
     /// mark lit with its burst and ring, then the stage and the words, the
     /// mark rising to make room for them.
     private func open() {
+        roomForSteps()
         guard opening == 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             withAnimation(.spring(response: 1.1, dampingFraction: 0.62)) { opening = 1 }
@@ -285,6 +288,32 @@ struct WelcomePanel: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
             withAnimation(.spring(response: 1.0, dampingFraction: 0.84)) { opening = 2 }
+        }
+    }
+
+    /// How tall the welcome's window is, where the screen has room: Bring
+    /// Your Things' list ran past the 780 points a new window opens at,
+    /// and its rows came in cut off as they rose.
+    static let height: CGFloat = 860
+
+    /// The window grown to that before anything comes in, about its middle,
+    /// on its screen; never shrunk, never past the screen's edge.
+    private func roomForSteps(tries: Int = 20) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (tries == 20 ? 0 : 0.05)) {
+            // The window is handed to the browser a moment after the first
+            // step appears: asked again until it is, for a second at most.
+            guard let window = browser.window else {
+                if tries > 0 { roomForSteps(tries: tries - 1) }
+                return
+            }
+            guard let screen = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+            let want = min(WelcomePanel.height, screen.height)
+            guard window.frame.height < want else { return }
+            var frame = window.frame
+            frame.origin.y -= (want - frame.height) / 2
+            frame.size.height = want
+            frame.origin.y = min(max(frame.origin.y, screen.minY), screen.maxY - want)
+            window.setFrame(frame, display: true, animate: false)
         }
     }
 
@@ -935,21 +964,6 @@ private struct Unfurl: ViewModifier {
                     shown = true
                 }
             }
-    }
-}
-
-/// Drifting up and down a few points, forever.
-private struct Floating<Content: View>: View {
-    let reduced: Bool
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduced)) { time in
-            let t = time.date.timeIntervalSinceReferenceDate
-            content()
-                .offset(y: reduced ? 0 : 5 * Foundation.sin(t * 1.3))
-                .rotationEffect(.degrees(reduced ? 0 : 1.5 * Foundation.sin(t * 0.9)))
-        }
     }
 }
 

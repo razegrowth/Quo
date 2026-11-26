@@ -1328,6 +1328,36 @@ final class Extensions: NSObject, ObservableObject {
         else { Store.settings.set(values, forKey: "extensions.settings.\(id)") }
     }
 
+    /// Password managers' extensions in the Chrome Web Store, by id: 1Password,
+    /// Bitwarden, Dashlane, LastPass, Proton Pass, NordPass, Keeper, RoboForm
+    /// and Enpass.
+    static let passwordManagers: Set<String> = [
+        "aeblfdkhhhdcdjpifhhbdiojplfjncoa", "nngceckbapebfimnlniiiahkandclblb",
+        "fdjamakpfbbddfjaooikfcpapjohcfmg", "hdokiejnpimakedhajhdlcegeplioahd",
+        "ghmbeldphafepmbegfdlkpapadhbakde", "eiaeiblijfjekdanodkjadfinkhbfgcd",
+        "bfogiafebfohielmmehodmfbbebbbpei", "pnlccmojcmeohlpggmfnbbiapkmbliob",
+        "kmcfomidfpdkfieipokbalgegidffkal",
+    ]
+
+    /// For the bench: a password manager taken as on, by name, without one.
+    nonisolated(unsafe) static var benchPasswordManager: String?
+
+    /// A password manager's extension, on: one of those, or any that asked
+    /// the browser not to offer to save passwords. Its name as people say
+    /// it, "1Password" for "1Password – Password Manager".
+    var passwordManager: String? {
+        if Store.testing, let name = Extensions.benchPasswordManager { return name }
+        guard let found = installed.first(where: {
+            $0.enabled && (Extensions.passwordManagers.contains($0.id)
+                || Extensions.settings(for: $0.id)["privacy.services.passwordSavingEnabled"] as? Bool == false)
+        }) else { return nil }
+        var short = found.name
+        for cut in [" \u{2013} ", " \u{2014} ", " - ", ": "] {
+            if let range = short.range(of: cut) { short = String(short[..<range.lowerBound]) }
+        }
+        return short.trimmingCharacters(in: .whitespaces).isEmpty ? found.name : short
+    }
+
     /// The extension, on and running, that asked the browser not to offer to
     /// save passwords — a password manager doing the saving itself.
     var passwordSavingTakenBy: String? {

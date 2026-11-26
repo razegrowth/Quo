@@ -2,6 +2,20 @@
 
 Newest first. Each version starts with its own heading, `## 0.1.0 · 20 November 2026`, and the paragraphs under it. The first paragraph of the newest is the line under the version in Settings › About and the release's notes on GitHub; all of them are in Settings › About › What's New, above Search's own.
 
+## 1.0.4 · 26 November 2026
+
+Quo gets out of your password manager's way, and ⇧⌘B actually shows the bookmarks bar now.
+
+If you use 1Password, Bitwarden, Dashlane or another password manager's extension, Quo's own password stuff steps aside: no second list under the box, no Use Strong Password card, no offer to save. Only your password manager shows up. Settings › Passwords says which one is doing it, and you can turn that off if you want both.
+
+⇧⌘B was supposed to show and hide the bookmarks bar in 1.0.3, but a shortcut handler that runs before the menus was still quietly bookmarking the page. That's fixed for real this time.
+
+Hide Elements got some love too. ⌘Z puts back what you just hid even after you've left the picker, and the hint at the bottom is a proper card now instead of a little black pill. All the notices at the bottom are centred on the page now, not the whole window, so they don't lean towards the sidebar.
+
+New installs come set up even more like Arc: the mini player, your own style per site, Capture and sending links to a space are all on from the start. And the welcome screen sits still and says what Quo actually is.
+
+Smaller stuff: filter lists sit in one tidy panel like your devices, the "Pick up where you left off" times no longer get cut off by long titles, filter list downloads go through your proxy like everything else, and the scripting commands that could read your tabs only work in test builds now.
+
 ## 1.0.3 · 26 November 2026
 
 Tab previews when you hover, and ⇧⌘B shows the bookmarks bar like in Chrome.

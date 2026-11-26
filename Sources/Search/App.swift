@@ -839,11 +839,16 @@ struct ContentView: View {
             }
             StoreOffer(browser: browser)
             if browser.veiling {
-                hint("Click anything to hide it   ⌘Z undo   esc done")
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                PickingCard(done: { browser.toggleHiding() })
+                    .transition(NoticeCard.arrival)
             }
         }
         .padding(.bottom, 30)
+        // Centred on the page, not on the window, as the address field is:
+        // the column isn't what they speak about. Tabs across the top leave
+        // the page the window's width.
+        .padding(.leading, sidebar && !sideOnRight ? sideWidth : 0)
+        .padding(.trailing, sidebar && sideOnRight ? sideWidth : 0)
         .animation(Motion.settle, value: browser.veiling)
         .animation(Motion.settle, value: browser.asking)
         .animation(Motion.settle, value: browser.offering)
@@ -1137,18 +1142,6 @@ struct ContentView: View {
         }
     }
 
-    /// A dark pill, for the one mode this browser has. It stays up for as long
-    /// as the mode does, which is how you know you are still in it.
-    private func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11.5))
-            .foregroundStyle(Palette.ground.opacity(0.92))
-            .padding(.horizontal, 15)
-            .padding(.vertical, 9)
-            .background(Palette.ink.opacity(0.92), in: Capsule())
-            .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
-    }
-
     /// The same dimmed ground and spring for every panel that floats over a
     /// page, so they read as one kind of thing.
     @ViewBuilder
@@ -1351,6 +1344,7 @@ struct ContentView: View {
                 // close a click on a tab's cross makes, on the way up, is.
                 guard let window, event.window === window else { return event }
                 Browser.lastClose = nil
+                if !browser.veiling { Browser.lastHide = nil }
                 // A click on the tab switcher, in this window only (see
                 // Browser.clickTabSwitcher), turned into the top-left
                 // coordinates SwiftUI's frames are in.
@@ -1440,7 +1434,11 @@ struct ContentView: View {
     /// acts on the key: ⌘W's own close is then the last.
     private static func keyed(_ event: NSEvent) {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if flags != .command || event.shortcutCharacters != "z" { Browser.lastClose = nil }
+        if flags != .command || event.shortcutCharacters != "z" {
+            Browser.lastClose = nil
+            // Esc or ⇧⌘H leaving the picker keeps the last hide ⌘Z's.
+            if !Browsers.all.contains(where: \.veiling) { Browser.lastHide = nil }
+        }
     }
 
     /// Each browser's key monitor. Kept here rather than in the view, so
@@ -1508,7 +1506,7 @@ struct ContentView: View {
     private func pageFirst(_ event: NSEvent, key: String, shifted: Bool) -> Bool {
         let reserved = (key == "t") || (key == "w") || (key == "n" && shifted)
             || ((key == "[" || key == "]" || key == "{" || key == "}") && shifted)
-            || (key == "z" && browser.veiling)
+            || (key == "z" && !shifted && browser.undoesHiding)
             || (key == "k" && !shifted)
             || (!shifted && (event.keyCode == 123 || event.keyCode == 124) && !caretIn(event))
         guard !reserved, event.window?.firstResponder is PageView else { return false }
@@ -1988,7 +1986,9 @@ struct ContentView: View {
             // The column or the strip, folded away (see Fold.swift).
             browser.toggleFold()
         case "b" where shifted:
-            browser.bookmarkCurrent()
+            // ⇧⌘B shows and hides the bookmarks bar, as in Chrome; Add This
+            // Page is ⌥⌘B (Shortcuts.swift), from the menu.
+            Command.all.first { $0.id == "bookmarks.bar" }?.run(browser)
         case "," where !shifted:
             browser.tuning = true
         case "h" where shifted:
@@ -1996,8 +1996,10 @@ struct ContentView: View {
         case "u" where shifted:
             browser.reviewing.toggle()
         case "z" where !shifted:
-            // While pointing, the last thing hidden comes back.
-            if browser.veiling {
+            // While pointing, or while hiding something was the last thing
+            // done, the last thing hidden comes back: before a closed tab,
+            // since the hide came after it (Browser.lastHide).
+            if browser.undoesHiding {
                 browser.undoHiding()
                 return true
             }

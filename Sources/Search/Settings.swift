@@ -912,6 +912,7 @@ struct SettingsPanel: View {
     private func keptControl(_ id: String) -> some View {
         switch id {
         case "passwords.open": Pill("Open…") { browser.lead(to: InternalPage(.passwords)) }
+        case "passwords.yield": Switch(on: $prefs.yieldsToPasswordManager)
         case "passwords.save": Switch(on: $prefs.savesPasswords)
         case "passwords.fill": Switch(on: $prefs.fillsPasswords)
         case "passkeys": Switch(on: $prefs.passkeys)
@@ -1972,42 +1973,55 @@ struct Pill: View {
 private struct FilterListRows: View {
     @ObservedObject var lists: FilterLists
 
+    @Environment(\.roomySettings) private var roomy
+
     var body: some View {
-        ForEach(lists.sources) { source in
-            FilterListRow(source: source, working: lists.working.contains(source.id), lists: lists)
-                .padding(.bottom, 6)
-        }
-        let suggestions = lists.suggestions
-        if !suggestions.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(lists.sources.isEmpty ? "Popular lists" : "More lists")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Palette.muted)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 2)
-                    .padding(.bottom, 4)
-                ForEach(suggestions) { suggestion in
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(suggestion.name)
-                                .font(.system(size: 12.5))
-                                .foregroundStyle(Palette.ink)
-                            Text(suggestion.what)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Palette.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .help(suggestion.origin)
-                        Spacer(minLength: 8)
-                        Pill("Add") { lists.add(suggestion.origin) }
-                            .accessibilityLabel("Add \(suggestion.name)")
+        VStack(alignment: .leading, spacing: 12) {
+            if !lists.sources.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(lists.sources.enumerated()), id: \.element.id) { index, source in
+                        if index > 0 { WellRule() }
+                        FilterListRow(source: source, working: lists.working.contains(source.id), lists: lists)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                }
+                .well()
+            }
+            let suggestions = lists.suggestions
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(lists.sources.isEmpty ? "Popular lists" : "More lists")
+                        .font(.system(size: roomy ? 12 : 11, weight: .medium))
+                        .foregroundStyle(Palette.muted)
+                        .padding(.leading, 2)
+                    VStack(spacing: 0) {
+                        ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                            if index > 0 { WellRule() }
+                            HStack(spacing: 10) {
+                                WellTile(symbol: "plus")
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(suggestion.name)
+                                        .font(.system(size: roomy ? 13.5 : 12.5))
+                                        .foregroundStyle(Palette.ink)
+                                    Text(suggestion.what)
+                                        .font(.system(size: roomy ? 12 : 11))
+                                        .foregroundStyle(Palette.muted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .help(suggestion.origin)
+                                Spacer(minLength: 8)
+                                WellButton(title: "Add") { lists.add(suggestion.origin) }
+                                    .accessibilityLabel("Add \(suggestion.name)")
+                            }
+                            .padding(.leading, 10)
+                            .padding(.trailing, 6)
+                            .padding(.vertical, roomy ? 9 : 8)
+                        }
+                    }
+                    .well()
                 }
             }
-            .padding(.bottom, 6)
         }
+        .padding(.bottom, 10)
     }
 }
 
@@ -2016,13 +2030,15 @@ private struct FilterListRow: View {
     let working: Bool
     let lists: FilterLists
     @State private var open = false
+    @Environment(\.roomySettings) private var roomy
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                WellTile(symbol: source.isFile ? "doc.text" : "shield.lefthalf.filled", dim: !source.on)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(source.name)
-                        .font(.system(size: 12.5))
+                        .font(.system(size: roomy ? 13.5 : 12.5))
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -2045,11 +2061,11 @@ private struct FilterListRow: View {
                 Switch(on: Binding(get: { source.on }, set: { lists.turn(source.id, on: $0) }))
                 icon("xmark.circle.fill", help: "Remove") { lists.remove(source.id) }
             }
-            if open { skipped }
+            if open { skipped.padding(.leading, roomy ? 38 : 36) }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Palette.wash, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(.leading, 10)
+        .padding(.trailing, 8)
+        .padding(.vertical, roomy ? 9 : 8)
     }
 
     /// What it came to, or what's wrong: the trouble and the near-limit
@@ -2064,7 +2080,7 @@ private struct FilterListRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 note("\(rules.formatted()) rules from \(source.used?.formatted() ?? "0") filters"
                      + (source.skipped > 0 ? ", \(source.skipped.formatted()) skipped" : "")
-                     + (source.fetched.map { ", updated \(FilterListRow.ago.localizedString(for: $0, relativeTo: Date()))" } ?? ""))
+                     + (source.fetched.map { ", updated \(FilterListRow.when($0))" } ?? ""))
                 if source.nearLimit {
                     warning("Near WebKit's limit of \(FilterList.limit.formatted()) rules for one list")
                 }
@@ -2085,9 +2101,15 @@ private struct FilterListRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// "just now" for the last minute: Apple's wording said "in 0 seconds"
+    /// for a time a hair ahead of the clock, as the sync line did.
+    static func when(_ date: Date) -> String {
+        Date().timeIntervalSince(date) < 60 ? "just now" : ago.localizedString(for: date, relativeTo: Date())
+    }
+
     private func note(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11))
+            .font(.system(size: roomy ? 12 : 11))
             .foregroundStyle(Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -2153,14 +2175,11 @@ struct DeviceWell: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(devices.enumerated()), id: \.element.id) { index, device in
-                if index > 0 {
-                    Rectangle().fill(Palette.hairline).frame(height: 0.5).padding(.leading, roomy ? 50 : 46)
-                }
+                if index > 0 { WellRule() }
                 DeviceLine(device: device, now: now) { remove(device.device) }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Palette.ink.opacity(0.035)))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 0.5))
+        .well()
         .padding(.top, 2)
     }
 }
@@ -2170,17 +2189,12 @@ private struct DeviceLine: View {
     let now: Double
     let remove: () -> Void
     @Environment(\.roomySettings) private var roomy
-    @State private var hovering = false
 
     private var active: Bool { now - device.seen < 5 * 60 }
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: device.phone ? "iphone" : "laptopcomputer")
-                .font(.system(size: roomy ? 13 : 12))
-                .foregroundStyle(Palette.muted)
-                .frame(width: roomy ? 28 : 26, height: roomy ? 28 : 26)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Palette.ink.opacity(0.06)))
+            WellTile(symbol: device.phone ? "iphone" : "laptopcomputer")
             VStack(alignment: .leading, spacing: 1) {
                 Text(device.name)
                     .font(.system(size: roomy ? 13.5 : 12.5))
@@ -2197,18 +2211,8 @@ private struct DeviceLine: View {
                 }
             }
             Spacer(minLength: 8)
-            Button(action: remove) {
-                Text("Remove")
-                    .font(.system(size: roomy ? 12 : 11.5))
-                    .foregroundStyle(hovering ? Palette.ink : Palette.muted)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(hovering ? Palette.hover : .clear))
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(PressStyle())
-            .onHover { hovering = $0 }
-            .accessibilityLabel("Remove \(device.name)")
+            WellButton(title: "Remove", action: remove)
+                .accessibilityLabel("Remove \(device.name)")
         }
         .padding(.leading, 10)
         .padding(.trailing, 6)
@@ -2387,5 +2391,61 @@ private struct RememberedAgents: View {
         let format = RelativeDateTimeFormatter()
         format.unitsStyle = .full
         return Date().timeIntervalSince(date) < 60 ? "just now" : format.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - a well under a row
+
+/// A list that belongs to the row above it (Your other devices, Filter
+/// lists): one rounded well under the row's words, its items parted by
+/// hairlines from the text on, never cards of their own.
+extension View {
+    func well() -> some View {
+        background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Palette.ink.opacity(0.035)))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 0.5))
+    }
+}
+
+/// The hairline between two items of a well, from where their text starts.
+struct WellRule: View {
+    @Environment(\.roomySettings) private var roomy
+    var body: some View {
+        Rectangle().fill(Palette.hairline).frame(height: 0.5).padding(.leading, roomy ? 50 : 46)
+    }
+}
+
+/// An item's small tile at the start: what kind of thing it is.
+struct WellTile: View {
+    let symbol: String
+    var dim = false
+    @Environment(\.roomySettings) private var roomy
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: roomy ? 13 : 12))
+            .foregroundStyle(Palette.muted.opacity(dim ? 0.5 : 1))
+            .frame(width: roomy ? 28 : 26, height: roomy ? 28 : 26)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Palette.ink.opacity(0.06)))
+    }
+}
+
+/// A quiet word at an item's end (Remove, Add): ink and a ground under the
+/// pointer.
+struct WellButton: View {
+    let title: String
+    let action: () -> Void
+    @Environment(\.roomySettings) private var roomy
+    @State private var hovering = false
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: roomy ? 12 : 11.5))
+                .foregroundStyle(hovering ? Palette.ink : Palette.muted)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(hovering ? Palette.hover : .clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressStyle())
+        .onHover { hovering = $0 }
     }
 }

@@ -385,9 +385,21 @@ private final class TabHelper: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
         }
         if action.targetFrame?.isMainFrame ?? true { lastRequest = action.request }
         let scheme = url.scheme?.lowercased() ?? ""
-        // Mail, phone, maps and the App Store: their own apps.
+        // Mail, phone, maps, the App Store and other apps: their own apps,
+        // for a link you tapped or a form you sent. Anything else (a
+        // redirect, a script, an ad in a frame) never switched you into
+        // another app on its own: from the page in front it asks first, as
+        // Safari does, and from a frame or a tab behind it doesn't happen.
         if !["http", "https", "about", "data", "blob", "file", "javascript"].contains(scheme) {
-            await UIApplication.shared.open(url)
+            let main = action.targetFrame?.isMainFrame ?? true
+            let tapped = action.navigationType == .linkActivated || action.navigationType == .formSubmitted
+            if main && tapped {
+                await UIApplication.shared.open(url)
+            } else if main, Tabs.shared.current === tab, !Dialogs.asking,
+                      await Dialogs.confirm("This page wants to open another app.",
+                                            host: tab.url?.host() ?? webView.url?.host(), ok: "Open") {
+                await UIApplication.shared.open(url)
+            }
             return (.cancel, preferences)
         }
         guard action.targetFrame?.isMainFrame ?? true else { return (.allow, preferences) }
@@ -526,11 +538,17 @@ enum Dialogs {
         }
     }
 
-    static func confirm(_ message: String, host: String?) async -> Bool {
-        await withCheckedContinuation { done in
+    /// One of these is up: a page asking again meanwhile is turned down,
+    /// not stacked.
+    private(set) static var asking = false
+
+    static func confirm(_ message: String, host: String?, ok: String = "OK") async -> Bool {
+        asking = true
+        defer { asking = false }
+        return await withCheckedContinuation { done in
             let alert = UIAlertController(title: host, message: message, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in done.resume(returning: false) })
-            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in done.resume(returning: true) })
+            alert.addAction(UIAlertAction(title: ok, style: .default) { _ in done.resume(returning: true) })
             guard let top else { return done.resume(returning: false) }
             top.present(alert, animated: true)
         }

@@ -839,6 +839,17 @@ final class Browser: NSObject, ObservableObject {
         (passingVeils[id] ?? []).map { "\n\($0) { display: none !important; }" }.joined()
     }
 
+    /// The tab something was just hidden in (Hide Elements), while that is
+    /// still the last thing done: any other key, or a click that isn't a
+    /// hide, and ⌘Z is the page's again (or a closed tab's). ⌘Z puts back
+    /// one thing at a time, as long as it lasts.
+    static var lastHide: Tab.ID?
+
+    /// ⌘Z is Hide Elements' own: while pointing, or just after a hide.
+    var undoesHiding: Bool {
+        veiling || (Browser.lastHide != nil && Browser.lastHide == active?.id)
+    }
+
     /// ⌘Z, while pointing: the last thing you took off comes back.
     func undoHiding() {
         if let tab = active, tab.shy {
@@ -1070,7 +1081,10 @@ final class Browser: NSObject, ObservableObject {
         // alone has no password to put anywhere. A box that only might be a
         // sign-in's gets this host's own accounts, never the rest of the
         // site's: console.cloud.google.com's project name is not Gmail's.
-        var kept = prefs.fillsPasswords && passwords
+        // A password manager's extension, on, does the filling (and the
+        // strong passwords, and cards): nothing of Quo's own hangs here too.
+        let fills = prefs.fillsPasswords && passwordManagerHere == nil
+        var kept = fills && passwords
             ? Vault.kept(matching: host, wide: wide).filter { !inTheClear || $0.clear } : []
         // The account whose name the step before was sent with comes first:
         // the password page of a sign-in that asks for the name first.
@@ -1086,7 +1100,7 @@ final class Browser: NSObject, ObservableObject {
         // ordinary tab only, asked about by its own host. Paired, its names
         // join the list when the helper answers; not yet, a row offers to
         // connect.
-        let appleHost = prefs.applePasswords && prefs.fillsPasswords && passwords
+        let appleHost = prefs.applePasswords && fills && passwords
             ? ApplePasswords.offers(on: tab.pageAddress, privateTab: tab.shy) : nil
         let apple = applePasswords
         let connect = appleHost != nil && apple.state == .idle && applePairing?.tab != tab.id
@@ -1097,7 +1111,7 @@ final class Browser: NSObject, ObservableObject {
             return applePasswordsOffer.site(
                 for: .init(page: tab.pageAddress, privateTab: tab.shy, frameHost: tab.fieldFrameHost,
                            passwords: passwords, kept: known.count),
-                .init(appleOn: prefs.applePasswords, fills: prefs.fillsPasswords,
+                .init(appleOn: prefs.applePasswords, fills: fills,
                       helper: ApplePasswordsOffer.benchHelper ?? ApplePasswordsOffer.helperHere,
                       testRun: Store.testing, benchAsks: ApplePasswordsOffer.benchAsks))
         }()
@@ -1115,14 +1129,14 @@ final class Browser: NSObject, ObservableObject {
         }()
         // A box for a card: your cards, if turned on, the expired last.
         let cards: [KeptCard] = {
-            guard case .card = fill, prefs.fillsCards, !tab.shy || true else { return [] }
+            guard case .card = fill, prefs.fillsCards, passwordManagerHere == nil else { return [] }
             return Cards.shared.kept.sorted { !$0.expired && $1.expired }
         }()
         let cardBox: Int? = if case .card(_, let box) = fill { box } else { nil }
         // A box for a new password: a strong one, the same as long as the
         // list stays up under this tab's box.
         let strong: String? = {
-            guard let most = tab.freshPassword, prefs.fillsPasswords else { return nil }
+            guard let most = tab.freshPassword, fills else { return nil }
             if let up = suggesting, up.tab == tab.id, let made = up.strong { return made }
             return StrongPassword.make(fitting: most == 0 ? nil : most)
         }()
@@ -1155,7 +1169,7 @@ final class Browser: NSObject, ObservableObject {
     /// row of its own for a box that may be something else.
     private func hangCodes(from tab: Tab, _ spot: CGRect, host: String, wide: Bool) {
         appleAsk += 1
-        guard prefs.applePasswords, prefs.fillsPasswords,
+        guard prefs.applePasswords, prefs.fillsPasswords, passwordManagerHere == nil,
               let appleHost = ApplePasswords.offers(on: tab.pageAddress, privateTab: tab.shy)
         else {
             suggesting = nil
@@ -2258,6 +2272,15 @@ final class Browser: NSObject, ObservableObject {
         case .mail: Inbox.shared.stale(tab.id)
         case nil: break
         }
+    }
+
+    /// A password manager's extension that is on, while Settings › Passwords ›
+    /// Let a password manager take over is: Quo's own sign-in filling,
+    /// strong passwords, saving, Apple Passwords and cards step aside for it.
+    var passwordManagerHere: String? {
+        guard prefs.yieldsToPasswordManager else { return nil }
+        if #available(macOS 15.4, *) { return Extensions.shared.passwordManager }
+        return nil
     }
 
     /// A double-click on the pin you are on: back to the page it was pinned
@@ -5362,6 +5385,7 @@ final class Browser: NSObject, ObservableObject {
         // bulk close's other tabs still to go.
         if let id = ghosts.last?.id {
             Browser.lastClose = LastClose(browser: self, ghost: id)
+            Browser.lastHide = nil
             DispatchQueue.main.async { [weak self] in
                 guard let self, Browser.lastClose?.ghost == id else { return }
                 Browser.lastClose?.scene = self.closeScene
@@ -7341,14 +7365,18 @@ final class Browser: NSObject, ObservableObject {
             if tab.shy {
                 passingVeils[tab.id, default: []].append(selector)
                 tab.applyVeils(curtain.css(on: host) + passingCSS(tab.id))
-                announce("Hidden on this page — ⌘Z puts it back")
+                Browser.lastHide = tab.id
+                Browser.lastClose = nil
+                announce("Hidden on this page. ⌘Z puts it back")
                 return
             }
             curtain.hide(selector, label: label, note: note, on: host)
             let css = curtain.css(on: host)
             tab.arm(hiding: css)
             tab.applyVeils(css)
-            announce("Hidden — ⌘Z puts it back")
+            Browser.lastHide = tab.id
+            Browser.lastClose = nil
+            announce("Hidden. ⌘Z puts it back")
         }
         tab.onPickEnd = { [weak self] tab in
             guard let self, picking === tab else { return }
@@ -7395,6 +7423,8 @@ final class Browser: NSObject, ObservableObject {
             // A password manager extension that asked Chrome's way to do the
             // saving itself.
             if #available(macOS 15.4, *), Extensions.shared.passwordSavingTakenBy != nil { return }
+            // Or any password manager's, while Quo steps aside for one.
+            if passwordManagerHere != nil { return }
             // Just filled from the Passwords app: it is kept there already.
             if tab.appleFill?.matches(host: host, user: user, password: password) == true { return }
             let known = Vault.kept(for: host)

@@ -24,7 +24,7 @@ final class FollowFileTests: XCTestCase {
             .map { String($0.prefix { $0.isLetter || $0.isNumber }) })
         XCTAssertEqual(read, [
             "look", "navigationLeft", "sidebar", "sidePosition", "sideHides", "roomyTabs", "sideIcons", "sideWidth",
-            "sidePanelWidth", "cards", "glyph", "tabsGive", "showsTabShortcuts", "bookmarksBar", "alwaysShowsDownloads",
+            "sidePanelWidth", "cards", "glyph", "tabsGive", "tabPreviews", "showsTabShortcuts", "bookmarksBar", "alwaysShowsDownloads",
             "foldsToIcons", "instantMotion", "compactStrip", "addressBar", "slidesColumn", "spacesOnCommand",
             "bounces", "smoothWheel", "cardsInFullScreen",
         ])

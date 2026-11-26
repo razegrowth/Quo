@@ -155,7 +155,11 @@ enum SidebarDefault {
     /// build must still be asked: one that ran before, with no line for a
     /// setting, had it off, and keeps it off.
     static let onWhenFresh = ["sidebar.roomy", "sidebar.addressBar",
-                              "spaces", "newtab.floating", "newtab.recent", "commandbar", "pins.list", "pins.folders"]
+                              "spaces", "newtab.floating", "newtab.recent", "commandbar", "pins.list", "pins.folders",
+                              // Arc's mini player, Boosts, Capture and Air
+                              // Traffic Control (26 Nov 2026): each only adds
+                              // a control or a menu item until it is used.
+                              "sidebar.player", "sites.styles", "pages.capture", "spaces.links"]
 
     static func settleFresh(_ key: String, _ store: UserDefaults, testing: Bool, ranBefore: Bool) {
         let settled = key + ".settled"
@@ -649,6 +653,13 @@ final class Preferences: ObservableObject {
     /// Offer to keep a password the first time a site sees it.
     @Published var savesPasswords: Bool {
         didSet { store.set(savesPasswords, forKey: "passwords.save") }
+    }
+    /// With a password manager's extension on (Extensions.passwordManager),
+    /// Quo's own sign-in filling, strong passwords, saving, Apple Passwords
+    /// and cards step aside, so two lists never hang from one box. On unless
+    /// turned off.
+    @Published var yieldsToPasswordManager: Bool {
+        didSet { store.set(yieldsToPasswordManager, forKey: "passwords.yield") }
     }
     /// Put a kept name and password into a sign-in as soon as one appears.
     @Published var fillsPasswords: Bool {
@@ -1220,7 +1231,7 @@ final class Preferences: ObservableObject {
         roomyTabs = SidebarDefault.onWhenFresh("sidebar.roomy", store, testing: Store.testing)
         sideIcons = store.bool(forKey: "sidebar.icons")
         foldsToIcons = store.bool(forKey: "sidebar.foldIcons")
-        showsPlayer = store.bool(forKey: "sidebar.player")
+        showsPlayer = SidebarDefault.onWhenFresh("sidebar.player", store, testing: Store.testing)
         let width = store.object(forKey: "sidebar.width") as? Double ?? Double(Metrics.side)
         sideWidth = min(Metrics.sideMax, max(Metrics.sideMin, CGFloat(width)))
         cards = store.object(forKey: "layout.cards") as? Bool ?? true
@@ -1326,6 +1337,7 @@ final class Preferences: ObservableObject {
                 ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
         asksWhereToSave = store.bool(forKey: "downloads.ask")
         savesPasswords = store.object(forKey: "passwords.save") as? Bool ?? true
+        yieldsToPasswordManager = store.object(forKey: "passwords.yield") as? Bool ?? true
         fillsPasswords = store.object(forKey: "passwords.fill") as? Bool ?? true
         applePasswords = store.bool(forKey: "passwords.apple")
         let contacts = store.bool(forKey: "contacts.fill")
@@ -1394,7 +1406,7 @@ final class Preferences: ObservableObject {
         littleLinks = store.bool(forKey: Preferences.littleKey)
         littleFindsTabs = store.bool(forKey: "links.little.tabs")
         webmail = store.string(forKey: "mail.webmail").flatMap(Webmail.init(rawValue:)) ?? .none
-        sendsLinksToSpaces = store.bool(forKey: SpaceRoutes.key)
+        sendsLinksToSpaces = SidebarDefault.onWhenFresh(SpaceRoutes.key, store, testing: Store.testing)
         spaceRoutes = (store.array(forKey: SpaceRoutes.rulesKey) ?? []).compactMap(SpaceRoute.init(plist:))
         bookmarksBar = store.bool(forKey: "bookmarks.bar")
         alwaysShowsDownloads = store.bool(forKey: "downloads.button")
@@ -1405,8 +1417,8 @@ final class Preferences: ObservableObject {
         let dusk = store.bool(forKey: "pages.dusk")
         darkensPages = dusk
         Dusk.shared.on = dusk
-        capturesPages = store.bool(forKey: "pages.capture")
-        let styles = store.bool(forKey: "sites.styles")
+        capturesPages = SidebarDefault.onWhenFresh("pages.capture", store, testing: Store.testing)
+        let styles = SidebarDefault.onWhenFresh("sites.styles", store, testing: Store.testing)
         sitesStyles = styles
         SiteStyles.shared.on = styles
         inspectorChrome = store.bool(forKey: "inspector.chrome")

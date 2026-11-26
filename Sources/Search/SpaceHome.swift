@@ -236,7 +236,7 @@ struct SpaceHomeBelow: View {
         return HomeRow(id: "closed:" + ghost.id.uuidString, hovered: $hovered, ground: ground,
                        icon: Favicons.shared.cached(for: ghost.url), letter: nil,
                        title: title,
-                       note: SpaceHomeBelow.ago(ghost.at, now: now), roomy: browser.prefs.roomyTabs) {
+                       note: SpaceHomeBelow.ago(ghost.at, now: now), roomy: browser.prefs.roomyTabs, keepsNote: true) {
             browser.reopen(ghost)
         }
         .help("Reopen \(ghost.url.absoluteString)")
@@ -414,6 +414,9 @@ private struct HomeRow: View {
     let title: String
     let note: String
     var roomy = false
+    /// The note is short and must read whole ("now", "12m"): the title is
+    /// cut first. A site's address, the other kind, gives way to the title.
+    var keepsNote = false
     let open: () -> Void
 
     var body: some View {
@@ -432,6 +435,8 @@ private struct HomeRow: View {
                         .foregroundStyle(Palette.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .fixedSize(horizontal: keepsNote, vertical: false)
+                        .layoutPriority(keepsNote ? 2 : 0)
                 }
             }
             .padding(.horizontal, 10)

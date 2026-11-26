@@ -1261,6 +1261,24 @@ final class Bench {
             }
             answer(["path": path])
 
+        case "windowshot":
+            // The window as drawn now, chrome and all, to `path` as a PNG, in
+            // the look asked for, without bringing it forward. Test runs only.
+            guard Store.testing, let path = request["path"] as? String,
+                  let window = browser.window, let view = window.contentView
+            else { answer(["error": "windowshot PATH, a window, test runs only"]); return }
+            if let look = request["look"] as? String {
+                window.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                view.layoutSubtreeIfNeeded()
+                if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                }
+                answer(["path": path, "size": [view.bounds.width, view.bounds.height]])
+            }
+
         case "tabpreview":
             // The pointer resting on a tab's row in the column, or leaving
             // it ("over": false), through the row's own hover answer as
@@ -1953,6 +1971,14 @@ final class Bench {
             case "allow":
                 Cards.testAllows = request["on"] as? Bool ?? true
                 answer(["allow": Cards.testAllows])
+            case "manager":
+                // A password manager's extension taken as on ("name"), or
+                // none (no name): Quo's own filling steps aside for it.
+                if #available(macOS 15.4, *) { Extensions.benchPasswordManager = request["name"] as? String }
+                answer(["manager": browser.passwordManagerHere ?? NSNull(), "yields": browser.prefs.yieldsToPasswordManager])
+            case "yield":
+                browser.prefs.yieldsToPasswordManager = request["on"] as? Bool ?? true
+                answer(["yields": browser.prefs.yieldsToPasswordManager])
             case "pick":
                 guard let list = browser.suggesting, let at = request["index"] as? Int, list.choices.indices.contains(at) else {
                     answer(["error": "no such row", "rows": rows()]); return
@@ -2034,8 +2060,9 @@ final class Bench {
             // (Intelligence.swift): whether it's here, the shorter tab names,
             // Tidy Tabs (asked of the model, or a sort handed in), and a
             // link's card.
+            // Never a private tab's title, outside a test run, as "tabs".
             func tabs() -> [[String: Any]] {
-                browser.tabs.map { tab in
+                browser.tabs.filter { Store.testing || !$0.shy }.map { tab in
                     ["id": tab.id.uuidString, "title": tab.title, "row": tab.rowLabel, "short": tab.short ?? NSNull(),
                      "group": browser.group(of: tab).flatMap { id in browser.tabGroups.first { $0.id == id }?.name } ?? NSNull()]
                 }
@@ -5305,7 +5332,9 @@ final class Bench {
             // in front.
             if let text = request["show"] as? String, let url = URL(string: text) { _ = browser.open(url, foreground: true) }
             if let text = request["lead"] as? String, let kind = InternalPage.Kind(rawValue: text) { browser.lead(to: InternalPage(kind)) }
-            if let text = request["go"] as? String, let url = URL(string: text) { browser.active?.go(to: url) }
+            // The tab in front is yours, not a script's: only a test run
+            // sends it somewhere ("go" with an id is for the script's own).
+            if let text = request["go"] as? String, Store.testing, let url = URL(string: text) { browser.active?.go(to: url) }
             if let on = request["hidden"] as? Bool { browser.reviewing = on }
             if let look = (request["look"] as? String).flatMap(Look.init) { browser.prefs.look = look }
             if let side = request["side"] as? String {

@@ -267,7 +267,11 @@ final class FilterLists: ObservableObject {
             guard let url = URL(string: origin) else { throw Trouble("Not an address") }
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
             request.setValue("text/plain", forHTTPHeaderField: "Accept")
-            let (body, response) = try await URLSession.shared.data(for: request)
+            // Through Settings › Privacy › Proxy when one is set, as every
+            // other request the browser makes is: URLSession.shared takes
+            // no configuration, so a list's publisher saw the Mac's own
+            // address on each refresh.
+            let (body, response) = try await ProxyNetwork.session.data(for: request)
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 throw Trouble("The address answered \(http.statusCode)")
             }

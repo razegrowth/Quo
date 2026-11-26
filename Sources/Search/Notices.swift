@@ -136,3 +136,44 @@ struct AnnouncementLine: View {
         .onHover { browser.holdAnnouncement($0) }
     }
 }
+
+/// Hide Elements' card, up for as long as the picker is: what a click does,
+/// ⌘Z, and Done (or Esc). The notice card's look, so it sits with "Hidden.
+/// ⌘Z puts it back" above it as one kind of thing. It was a black capsule
+/// of small print, all three in a row.
+struct PickingCard: View {
+    let done: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            NoticeIcon(symbol: "cursorarrow.rays")
+            NoticeText("Click anything to hide it")
+            HStack(spacing: 5) {
+                NoticeKey("⌘Z")
+                Text("Undo")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Palette.muted)
+            }
+            .padding(.leading, 4)
+            NoticeButton("Done", action: done)
+                .help("Esc")
+        }
+        .noticeCard()
+    }
+}
+
+/// A key as a small cap, as menus and Settings › Shortcuts show one.
+struct NoticeKey: View {
+    let key: String
+    init(_ key: String) { self.key = key }
+
+    var body: some View {
+        Text(key)
+            .font(.system(size: 11.5, weight: .medium, design: .rounded))
+            .foregroundStyle(Palette.ink.opacity(0.8))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2.5)
+            .background(Palette.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Palette.ink.opacity(0.1), lineWidth: 0.5))
+    }
+}
