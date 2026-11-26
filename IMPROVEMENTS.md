@@ -4,6 +4,7 @@ Everything Quo has added to or fixed in [Search](https://github.com/driceroland/
 
 ## Quo for iPhone
 
+- **Its own icon on the iPhone, light or ink**: the Q on a white tile (dark in Dark Mode), or on an ink one picked in Settings › Change app icon, each shown there as it looks on the Home Screen. *Nov 2026*
 - **Send to Device tells your devices apart, and you can remove old ones**: two devices with the same name (every iPhone is "iPhone" to an app) each say when they were last heard from, "iPhone · active now" and "iPhone · seen 3 days ago". A simulator calls itself one, with its model ("iPhone 17 Pro Simulator"). A device not heard from in a week leaves Send to on its own, and Settings › General › Your other devices lists every one with when it was last seen, with Remove for a test install or an old phone; one still in use comes back the next time Quo is opened on it. *Nov 2026*
 - **A side rail on the iPhone Duo**: on the outer screen, and the inner one held sideways, the bar stands down the side under the clock, the way iOS asks for. Pages get the full height, the ^ menu and search open as a card beside it, and a swipe in from the rail starts a search. Held upright, the inner screen keeps the bar along the bottom. *Nov 2026*
 - **Ready for the iPhone Duo**: Quo for iPhone follows its window as the Duo opens and closes, and keeps pages, the bar, search and onboarding out from under the outer screen's camera column (and the island in landscape). Nothing reads the whole screen's size any more. *Nov 2026*

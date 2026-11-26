@@ -14,7 +14,8 @@ RAW = HERE.parent / "raw"
 OUT = HERE.parent / "screenshots"
 BUILD = HERE / "build"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-Q = (HERE.parent.parent.parent / "Icon/Quo.icon/Assets/quo-q-vector.svg").read_text()
+ICON = HERE.parent.parent / "Quo/AppIcon.icon"
+ICTOOL = "/Applications/Icon Composer.app/Contents/Executables/ictool"
 
 LIGHT = dict(ground="#F4F4F4", ink="#171717", muted="#737373")
 DARK = dict(ground="#131313", ink="#EDEDED", muted="#949494")
@@ -49,9 +50,8 @@ HERO = """<!doctype html><meta charset="utf-8">
   body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
          color: {ink}; -webkit-font-smoothing: antialiased; position: relative; }}
   .brand {{ position: absolute; left: 120px; top: 190px; display: flex; align-items: center; gap: 32px; }}
-  .tile {{ width: 168px; height: 168px; border-radius: 40px; background: #FAFAFA; display: grid; place-items: center;
-          box-shadow: 0 24px 60px rgba(0,0,0,0.45); }}
-  .tile svg {{ width: 100px; height: 100px; }}
+  .tile {{ width: 168px; height: 168px; }}
+  .tile img {{ display: block; width: 100%; height: 100%; }}
   .word {{ font-size: 84px; font-weight: 600; letter-spacing: -0.01em; }}
   .free {{ margin-left: 8px; font-size: 34px; font-weight: 500; color: {muted}; border: 2px solid #333;
           border-radius: 999px; padding: 10px 26px; }}
@@ -97,8 +97,8 @@ BASE = """<!doctype html><meta charset="utf-8">
            box-shadow: 0 0 0 3px {rim}, 0 60px 140px rgba(0,0,0,{shadow}); }}
   .phone img {{ display: block; width: 100%; border-radius: 128px; }}
   .mark {{ position: absolute; left: 120px; bottom: 260px; display: flex; align-items: center; gap: 36px; }}
-  .tile {{ width: 200px; height: 200px; border-radius: 46px; background: #FAFAFA; display: grid; place-items: center; }}
-  .tile svg {{ width: 120px; height: 120px; }}
+  .tile {{ width: 200px; height: 200px; }}
+  .tile img {{ display: block; width: 100%; height: 100%; }}
   .word {{ font-size: 88px; font-weight: 600; letter-spacing: -0.01em; }}
   .closer .copy {{ top: 760px; }}
   .closer h1 {{ font-size: 136px; }}
@@ -113,7 +113,7 @@ BASE = """<!doctype html><meta charset="utf-8">
 def page(s):
     t = s["theme"]
     dark = t is DARK
-    q = Q.replace('fill="white"', 'fill="#171717"')
+    q = f'<img src="file://{BUILD / "icon.png"}">'
     if s.get("hero"):
         points = "".join(f"<li>{CHECK}{x}</li>" for x in s["points"])
         return HERO.format(title=s["title"], line=s["line"], points=points, q=q,
@@ -131,6 +131,10 @@ def page(s):
 def main():
     BUILD.mkdir(exist_ok=True)
     OUT.mkdir(exist_ok=True)
+    # The app icon as iOS draws it, from the Icon Composer file the app ships.
+    subprocess.run([ICTOOL, str(ICON), "--export-image", "--output-file", str(BUILD / "icon.png"), "--platform", "iOS",
+                    "--rendition", "Default", "--width", "512", "--height", "512", "--scale", "1"],
+                   check=True, capture_output=True)
     for s in SCREENS:
         html = BUILD / f'{s["name"]}.html'
         html.write_text(page(s))

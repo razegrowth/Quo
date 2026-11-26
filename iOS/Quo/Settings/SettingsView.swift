@@ -416,7 +416,7 @@ struct AppIconView: View {
 
     var body: some View {
         List {
-            choice(nil, "Light", "White tile, ink Q")
+            choice(nil, "Light", "White tile, ink Q. Dark in Dark Mode")
             choice("AppIconInk", "Ink", "Ink tile, white Q")
         }
         .tint(Q.ink)
@@ -431,10 +431,9 @@ struct AppIconView: View {
             }
         } label: {
             HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(name == nil ? Color(white: 0.98) : Color(white: 0.09))
-                    .overlay(Image("QMark").resizable().aspectRatio(contentMode: .fit).padding(12)
-                        .foregroundStyle(name == nil ? Color(white: 0.09) : Color(white: 0.98)))
+                // The icons themselves, rendered from their Icon Composer files.
+                Image(name == nil ? "IconPreview" : "IconPreviewInk")
+                    .resizable()
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Q.hairline))
                     .frame(width: 52, height: 52)
                 VStack(alignment: .leading, spacing: 2) {
